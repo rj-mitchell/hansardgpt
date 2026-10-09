@@ -4,7 +4,8 @@ import type { Highlight, SourceCard, Speaker } from "../types";
 
 export function speakerLine(sp: Speaker | null | undefined, raw?: string | null): string {
   if (!sp || !sp.name) return raw || "Unattributed";
-  const where = sp.constituency ? `MP for ${sp.constituency}` : sp.house === "lords" ? "House of Lords" : null;
+  const seat = sp.settlement ? ` (${sp.settlement} seat)` : "";
+  const where = sp.constituency ? `MP for ${sp.constituency}${seat}` : sp.house === "lords" ? "House of Lords" : null;
   return [sp.name, [sp.party, where].filter(Boolean).join(", ")].filter(Boolean).join(" — ");
 }
 
@@ -12,15 +13,33 @@ export function roleTitles(sp: Speaker | null | undefined): string[] {
   return (sp?.offices ?? []).filter((o) => ["gov", "shadow", "chair"].includes(o.kind)).map((o) => o.title);
 }
 
-export function SourceList({ sources, onOpen }: { sources: SourceCard[]; onOpen: (h: Highlight) => void }) {
+export function SourceList({
+  sources,
+  onOpen,
+  open,
+}: {
+  sources: SourceCard[];
+  onOpen: (h: Highlight) => void;
+  open: boolean;
+}) {
   if (!sources.length) return null;
+  const groups: [string, SourceCard[]][] = [];
+  for (const s of sources) {
+    const g = s.kind === "division" ? "Votes (divisions)" : s.group ?? "Other";
+    const hit = groups.find(([name]) => name === g);
+    if (hit) hit[1].push(s);
+    else groups.push([g, [s]]);
+  }
   return (
-    <details className="sources" open>
+    <details className="sources" open={open}>
       <summary>
-        {sources.length} source{sources.length === 1 ? "" : "s"}
+        {open ? "" : "Show "}all {sources.length} source{sources.length === 1 ? "" : "s"}, by speaker group
       </summary>
-      <ol>
-        {sources.map((s) => (
+      {groups.map(([g, items]) => (
+        <section key={g} className="source-group">
+          <h3>{g}</h3>
+          <ol>
+            {items.map((s) => (
           <li key={s.n}>
             <button type="button" className="source-card" onClick={() => onOpen({ source: s.n, quotes: [] })}>
               <span className="badge">{s.n}</span>
@@ -41,8 +60,10 @@ export function SourceList({ sources, onOpen }: { sources: SourceCard[]; onOpen:
               </span>
             </button>
           </li>
-        ))}
-      </ol>
+            ))}
+          </ol>
+        </section>
+      ))}
     </details>
   );
 }

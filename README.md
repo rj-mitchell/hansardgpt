@@ -1,18 +1,26 @@
 # HansardGPT
 
-**Verifiable answers about the UK Parliament, cited to Hansard.**
+**Sourced briefings on what the UK Parliament has said, and who stands where.**
 
-HansardGPT is an open-source research engine for journalists, researchers and policy analysts. Ask a
-plain-English question ("How have ministers justified delays to HS2?") and get an answer written *only* from
-retrieved Hansard records. Every statement carries a `[Source n]` citation that opens the verbatim record,
-with:
+HansardGPT is an open-source research tool for journalists, researchers and policy analysts. It is deliberately
+*not* another keyword search; [Hansard's own search](https://hansard.parliament.uk/search) is excellent at finding
+every speech that mentions a word. Instead, ask a question such as "What have northern Labour MPs said about
+HS2?" and get a short **analytical briefing** that groups the positions taken. For example:
 
-* the speaker's name, party and constituency **on that date**;
+* ministers have been in favour, with examples;
+* big-city MPs have been supportive but raised local points, with examples;
+* town and rural MPs have ranged from sceptical to hostile, with examples.
+
+Every example is a `[Source n]` citation that opens the verbatim record, with:
+
+* the speaker's name, party, constituency and seat type (city, town or rural) **on that date**;
 * their ministerial, shadow or committee-chair role at the time;
 * the Hansard column number (or written-question reference);
 * links to the official Parliament record and to the exact record on TheyWorkForYou.
 
-If the archive has nothing relevant, it says **"No records found."** instead of guessing.
+The evidence behind each briefing is chosen for balance across speaker groups, not just keyword score. A summary
+computed from the data, not written by the model, shows how many contributions, from how many speakers, and from
+which groups. If the archive has nothing relevant, the tool says **"No records found."** instead of guessing.
 
 > Status: v1, covering May 2010 (the 2010 general election) to today. Commons, Lords, Westminster Hall, written
 > answers and statements (both Houses), Public Bill Committees and every division (vote).
@@ -57,6 +65,8 @@ If the archive has nothing relevant, it says **"No records found."** instead of 
 * **Storage.** Zstd-compressed Parquet, partitioned by source and year. Each sitting day is replaced atomically
   when Hansard issues a correction. Days older than 90 days are compacted into one file per partition, so
   queries spanning many years run in tens of milliseconds.
+* **Republished records.** About 37,000 written answers, mostly corrected Lords answers, are republished in a
+  later day's file under the same ID. As on TheyWorkForYou, only the newest copy is searched and cited.
 * **Identity.** Speakers are resolved **only by parlparse IDs**, never by name. One person ID covers every
   name and title change. For example, David Cameron is "David Cameron", MP for Witney, Prime Minister in 2012,
   and "Lord Cameron of Chipping Norton", Foreign Secretary in the Lords in 2024. Both are the same person.
@@ -66,7 +76,19 @@ If the archive has nothing relevant, it says **"No records found."** instead of 
   posts never duplicates a speech.
 * **Search.** LanceDB holds a BM25 full-text index over 4.7 million passages, plus vectors from a local
   open-source embedding model (`snowflake-arctic-embed-xs`, run on CPU). Both are filtered by date, House,
-  region, party, person and role.
+  region, party, person and role. A Labour filter also includes Labour/Co-operative MPs.
+* **Balanced evidence.** Up to 150 ranked candidates are grouped into government ministers, opposition
+  frontbench, select committee chairs, backbench MPs in city, town and rural seats, and backbench peers. The
+  evidence set is then drawn round-robin across those groups, with at most two contributions per speaker and a
+  relevance floor, so a briefing can compare groups instead of echoing one minister six times.
+* **Seat type.** Every constituency in both boundary sets is classified (`data_static/geo/constituencies.csv`):
+  * **city:** most of the seat's population lives in London or a Core City (Belfast, Birmingham, Bristol,
+    Cardiff, Glasgow, Leeds, Liverpool, Manchester, Newcastle, Nottingham, Sheffield) or Edinburgh;
+  * **rural:** fewer than 250 people per km²;
+  * **town:** all other seats.
+
+  That gives about 140 city, 360 town and 150 rural seats in each set. The thresholds are in
+  `scripts/build_geo_lookups.py`.
 
 ## Trying it (offline sample)
 
@@ -125,7 +147,7 @@ to 4 hours.
 | `hansard search "…" --from 2018-01-01 --region "North East"` | Ranked sources from the terminal (no model call) |
 | `hansard user add/list/disable` | Invite-only accounts (argon2 password hashes) |
 | `hansard embed --max-minutes 60` | Continue building semantic vectors |
-| `hansard reference` | Rebuild member and role tables from parlparse |
+| `hansard reference` | Rebuild member and role tables from parlparse; the next sync refreshes the changed people in the index |
 
 **Cost control** (in `config/settings.toml`, `[usage]`):
 
@@ -172,6 +194,10 @@ The authority multiplier `m` depends on the speaker's role on the date of the re
 1. **Editable filters.** The question becomes an editable filter plan: dates, Houses, regions, parties,
    speakers, roles and boosted portfolios. "Northern MPs" means the North East, North West, and Yorkshire and
    The Humber; you can change this in settings. You see and can edit every filter.
+1. **Synthesis rules.** The model is told to synthesise rather than list, to group speakers by the attributes
+   given in each source's title (role on the date, party, seat type, region), and to use no other attributes.
+   It characterises each group's stance with one to three cited examples, preferably short exact quotations,
+   and describes the strength of evidence honestly ("two MPs", "in the records retrieved").
 2. **Deterministic retrieval.** The same plan and sliders always give the same sources.
 3. **Sources only.** Claude (Opus 5.5) receives only those sources, as search-result blocks with citations
    enabled, under rules that forbid outside knowledge. When the sources don't answer the question, it must say
@@ -215,7 +241,9 @@ cd web && npm ci && npm test && npm run typecheck
   * composite scoring;
   * filters;
   * citation verification;
-  * the "no records found" path, refusals, auth and caps, and the daily sync with a member reshuffle.
+  * republished written answers (only the newest copy is kept);
+  * the "no records found" path, refusals, auth and caps;
+  * the daily sync with a member reshuffle, including a sync that fails part-way.
 * **Live role-mapping check.** `PARLPARSE_MEMBERS=/path/to/members uv run pytest tests/test_portfolios.py`
   checks the role mapping against the current live data.
 
@@ -227,10 +255,16 @@ On a 4-vCPU cloud VM, using the full archive since 2010:
 |---|---|
 | Download (HTTPS) | 24,695 files, 4.9 GB, 14 minutes |
 | Ingest | 3.73 M records, 5,344 divisions, 2.35 M votes; 3 minutes; peak 664 MB across all processes |
-| Keyword index | 4.72 M passages in 9 minutes; peak 2.7 GB during the full-text build |
+| Keyword index | 4.68 M passages in 9 minutes; peak 2.7 GB during the full-text build |
+| Daily sync (12 new day-files) | 28 s; peak 2.4 GB |
+| Member reshuffle (96 people; 225 k passages updated in place, text and vectors kept) | 21 s; peak 1.7 GB |
 | Multi-year SQL (Parquet + DuckDB) | 20–50 ms |
 | Search (filters + BM25 + vectors + ranking + full records + speaker profiles) | 0.25–0.5 s warm |
-| Embedding (`arctic-embed-xs`, CPU, batch 8) | 35–110 passages/s depending on length; peak ~1 GB |
+| Embedding (`arctic-embed-xs`, CPU, batch 8) | 20–110 passages/s depending on length and CPU load; peak ~1 GB |
+
+Embedding the whole archive is a one-off backlog of roughly two days on 4 vCPUs. It runs newest first and
+resumes where it stopped. Keyword search covers everything in the meantime, and semantic matching covers
+whatever has been embedded so far.
 
 ## Known limitations
 

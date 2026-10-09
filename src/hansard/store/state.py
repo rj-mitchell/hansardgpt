@@ -120,9 +120,10 @@ class StateDB:
             )
 
     def mark_indexed(self, keys: list[tuple[str, str]]) -> None:
+        """Indexing a file replaces its passages and drops its vectors, so it needs embedding again."""
         now = utcnow()
         with self.connect() as con:
-            con.executemany("UPDATE manifest SET indexed_at=? WHERE source=? AND key=?",
+            con.executemany("UPDATE manifest SET indexed_at=?, embedded_at=NULL WHERE source=? AND key=?",
                             [(now, s, k) for s, k in keys])
 
     def mark_embedded(self, keys: list[tuple[str, str]]) -> None:

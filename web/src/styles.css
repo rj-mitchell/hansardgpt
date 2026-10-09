@@ -686,3 +686,78 @@ mark {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- briefing-first layout ------------------------------------------------------ */
+
+.evidence {
+  margin: 0.25rem 0 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.evidence-head {
+  margin: 0 0 0.45rem;
+}
+
+.evidence-groups {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.evidence-groups li {
+  font-size: 0.85rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.evidence-groups .count {
+  font-weight: 700;
+  margin-left: 0.2rem;
+}
+
+.answer {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.6rem 1.25rem 0.4rem;
+  box-shadow: var(--shadow);
+}
+
+.answer-body {
+  font-family: var(--serif);
+  font-size: 1.08rem;
+  line-height: 1.6;
+}
+
+.answer-body strong {
+  font-family: var(--sans);
+  font-size: 0.98rem;
+}
+
+.answer-body h1,
+.answer-body h2,
+.answer-body h3 {
+  font-size: 1.05rem;
+  margin: 1rem 0 0.3rem;
+}
+
+.answer-body ul {
+  padding-left: 1.2rem;
+}
+
+.source-group h3 {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0.9rem 0 0.35rem;
+}

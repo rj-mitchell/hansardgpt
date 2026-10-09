@@ -4,14 +4,16 @@ import { AnswerView } from "./components/AnswerView";
 import { Controls } from "./components/Controls";
 import { Login } from "./components/Login";
 import { PlanChips } from "./components/PlanChips";
+import { EvidenceBar } from "./components/Evidence";
 import { SourceDrawer, SourceList } from "./components/Sources";
 import { ATTRIBUTION } from "./attribution";
-import type { Answer, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
+import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const EXAMPLES = [
+  "What have northern Labour MPs said about HS2?",
   "How have ministers justified delays to HS2?",
+  "Where do rural and city MPs differ on onshore wind farms?",
   "Did northern MPs dissent on agricultural planning bills between 2018 and 2022?",
-  "What have select committee chairs said about NHS waiting lists since 2022?",
 ];
 
 function loadSettings(defaults?: Meta["defaults"]): Settings {
@@ -89,6 +91,7 @@ export default function App() {
             sources: ev.sources as SourceCard[],
             candidates: ev.candidates as number,
             semantic: ev.semantic as boolean,
+            evidence: ev.evidence as Evidence,
             status: "answering",
           });
         else if (ev.type === "text") update(id, (t) => ({ streamText: t.streamText + (ev.text as string) }));
@@ -125,7 +128,7 @@ export default function App() {
           <div>
             <h1>HansardGPT</h1>
             <p className="muted small">
-              Cited answers from Hansard{meta ? `, ${meta.archive_start.slice(0, 4)} to date` : ""}
+              Sourced briefings on what Parliament has said{meta ? `, ${meta.archive_start.slice(0, 4)} to date` : ""}
               {meta?.last_sync?.finished_at ? ` · updated ${meta.last_sync.finished_at.slice(0, 10)}` : ""}
             </p>
           </div>
@@ -144,17 +147,21 @@ export default function App() {
 
       {showControls && <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />}
       {meta && !meta.answers_enabled && (
-        <p className="banner">AI answers are not configured on this server: you will see ranked, cited sources only.</p>
+        <p className="banner">
+          Briefings need an Anthropic API key on the server. Until one is set you will see the balanced evidence set only.
+        </p>
       )}
 
       <main className="thread" aria-live="polite">
         {turns.length === 0 && (
           <section className="empty">
-            <h2>Ask about anything said in Parliament</h2>
+            <h2>Who said what in Parliament, and where they stand</h2>
             <p className="muted">
-              Answers are written only from Hansard records retrieved for your question. Every statement links to the
-              verbatim source, with the speaker's role on that date and the official Hansard reference.
+              Ask a question and get a short briefing on the positions taken (ministers, the opposition, city, town and
+              rural MPs, peers), written only from Hansard. Every example links to the verbatim speech, with the
+              speaker's role on that date and the official reference.
             </p>
+            <p className="muted small">Looking for every mention of a word? Hansard's own search does that best.</p>
             <ul className="examples">
               {EXAMPLES.map((ex) => (
                 <li key={ex}>
@@ -170,10 +177,11 @@ export default function App() {
           <article key={t.id} className="turn">
             <h2 className="question">{t.question}</h2>
             {t.plan && <PlanChips key={JSON.stringify(t.plan)} plan={t.plan} meta={meta} busy={busy} onRerun={(p) => void run(t.question, p, t.id)} />}
+            <EvidenceBar evidence={t.evidence} />
             {t.status === "planning" && <p className="status">Interpreting the question…</p>}
             {t.status === "searching" && <p className="status">Searching Hansard…</p>}
             {t.status === "answering" && !t.streamText && t.sources.length > 0 && (
-              <p className="status">Writing a cited answer from {t.sources.length} sources…</p>
+              <p className="status">Writing a sourced briefing from {t.sources.length} contributions…</p>
             )}
             {(t.streamText || t.answer) && (
               <AnswerView answer={t.answer} streamText={t.streamText} onCite={(h) => setDrawer({ turn: t.id, h })} />
@@ -184,7 +192,11 @@ export default function App() {
                 {t.error}
               </p>
             )}
-            <SourceList sources={t.sources} onOpen={(h) => setDrawer({ turn: t.id, h })} />
+            <SourceList
+              sources={t.sources}
+              onOpen={(h) => setDrawer({ turn: t.id, h })}
+              open={!t.answer && t.status === "done"}
+            />
             {t.status === "done" && t.semantic === false && (
               <p className="muted small">Meaning-based search is still being built; these results used keyword search.</p>
             )}

@@ -14,6 +14,7 @@ export interface Speaker {
   constituency: string | null;
   region: string | null;
   nation?: string | null;
+  settlement?: string | null;
   party: string | null;
   offices: Office[];
   other_names: string[];
@@ -59,6 +60,7 @@ export interface SourceCard {
   speaker_name_raw?: string | null;
   context?: string | null;
   ranking?: Ranking | null;
+  group?: string;
   // divisions
   number?: number;
   ayes?: number;
@@ -123,6 +125,17 @@ export interface Settings {
   scope: Scope;
 }
 
+export interface Evidence {
+  records: number;
+  speakers: number;
+  divisions: number;
+  date_from: string | null;
+  date_to: string | null;
+  groups: Record<string, number>;
+  parties: Record<string, number>;
+  seat_types: Record<string, number>;
+}
+
 export type TurnStatus = "planning" | "searching" | "answering" | "verifying" | "done" | "error";
 
 export interface Turn {
@@ -133,6 +146,7 @@ export interface Turn {
   sources: SourceCard[];
   candidates?: number;
   semantic?: boolean;
+  evidence?: Evidence;
   streamText: string;
   answer?: Answer | null;
   status: TurnStatus;

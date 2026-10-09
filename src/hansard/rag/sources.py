@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+from hansard.rank.evidence import GROUPS, SETTLEMENT_LABEL, speaker_group
 from hansard.votes import division_text
 
 
@@ -37,19 +38,26 @@ def _fmt_date(iso: str) -> str:
 
 
 def speaker_label(r: dict[str, Any]) -> str:
+    """e.g. 'Hilary Benn (Labour; MP for Leeds Central, city seat, Yorkshire and The Humber;
+    role on this date: Chair, Exiting the European Union Committee)'."""
     sp = r.get("speaker") or {}
     name = sp.get("name") or r.get("speaker_name_raw") or "Unattributed"
     bits = []
     if sp.get("party"):
         bits.append(sp["party"])
     if sp.get("constituency"):
-        bits.append(f"MP for {sp['constituency']}")
+        seat = [f"MP for {sp['constituency']}"]
+        if sp.get("settlement"):
+            seat.append(SETTLEMENT_LABEL.get(sp["settlement"], sp["settlement"]))
+        if sp.get("region"):
+            seat.append(sp["region"])
+        bits.append(", ".join(seat))
     elif sp.get("house") == "lords":
-        bits.append("House of Lords")
-    roles = [o["title"] for o in sp.get("offices", []) if o.get("kind") in ("gov", "shadow", "chair")]
-    if roles:
-        bits.append("; ".join(roles))
-    return f"{name} ({', '.join(bits)})" if bits else name
+        bits.append("member of the House of Lords")
+    if sp.get("person_id"):
+        roles = [o["title"] for o in sp.get("offices", []) if o.get("kind") in ("gov", "shadow", "chair")]
+        bits.append("role on this date: " + ("; ".join(roles) if roles else "backbencher"))
+    return f"{name} ({'; '.join(bits)})" if bits else name
 
 
 def record_source(n: int, r: dict[str, Any]) -> Source:
@@ -77,6 +85,7 @@ def record_source(n: int, r: dict[str, Any]) -> Source:
         "twfy_url": r["twfy_url"],
         "speaker": r.get("speaker"),
         "speaker_name_raw": r.get("speaker_name_raw"),
+        "group": GROUPS[speaker_group(r.get("speaker"))],
         "text": r["text"],
         "context": r.get("context"),
         "ranking": r.get("ranking"),

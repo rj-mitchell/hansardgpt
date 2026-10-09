@@ -121,6 +121,17 @@ def _dates(q: str, today: date) -> tuple[date | None, date | None]:
 _FILTER_WORDS = set(["how", "have", "has", "had", "did", "do", "does", "what", "which", "who", "whom", "whose", "when", "where", "why", "is", "are", "was", "were", "be", "been", "being", "the", "a", "an", "of", "to", "in", "on", "for", "by", "with", "about", "from", "at", "as", "and", "or", "not", "any", "all", "this", "that", "these", "those", "there", "their", "they", "them", "it", "its", "into", "over", "under", "between", "since", "before", "after", "during", "until", "than", "then", "so", "such", "said", "say", "says", "saying", "stated", "mps", "mp", "members", "member", "ministers", "minister", "government", "governments", "lords", "lord", "peers", "peer", "commons", "house", "parliament", "parliamentary", "shadow", "backbench", "backbenchers", "backbencher", "chairs", "chair", "committee", "committees", "northern", "southern", "midlands", "north", "south", "east", "west", "party", "parties", "labour", "conservative", "conservatives", "tory", "tories", "liberal", "democrat", "democrats", "snp", "year", "years", "last", "this"])
 
 
+_PARTY_WORDS = [
+    ("labour", r"\blabour\b"),
+    ("conservative", r"\bconservatives?\b|\btor(y|ies)\b"),
+    ("liberal-democrat", r"\blib(eral)? ?dem(ocrat)?s?\b"),
+    ("scottish-national-party", r"\bsnp\b|scottish national"),
+    ("reform", r"\breform uk\b|\breform (mps|party)\b"),
+    ("plaid-cymru", r"\bplaid\b"),
+    ("dup", r"\bdup\b"),
+]
+
+
 def topic_words(question: str) -> str:
     """Retrieval words: drop question words, filter words and years (they become filters)."""
     words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*", question)
@@ -155,11 +166,12 @@ def parse_offline(question: str, region_groups: dict[str, list[str]], today: dat
     if re.search(r"backbench", ql):
         offices.append("backbench")
     wants_votes = bool(re.search(r"\bvot(e|ed|es|ing)\b|dissent|rebel|divisions?\b", ql))
+    parties = [pid for pid, pattern in _PARTY_WORDS if re.search(pattern, ql)]
     return QueryPlan(
         question=question,
         search_text=topic_words(question) or question,
         filters=Filters(date_from=date_from, date_to=date_to, houses=sorted(set(houses)) if len(set(houses)) == 1 else [],
-                        regions=regions, offices=offices),
+                        regions=regions, offices=offices, parties=parties),
         portfolios=list(portfolios_for_query(question)),
         wants_votes=wants_votes,
         interpretation="Interpreted with offline rules (no language model).",

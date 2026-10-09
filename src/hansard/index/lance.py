@@ -51,9 +51,6 @@ FILTER_FIELDS = [
     ("shadow_portfolios", pa.list_(pa.string())),
     ("chair_portfolios", pa.list_(pa.string())),
 ]
-SPEAKER_FIELDS = ["person_id", "party_id", "region", "is_gov", "is_shadow", "is_chair",
-                  "gov_portfolios", "shadow_portfolios", "chair_portfolios", "speaker_name", "party",
-                  "constituency", "member_house"]
 
 PASSAGE_SCHEMA = pa.schema([
     *FILTER_FIELDS,
@@ -115,16 +112,29 @@ class SearchIndex:
         return PASSAGES in self._names() and self.passages().count_rows() > 0
 
     # ---- writes ---------------------------------------------------------------
-    def replace_keys(self, keys: list[str], rows: list[dict[str, Any]], drop_vectors: bool = True) -> None:
-        """Replace all passages (and, by default, their vectors) for the given source keys."""
+    def replace_keys(self, keys: list[str], rows: list[dict[str, Any]]) -> None:
+        """Replace all passages (and their vectors) for the given source keys."""
         tbl = self.passages()
         if keys:
             where = f"source_key IN ({', '.join(sql_str(k) for k in keys)})"
             tbl.delete(where)
-            if drop_vectors and VECTORS in self._names():
+            if VECTORS in self._names():
                 self.vectors().delete(where)
         if rows:
             tbl.add(pa.Table.from_pylist(rows, schema=PASSAGE_SCHEMA))
+
+    def delete_copies(self, pairs: list[tuple[str, str]], chunk: int = 500) -> int:
+        """Delete the passages and vectors of specific (record_id, source_key) copies of records."""
+        names = self._names()
+        for i in range(0, len(pairs), chunk):
+            part = pairs[i:i + chunk]
+            # the record_id clause can use the scalar index; the concat clause makes the match exact
+            where = (f"record_id IN ({', '.join(sql_str(r) for r in sorted({r for r, _ in part}))}) "
+                     f"AND concat(record_id, '|', source_key) IN ({', '.join(sql_str(f'{r}|{k}') for r, k in part)})")
+            for name in (PASSAGES, VECTORS):
+                if name in names:
+                    self.db.open_table(name).delete(where)
+        return len(pairs)
 
     def add_vectors(self, keys: list[str], rows: list[dict[str, Any]], vectors: np.ndarray) -> None:
         tbl = self.vectors()
@@ -135,20 +145,6 @@ class SearchIndex:
         cols = {name: [r[name] for r in rows] for name, _ in FILTER_FIELDS}
         cols["vector"] = list(vectors.astype(np.float32))
         tbl.add(pa.Table.from_pydict(cols, schema=vector_schema(self.dim)))
-
-    def refresh_vector_metadata(self, keys: list[str], rows: list[dict[str, Any]]) -> int:
-        """Rewrite filter columns of existing vectors for ``keys`` from fresh passage rows."""
-        if VECTORS not in self._names() or not keys:
-            return 0
-        tbl = self.vectors()
-        where = f"source_key IN ({', '.join(sql_str(k) for k in keys)})"
-        existing = tbl.search().where(where).select(["passage_id", "vector"]).limit(None).to_list()
-        vec = {r["passage_id"]: r["vector"] for r in existing}
-        keep = [r for r in rows if r["passage_id"] in vec]
-        tbl.delete(where)
-        if keep:
-            self.add_vectors([], keep, np.array([vec[r["passage_id"]] for r in keep], dtype=np.float32))
-        return len(keep)
 
     def build_indices(self) -> None:
         tbl = self.passages()

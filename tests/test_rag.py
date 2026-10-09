@@ -167,3 +167,10 @@ def test_votes_evidence_is_offered_for_dissent_questions(indexed_settings):
     divs = p.votes.find("Finance Bill", Filters())
     assert divs and divs[0]["major_heading"].startswith("Finance")
     assert "party_votes" in divs[0] and divs[0]["voters_in_scope"] > 0
+
+
+def test_offline_parse_northern_labour_mps():
+    plan = parse_offline("What have northern Labour MPs said about HS2?", GROUPS, TODAY)
+    assert plan.filters.parties == ["labour"]
+    assert plan.filters.regions == GROUPS["northern"] and plan.filters.houses == ["commons"]
+    assert plan.search_text == "HS2" and plan.portfolios == ["transport"]

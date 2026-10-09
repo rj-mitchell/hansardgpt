@@ -191,11 +191,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         limit = int(settings.answer.get("comprehensive_sources" if body.mode == "comprehensive"
                                         else "summary_sources", 12))
         res = p.engine.search(plan.search_text, plan.filters, Scope(**body.scope.model_dump()), plan.portfolios,
-                              body.recency, body.role_weight, limit)
+                              body.recency, body.role_weight, limit, diversify=True)
         from hansard.rag.sources import build_sources
 
         return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [])],
-                "candidates": res.candidates, "semantic": res.semantic_available}
+                "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
 
     @app.get("/api/admin/usage")
     def usage(user=Depends(admin_user)):

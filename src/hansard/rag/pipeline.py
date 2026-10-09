@@ -120,13 +120,15 @@ class Pipeline:
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))
         result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
-                                    req.recency, req.role_weight, limit)
+                                    req.recency, req.role_weight, limit, diversify=True)
         divisions = []
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
         sources = build_sources(result.records, divisions)
+        from hansard.rank.evidence import evidence_summary
+
         yield {"type": "sources", "sources": [s.card() for s in sources], "candidates": result.candidates,
-               "semantic": result.semantic_available}
+               "semantic": result.semantic_available, "evidence": evidence_summary(result.records, divisions)}
 
         if not sources or (result.no_records and not divisions):
             yield {"type": "final", "answer": {"segments": [{"text": NO_RECORDS + " The archive contains no "
@@ -136,7 +138,7 @@ class Pipeline:
             return
         if not self.has_model():
             yield {"type": "final", "answer": None, "usage": None,
-                   "note": "No ANTHROPIC_API_KEY configured: showing ranked sources only."}
+                   "note": "Showing the evidence set only (no Anthropic API key on the server)."}
             return
 
         from hansard.rag.answer import Answerer

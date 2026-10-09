@@ -40,6 +40,7 @@ log = logging.getLogger(__name__)
 
 COMPACT_AFTER_DAYS = 90
 PERSON_TABLES = ("names", "memberships", "offices")
+PENDING_PEOPLE = "reenrich_pending_people"
 
 
 def _person_fingerprints(rows_by_table: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
@@ -65,6 +66,10 @@ def changed_people(old_dir: Path, new: ReferenceData) -> set[str]:
     return {p for p in a.keys() | b.keys() if a.get(p) != b.get(p)}
 
 
+def pending_people(state: StateDB) -> set[str]:
+    return set(json.loads(state.get(PENDING_PEOPLE) or "[]"))
+
+
 def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | None) -> dict[str, Any]:
     from hansard.sources import parlparse
 
@@ -77,7 +82,17 @@ def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | No
             return {"parlparse_sha": sha, "reference_changed": False, "people_changed": []}
     ref = build_reference(members_dir, STATIC_DIR / "geo" / "constituencies.csv",
                           Path(settings.config_path).parent / "overrides" / "constituency_names.csv")
+    people = install_reference(settings, state, ref, sha)
+    return {"parlparse_sha": sha, "reference_changed": True, "people_changed": sorted(people),
+            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", [])}
+
+
+def install_reference(settings: Settings, state: StateDB, ref: ReferenceData, sha: str | None) -> set[str]:
+    """Swap in a new reference build; returns the people whose details changed."""
     people = changed_people(settings.reference_dir, ref)
+    # Queue the changed people before the swap: if this sync fails later, the next one
+    # still refreshes their passages even though the reference will then look unchanged.
+    state.set(PENDING_PEOPLE, json.dumps(sorted(pending_people(state) | people)))
     # write to a temporary directory, then swap, so readers never see a half-written set
     tmp = Path(tempfile.mkdtemp(prefix=".reference-", dir=settings.reference_dir.parent))
     write_reference(ref, tmp)
@@ -91,8 +106,7 @@ def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | No
         tmp.rename(settings.reference_dir)
     if sha:
         state.set("parlparse_sha", sha)
-    return {"parlparse_sha": sha, "reference_changed": True, "people_changed": sorted(people),
-            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", [])}
+    return people
 
 
 def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | None = 60.0,
@@ -121,13 +135,14 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
         t = time.time()
         first_build = not idx.has_data()
         passages = indexer.index_pending()
-        people = set(stats["reference"].get("people_changed") or [])
+        people = pending_people(state)
         reenriched = indexer.reenrich_people(people) if people and not first_build else 0
+        state.set(PENDING_PEOPLE, "[]")
         if first_build and passages:
             idx.build_indices()
         elif passages or reenriched:
             idx.optimize()  # merges new rows into the BM25 and scalar indices incrementally
-        stats["index"] = {"passages_written": passages, "files_reenriched": reenriched,
+        stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
 
         if embed_minutes is None or embed_minutes > 0:

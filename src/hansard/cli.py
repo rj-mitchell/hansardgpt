@@ -40,9 +40,10 @@ def _date(value: str | None) -> date | None:
 
 
 def build_reference_data(settings: Settings, pull: bool = True, members_dir: Path | None = None) -> dict:
-    from hansard.reference.build import build_reference, write_reference
+    from hansard.reference.build import build_reference
     from hansard.sources import parlparse
     from hansard.store.state import StateDB
+    from hansard.sync import install_reference
 
     state = StateDB(settings.state_db)
     sha = None
@@ -55,11 +56,9 @@ def build_reference_data(settings: Settings, pull: bool = True, members_dir: Pat
         members_dir = parlparse.members_dir(settings.parlparse_dir)
     ref = build_reference(members_dir, STATIC_DIR / "geo" / "constituencies.csv",
                           Path(settings.config_path).parent / "overrides" / "constituency_names.csv")
-    write_reference(ref, settings.reference_dir)
-    stats = {**ref.stats, "parlparse_sha": sha}
-    if sha:
-        state.set("parlparse_sha", sha)
-    return stats
+    people = install_reference(settings, state, ref, sha)
+    # the index's speaker columns for these people are refreshed by the next `hansard sync`
+    return {**ref.stats, "parlparse_sha": sha, "people_changed": len(people)}
 
 
 @app.command()
@@ -115,26 +114,30 @@ def ingest(workers: int = typer.Option(3, help="parser processes (each streams o
 
 
 @app.command()
-def index(rebuild_fts: bool = typer.Option(True, help="(re)build the BM25 index afterwards")):
+def index(rebuild_fts: bool = typer.Option(True, help="(re)build the BM25 index afterwards"),
+          dedupe: bool = typer.Option(False, help="one-off: drop older copies of republished "
+                                                  "records left by earlier versions of the indexer")):
     """Add newly ingested records to the keyword search index."""
     _setup_logging()
     settings = _settings()
-    typer.echo(json.dumps(index_pending(settings, rebuild_fts), indent=2))
+    typer.echo(json.dumps(index_pending(settings, rebuild_fts, dedupe), indent=2))
 
 
-def index_pending(settings: Settings, rebuild_fts: bool = True) -> dict:
+def index_pending(settings: Settings, rebuild_fts: bool = True, dedupe: bool = False) -> dict:
     from hansard.index.build import Indexer
     from hansard.index.lance import SearchIndex
     from hansard.store.state import StateDB
 
     idx = SearchIndex(settings.index_dir, int(settings.embedding.get("dim", 384)))
     t = time.time()
-    n = Indexer(settings, idx, StateDB(settings.state_db)).index_pending()
-    if rebuild_fts and n:
+    indexer = Indexer(settings, idx, StateDB(settings.state_db))
+    out = indexer.dedupe() if dedupe else {}
+    n = indexer.index_pending()
+    if rebuild_fts and (n or dedupe):
         idx.build_indices()
     elif n:
         idx.optimize()
-    return {"passages_written": n, "seconds": round(time.time() - t, 1), **idx.stats()}
+    return {"passages_written": n, **out, "seconds": round(time.time() - t, 1), **idx.stats()}
 
 
 @app.command()

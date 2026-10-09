@@ -11,7 +11,6 @@ import logging
 import re
 import time
 from collections import defaultdict
-from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -19,9 +18,9 @@ import pyarrow as pa
 
 from hansard.config import Settings
 from hansard.embed.base import Embedder
-from hansard.index.lance import FILTER_FIELDS, SearchIndex
+from hansard.index.lance import FILTER_FIELDS, PASSAGE_SCHEMA, VECTORS, SearchIndex, sql_str
 from hansard.reference.profiles import ENRICH_SQL, attach_reference, office_columns
-from hansard.store.parquet import read_partition_rows
+from hansard.store.parquet import attach_store, read_partition_rows
 from hansard.store.state import StateDB
 
 log = logging.getLogger(__name__)
@@ -142,27 +141,76 @@ class Indexer:
         cols = rel.columns
         return {row[0]: dict(zip(cols, row, strict=True)) for row in rel.fetchall()}
 
-    def index_keys(self, keys: list[tuple[str, str]], batch: int = 200, keep_vectors: bool = False) -> int:
-        """(Re)index the given (source, key) files. Returns passages written.
+    def _copies(self, sources: set[str], record_ids: list[str]) -> dict[str, tuple[str, list[str]]]:
+        """For records held in more than one file: record_id -> (newest file's key, every key).
 
-        ``keep_vectors`` is for metadata-only refreshes (member data changed but
-        the text did not): existing embeddings are kept and their filter
-        columns updated, instead of being dropped for re-embedding.
+        TWFY republishes corrected written answers in a later day's file under the
+        same ID (about 37k since 2010); like TWFY itself, only the newest copy counts.
         """
+        globs = [f"'{d.as_posix()}/**/*.parquet'" for d in
+                 (self.settings.parquet_dir / "records" / f"source={s}" for s in sorted(sources))
+                 if any(d.glob("**/*.parquet"))]
+        if not globs or not record_ids:
+            return {}
+        self.con.register("batch_ids", pa.table({"record_id": pa.array(sorted(set(record_ids)), pa.string())}))
+        rows = self.con.execute(f"""
+            SELECT r.record_id, arg_max(r.source_key, strftime(r.date, '%Y-%m-%d') || r.source_key),
+                   list(DISTINCT r.source_key)
+            FROM read_parquet([{', '.join(globs)}], union_by_name = true) r
+            SEMI JOIN batch_ids b ON r.record_id = b.record_id
+            GROUP BY r.record_id HAVING count(DISTINCT r.source_key) > 1""").fetchall()
+        self.con.unregister("batch_ids")
+        return {r[0]: (r[1], r[2]) for r in rows}
+
+    def _newest_copies(self, records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
+        """Keep one copy of each record: the first in its file, from the newest file holding it.
+
+        Returns the records to index, and the (record_id, source_key) copies in
+        files outside this batch that a copy here supersedes.
+        """
+        seen: set[tuple[str, str]] = set()
+        unique = []
+        for r in records:  # parlparse occasionally repeats an ID within one file; keep the first
+            if (r["record_id"], r["source_key"]) not in seen:
+                seen.add((r["record_id"], r["source_key"]))
+                unique.append(r)
+        copies = self._copies({r["source"] for r in unique}, [r["record_id"] for r in unique])
+        keep = [r for r in unique if copies.get(r["record_id"], (r["source_key"],))[0] == r["source_key"]]
+        batch_keys = {r["source_key"] for r in unique}
+        stale = sorted({(rid, k) for rid, (newest, keys) in copies.items() if newest in batch_keys
+                        for k in keys if k != newest and k not in batch_keys})
+        return keep, stale
+
+    def index_keys(self, keys: list[tuple[str, str]], batch: int = 200) -> int:
+        """(Re)index the given (source, key) files, dropping their old vectors. Returns passages written."""
         max_words = int(self.settings.embedding.get("passage_words", 250))
         written = 0
         for i in range(0, len(keys), batch):
             part = keys[i:i + batch]
-            records = self._records(part)
+            records, stale = self._newest_copies(self._records(part))
             rows = passage_rows(records, self._enrich(records), max_words) if records else []
-            if keep_vectors:
-                self.index.replace_keys([k for _, k in part], rows, drop_vectors=False)
-                self.index.refresh_vector_metadata([k for _, k in part], rows)
-            else:
-                self.index.replace_keys([k for _, k in part], rows)
+            self.index.replace_keys([k for _, k in part], rows)
+            if stale:
+                self.index.delete_copies(stale)
             self.state.mark_indexed(part)
             written += len(rows)
         return written
+
+    def dedupe(self) -> dict[str, int]:
+        """One-off clean-up of an index built before older copies were dropped at index time."""
+        attach_store(self.con, self.settings.parquet_dir)
+        stale = self.con.execute("""
+            WITH c AS (SELECT record_id, source_key, date FROM records GROUP BY ALL),
+                 n AS (SELECT record_id, arg_max(source_key, strftime(date, '%Y-%m-%d') || source_key) newest
+                       FROM c GROUP BY record_id HAVING count(*) > 1)
+            SELECT c.record_id, c.source_key FROM c JOIN n USING (record_id) WHERE c.source_key <> n.newest
+            ORDER BY 1, 2""").fetchall()
+        self.index.delete_copies([(r[0], r[1]) for r in stale])
+        repeated = self.con.execute("""
+            SELECT DISTINCT source, source_key FROM records
+            GROUP BY source, source_key, record_id HAVING count(*) > 1 ORDER BY 1, 2""").fetchall()
+        self.index_keys([(r[0], r[1]) for r in repeated])
+        return {"stale_copies_deleted": len(stale), "files_reindexed": len(repeated)}
 
     def index_pending(self, batch: int = 200) -> int:
         keys = self.state.unindexed()
@@ -173,20 +221,62 @@ class Indexer:
         log.info("indexed %d files (%d passages) in %.0fs", len(keys), n, time.time() - t)
         return n
 
-    def reenrich_people(self, person_ids: set[str]) -> int:
-        """Refresh speaker columns for every passage by the given people."""
+    def reenrich_people(self, person_ids: set[str], batch: int = 50) -> int:
+        """Refresh speaker columns in place for every passage by the given people.
+
+        Text and embeddings are untouched (member data changed, Hansard did not).
+        The distinct (person, date) pairs are enriched once, and the new speaker
+        columns are written with one partial-column merge per table per batch,
+        keyed on passage_id. Returns the number of passages updated.
+        """
         if not person_ids:
             return 0
-        from hansard.index.lance import sql_str
-
         tbl = self.index.passages()
-        where = f"person_id IN ({', '.join(sql_str(p) for p in sorted(person_ids))})"
-        keys = sorted({(r["source"], r["source_key"]) for r in
-                       tbl.search().where(where).select(["source", "source_key"]).limit(None).to_list()})
-        # Re-indexing those files recomputes every derived column consistently;
-        # the text is unchanged, so embeddings are kept.
-        self.index_keys(keys, keep_vectors=True)
-        return len(keys)
+        has_vectors = VECTORS in self.index._names()
+        speaker_cols = ["speaker_name", "party", "party_id", "region", "constituency", "member_house",
+                        "is_gov", "is_shadow", "is_chair", "gov_portfolios", "shadow_portfolios", "chair_portfolios"]
+        vector_cols = [c for c in speaker_cols if c in {name for name, _ in FILTER_FIELDS}]
+        updated = 0
+        people = sorted(person_ids)
+        for i in range(0, len(people), batch):
+            part = people[i:i + batch]
+            rows = tbl.search().where(f"person_id IN ({', '.join(sql_str(p) for p in part)})") \
+                .select(["passage_id", "person_id", "date"]).limit(None).to_arrow()
+            if rows.num_rows == 0:
+                continue
+            pids, persons, dates = (rows.column(c).to_pylist() for c in ("passage_id", "person_id", "date"))
+            uniq = sorted(set(zip(persons, dates, strict=True)))
+            self.con.register("recs", pa.table({
+                "record_id": pa.array([f"{p}|{d.isoformat()}" for p, d in uniq], pa.string()),
+                "xml_person_id": pa.array([p for p, _ in uniq], pa.string()),
+                "date": pa.array([d for _, d in uniq], pa.date32()),
+            }))
+            rel = self.con.sql(ENRICH_SQL)
+            cols = rel.columns
+            values: dict[str, dict[str, Any]] = {}
+            for row in rel.fetchall():
+                e = dict(zip(cols, row, strict=True))
+                values[e["record_id"]] = {
+                    "speaker_name": e["speaker_name"], "party": e["party_name"], "party_id": e["party_id"],
+                    "region": e["region"], "constituency": e["constituency"], "member_house": e["member_house"],
+                    **office_columns(e["offices"] or []),
+                }
+            out = {c: [] for c in ["passage_id", *speaker_cols]}
+            for pid, person, d in zip(pids, persons, dates, strict=True):
+                v = values.get(f"{person}|{d.isoformat()}")
+                if v is None:
+                    continue
+                out["passage_id"].append(pid)
+                for c in speaker_cols:
+                    out[c].append(v[c])
+            schema = pa.schema([PASSAGE_SCHEMA.field(c) for c in ["passage_id", *speaker_cols]])
+            table = pa.Table.from_pydict(out, schema=schema)
+            tbl.merge_insert("passage_id").when_matched_update_all().execute(table)
+            if has_vectors:
+                self.index.vectors().merge_insert("passage_id").when_matched_update_all().execute(
+                    table.select(["passage_id", *vector_cols]))
+            updated += table.num_rows
+        return updated
 
 
 def embed_pending(settings: Settings, index: SearchIndex, state: StateDB, embedder: Embedder, *,
@@ -214,11 +304,4 @@ def embed_pending(settings: Settings, index: SearchIndex, state: StateDB, embedd
     return total
 
 
-def speaker_update_rows(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    by_record: dict[str, dict[str, Any]] = defaultdict(dict)
-    for r in rows:
-        by_record[r["record_id"]] = {k: r[k] for k, _ in FILTER_FIELDS if k in r}
-    return by_record
-
-
-__all__ = ["Indexer", "chunk_text", "embed_pending", "heading_of", "passage_rows", "Path"]
+__all__ = ["Indexer", "chunk_text", "embed_pending", "heading_of", "passage_rows"]

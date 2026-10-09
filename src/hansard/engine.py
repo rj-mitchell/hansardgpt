@@ -19,6 +19,7 @@ from hansard.config import Settings
 from hansard.embed.base import Embedder, get_embedder
 from hansard.index.lance import SearchIndex, date_lit, sql_list, sql_str
 from hansard.rank.composite import Candidate, RankParams, Scored, rank
+from hansard.rank.evidence import evidence_summary, select_evidence
 from hansard.reference.profiles import ProfileResolver
 from hansard.store.parquet import read_partition_rows
 
@@ -72,6 +73,7 @@ class SearchResult:
     candidates: int
     semantic_available: bool
     where: str | None
+    evidence: dict[str, Any] = field(default_factory=dict)
 
 
 def build_where(filters: Filters, scope: Scope) -> str:
@@ -126,11 +128,23 @@ class Engine:
                 return None
         return self._embedder
 
+    def expand_parties(self, parties: list[str]) -> list[str]:
+        """'labour' also matches Labour/Co-operative members (same whip)."""
+        if not parties:
+            return []
+        rows = self.resolver.con.execute(
+            """SELECT party_id FROM ref_parties WHERE list_contains(?, party_id) OR whip_group IN
+               (SELECT whip_group FROM ref_parties WHERE list_contains(?, party_id) AND whip_group IS NOT NULL)""",
+            [parties, parties]).fetchall()
+        return sorted({r[0] for r in rows} | set(parties))
+
     def search(self, query: str, filters: Filters | None = None, scope: Scope | None = None,
                portfolios: list[str] | None = None, recency: float | None = None,
-               role_weight: float | None = None, limit: int = 12) -> SearchResult:
+               role_weight: float | None = None, limit: int = 12, diversify: bool = False) -> SearchResult:
         filters, scope = filters or Filters(), scope or Scope()
         r = self.settings.ranking
+        if filters.parties:
+            filters = Filters(**{**filters.__dict__, "parties": self.expand_parties(filters.parties)})
         where = build_where(filters, scope)
         bm = self.index.bm25(query, where, int(r.get("candidates_bm25", 300)))
         vec_hits: list[dict[str, Any]] = []
@@ -151,7 +165,8 @@ class Engine:
                     gov_portfolios=list(hit["gov_portfolios"] or []),
                     shadow_portfolios=list(hit["shadow_portfolios"] or []),
                     chair_portfolios=list(hit["chair_portfolios"] or []),
-                    data={"source": hit["source"], "source_key": hit["source_key"], "passages": {}},
+                    data={"source": hit["source"], "source_key": hit["source_key"], "passages": {},
+                          "person_id": hit.get("person_id")},
                 )
                 cands[hit["record_id"]] = c
             return c
@@ -179,16 +194,24 @@ class Engine:
         best_cos = max((c.cosine or 0.0 for c in cands.values()), default=0.0)
         no_records = not scored or (semantic and best_cos < float(r.get("no_records_cosine", 0.0))
                                     and not any(c.bm25 for c in cands.values()))
-        top = scored[:limit]
+        if diversify and scored:
+            pool = scored[:max(limit * 8, 150)]
+            profiles = self.resolver.profiles([(s.candidate.record_id, s.candidate.data.get("person_id"),
+                                                s.candidate.date) for s in pool])
+            top = select_evidence(pool, profiles, limit,
+                                  max_per_speaker=int(r.get("max_per_speaker", 2)),
+                                  min_relevance_ratio=float(r.get("min_relevance_ratio", 0.25)))
+        else:
+            top = scored[:limit]
         records = self.records_for(top) if top else []
-        return SearchResult(top, records, no_records, len(cands), semantic, where)
+        return SearchResult(top, records, no_records, len(cands), semantic, where, evidence_summary(records))
 
     # ---- full records for display / grounding ---------------------------------
     def records_for(self, scored: list[Scored]) -> list[dict[str, Any]]:
         by_part: dict[tuple[str, int], list[Scored]] = {}
         for s in scored:
             by_part.setdefault((s.candidate.data["source"], s.candidate.date.year), []).append(s)
-        rows: dict[str, dict[str, Any]] = {}
+        found: dict[tuple[str, str], dict[str, Any]] = {}
         for (source, year), items in by_part.items():
             ids = [s.candidate.record_id for s in items]
             keys = sorted({s.candidate.data["source_key"] for s in items})
@@ -197,7 +220,10 @@ class Engine:
             where = (f"date BETWEEN DATE '{dates[0].isoformat()}' AND DATE '{dates[-1].isoformat()}' "
                      f"AND source_key IN {sql_list(keys)} AND record_id IN {sql_list(ids)}")
             for rec in read_partition_rows(self.con, self.settings.parquet_dir, "records", source, year, where):
-                rows[rec["record_id"]] = rec
+                # the indexed copy: other files may hold older copies, and an ID can repeat within a file
+                found.setdefault((rec["record_id"], rec["source_key"]), rec)
+        rows = {s.candidate.record_id: found[key] for s in scored
+                if (key := (s.candidate.record_id, s.candidate.data["source_key"])) in found}
         passages = {pid: p for s in scored for pid, p in s.candidate.data.get("passages", {}).items()}
         missing = [s.candidate.best_passage_id for s in scored
                    if s.candidate.best_passage_id and s.candidate.best_passage_id not in passages]
