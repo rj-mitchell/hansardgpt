@@ -5,7 +5,7 @@ import sys
 import textwrap
 
 
-def _write_big_file(path, n_speeches: int) -> int:
+def _write_file(path, n_speeches: int) -> int:
     para = "This is a long contribution about railway delays and agricultural zoning. " * 20
     with open(path, "w", encoding="utf-8") as fh:
         fh.write('<publicwhip scraperversion="a" latest="yes">\n')
@@ -18,21 +18,27 @@ def _write_big_file(path, n_speeches: int) -> int:
     return path.stat().st_size
 
 
-def test_parse_memory_is_bounded(tmp_path):
-    big = tmp_path / "debates" / "debates2025-01-01a.xml"
-    big.parent.mkdir()
-    size = _write_big_file(big, 80_000)
-    assert size > 250_000_000
+def _peak_mb(path) -> tuple[int, int]:
     script = textwrap.dedent(f"""
         import resource
         from hansard.parse.xml_stream import parse_file
-        n = 0
-        for row in parse_file({str(big)!r}, "debates"):
-            n += 1
+        n = sum(1 for _ in parse_file({str(path)!r}, "debates"))
         print(n, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024)
     """)
     out = subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True).stdout.split()
-    n, peak_mb = int(out[0]), int(out[1])
-    assert n == 80_000
-    # A DOM parse of a 250 MB file needs well over 1 GB; streaming stays small.
-    assert peak_mb < 200, f"peak RSS {peak_mb} MB for a {size // 1_000_000} MB file"
+    return int(out[0]), int(out[1])
+
+
+def test_parse_memory_does_not_grow_with_file_size(tmp_path):
+    (tmp_path / "debates").mkdir()
+    small = tmp_path / "debates" / "debates2025-01-01a.xml"
+    big = tmp_path / "debates" / "debates2025-01-02a.xml"
+    _write_file(small, 2_000)
+    size = _write_file(big, 80_000)
+    assert size > 250_000_000
+    n_small, peak_small = _peak_mb(small)
+    n_big, peak_big = _peak_mb(big)
+    assert (n_small, n_big) == (2_000, 80_000)
+    # 40x more data, essentially the same peak: a DOM parse would need well over 1 GB here.
+    assert peak_big - peak_small < 64, f"small {peak_small} MB vs big {peak_big} MB"
+    assert peak_big < 400
