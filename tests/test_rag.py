@@ -61,6 +61,27 @@ def test_verify_marks_cited_unsupported_and_invalid():
     assert not v.no_records
 
 
+def test_verify_separates_lead_ins_and_evidence_notes_from_uncited_claims():
+    sources = [src(1, "We will deliver the line to Manchester.")]
+    cite = {"search_result_index": 0, "cited_text": "We will deliver the line to Manchester."}
+    blocks = [
+        {"text": "## Labour MPs\n\n**Shadow ministers**\n\n"
+                 "Shadow ministers attacked the decision to cancel the northern legs.\n"
+                 "- Louise Haigh (Sheffield Heeley, Lab), 4 October 2023, said ", "citations": []},
+        {"text": "the line to Manchester would be delivered", "citations": [cite]},
+        {"text": ".\n\nNo division records were supplied, so votes cannot be reported.", "citations": []},
+    ]
+    v = verify(blocks, sources)
+    by_status = {}
+    for s in v.segments:
+        by_status.setdefault(s.status, []).append(s.text)
+    unsupported = "".join(by_status["unsupported"])
+    assert "attacked the decision" in unsupported
+    assert "Louise Haigh" not in unsupported and "Labour MPs" not in unsupported
+    assert "No division records" not in unsupported
+    assert v.to_dict()["unsupported_segments"] == 1
+
+
 def test_verify_detects_no_records_answer():
     v = verify([{"text": f"{NO_RECORDS} The records cover only fisheries.", "citations": []}], [src(1, "x")])
     assert v.no_records

@@ -82,16 +82,54 @@ def _is_connective(text: str) -> bool:
     return len(stripped) <= _CONNECTIVE_MAX and not re.search(r"\d{4}|£|%", stripped)
 
 
+_LABEL = re.compile(r"^\s*(#+ .*|\*\*[^*]+\*\*:?)\s*$")
+# statements about the evidence itself (what was or was not retrieved), not about what anyone said
+_EVIDENCE_NOTE = re.compile(
+    r"\b(records? (retrieved|supplied|shown)|in the records|no (division|voting) records|evidence (base|is|set)|"
+    r"gaps?\b|caveats?\b|cannot be (reported|attributed))", re.I)
+_SENTENCE_END = re.compile(r"[.!?][\"')\]]*\s+\S")
+_ATTRIBUTION_MAX = 220
+
+
+def _classify_uncited(text: str, next_is_cited: bool) -> list[Segment]:
+    """Split an uncited block into lines and label each one.
+
+    * headings, bold group labels, bullets and joins are ``connective``;
+    * the lead-in to a cited quotation ("- Keir Mather (Selby), 10 August 2026, said ") is ``connective``
+      when the very next span is cited and the lead-in states nothing on its own;
+    * notes about the evidence itself ("No division records were supplied") are ``connective``;
+    * anything else (a claim with no citation) is ``unsupported``.
+    """
+    lines = text.splitlines(keepends=True)
+    out: list[Segment] = []
+    for i, line in enumerate(lines):
+        last = i == len(lines) - 1
+        body = re.sub(r"^[\s\-*•\d.)]+", "", line).strip()
+        lead_in = (last and next_is_cited and len(body) <= _ATTRIBUTION_MAX
+                   and not _SENTENCE_END.search(body.rstrip()) and not body.endswith("."))
+        if (_is_connective(line) or _LABEL.match(line) or lead_in
+                or (_EVIDENCE_NOTE.search(body) and not re.search(r"\bsaid\b|\bargued\b|\bclaimed\b", body))):
+            status = "connective"
+        else:
+            status = "unsupported"
+        if out and out[-1].status == status:
+            out[-1].text += line
+        else:
+            out.append(Segment(line, status=status))
+    return out or [Segment(text, status="connective")]
+
+
 def verify(blocks: list[dict[str, Any]], sources: list[Source]) -> Verification:
     """``blocks``: text blocks as returned by the API (``text`` and optional ``citations``)."""
     by_index = {s.n - 1: s for s in sources}
     segments: list[Segment] = []
     total = invalid = 0
-    for b in blocks:
+    for i, b in enumerate(blocks):
         text = b.get("text") or ""
         cites = b.get("citations") or []
         if not cites:
-            segments.append(Segment(text, status="connective" if _is_connective(text) else "unsupported"))
+            next_is_cited = i + 1 < len(blocks) and bool(blocks[i + 1].get("citations"))
+            segments.extend(_classify_uncited(text, next_is_cited))
             continue
         nums, kept = [], []
         for c in cites:

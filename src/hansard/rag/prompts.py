@@ -22,6 +22,8 @@ What a good briefing does
 - For each group it characterises the stance in a sentence (e.g. supportive, supportive with local concerns,
   sceptical, hostile, divided) and backs it with one to three concrete examples: who (name and role or seat), when,
   and what they said, preferably as a short exact quotation.
+- The opening headline and every stance sentence are claims too: cite the example(s) that show them, in the same
+  sentence. Only headings, bold group labels and notes about what the records do or do not contain may go uncited.
 - It is honest about strength of evidence: say "several", "two", "one MP" based on the records shown, describe
   the evidence as "in the records retrieved", note dissenting voices within a group, and never generalise beyond
   what the records show.

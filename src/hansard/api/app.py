@@ -40,12 +40,17 @@ from hansard.api.usage import (
 )
 from hansard.config import REPO_ROOT, Settings, load_settings
 from hansard.engine import Engine, Scope
+from hansard.rag import prompts
 from hansard.rag.pipeline import AskRequest, Pipeline
 from hansard.rag.query_parse import ITL1_REGIONS, QueryPlan
 from hansard.reference.portfolios import PORTFOLIOS
 from hansard.store.state import StateDB
 
 log = logging.getLogger(__name__)
+
+# a cached briefing is only reused while the instructions that wrote it are unchanged
+INSTRUCTIONS_VERSION = __import__("hashlib").sha256(
+    (prompts.ANSWER_SYSTEM + json.dumps(prompts.MODE_INSTRUCTIONS, sort_keys=True)).encode()).hexdigest()[:12]
 
 ATTRIBUTION = [
     {"text": "Contains Parliamentary information licensed under the Open Parliament Licence v3.0.",
@@ -193,7 +198,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         if model_on and cache_hours > 0:
             last = state.runs(1)
             key = cache_key({"q": " ".join(body.question.lower().split()), **body.model_dump(exclude={"question"}),
-                             "model": settings.answer.get("model"), "data": last[0]["run_id"] if last else None})
+                             "model": settings.answer.get("model"), "data": last[0]["run_id"] if last else None,
+                             "instructions": INSTRUCTIONS_VERSION})
         hit = cached_events(state, key, cache_hours) if key else None
         blocked = check_caps(state, uid, settings.usage, visitor) if model_on and hit is None else None
 
