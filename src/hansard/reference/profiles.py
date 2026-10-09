@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import pyarrow as pa
 
 from hansard.reference.build import office_display
 from hansard.reference.portfolios import KIND_CHAIR, KIND_GOV, KIND_SHADOW
@@ -150,8 +151,11 @@ class ProfileResolver:
         """Profiles for ``(record_id, xml_person_id, date)`` triples."""
         if not items:
             return {}
-        self.con.execute("CREATE OR REPLACE TEMP TABLE recs (record_id VARCHAR, xml_person_id VARCHAR, date DATE)")
-        self.con.executemany("INSERT INTO recs VALUES (?, ?, ?)", items)
+        self.con.register("recs", pa.table({
+            "record_id": pa.array([i[0] for i in items], pa.string()),
+            "xml_person_id": pa.array([i[1] for i in items], pa.string()),
+            "date": pa.array([i[2] for i in items], pa.date32()),
+        }))
         rows = enrich(self.con).fetchall()
         cols = ["record_id", "person_id", "speaker_name", "member_house", "constituency", "gss_code",
                 "region", "nation", "party_id", "party_name", "offices"]

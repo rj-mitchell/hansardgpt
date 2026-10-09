@@ -19,7 +19,7 @@ from typing import Any
 from hansard.config import Settings
 from hansard.parse.xml_stream import parse_divisions, parse_file
 from hansard.sources.twfy import SOURCES, RemoteFile, local_files
-from hansard.store.parquet import write_divisions, write_records
+from hansard.store.parquet import remove_keys_from_compacted, write_divisions, write_records
 from hansard.store.state import StateDB, utcnow
 
 log = logging.getLogger(__name__)
@@ -116,5 +116,17 @@ def ingest(settings: Settings, *, workers: int = 3, since=None, until=None,
                 })
                 if i % 500 == 0:
                     log.info("parsed %d/%d files", i, len(todo))
+    # A correction to an already-compacted day: drop that day's old rows from the
+    # compacted file now that its new per-key file exists (serially, in this process).
+    by_partition: dict[tuple[str, str, int], set[str]] = {}
+    for f, _, _, _ in todo:
+        if f.directory in DIVISION_DIRS:
+            house = SOURCES[f.directory][0]
+            by_partition.setdefault(("divisions", house, f.file_date.year), set()).add(f.key)
+            by_partition.setdefault(("votes", house, f.file_date.year), set()).add(f.key)
+        else:
+            by_partition.setdefault(("records", f.directory, f.file_date.year), set()).add(f.key)
+    for (table, part, year), keys in sorted(by_partition.items(), key=lambda kv: kv[0][0] != "votes"):
+        remove_keys_from_compacted(settings.parquet_dir, table, part, year, keys)
     stats.seconds = round(time.time() - started, 1)
     return stats

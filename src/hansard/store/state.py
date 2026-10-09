@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS manifest (
     rows        INTEGER NOT NULL,
     parsed_at   TEXT NOT NULL,
     indexed_at  TEXT,
+    embedded_at TEXT,
     PRIMARY KEY (source, key)
 );
 CREATE TABLE IF NOT EXISTS sync_log (
@@ -114,7 +115,7 @@ class StateDB:
                    VALUES (:source, :key, :revision, :file_name, :size, :mtime_ns, :rows, :parsed_at, NULL)
                    ON CONFLICT(source, key) DO UPDATE SET revision=excluded.revision, file_name=excluded.file_name,
                      size=excluded.size, mtime_ns=excluded.mtime_ns, rows=excluded.rows,
-                     parsed_at=excluded.parsed_at, indexed_at=NULL""",
+                     parsed_at=excluded.parsed_at, indexed_at=NULL, embedded_at=NULL""",
                 row,
             )
 
@@ -124,10 +125,24 @@ class StateDB:
             con.executemany("UPDATE manifest SET indexed_at=? WHERE source=? AND key=?",
                             [(now, s, k) for s, k in keys])
 
+    def mark_embedded(self, keys: list[tuple[str, str]]) -> None:
+        now = utcnow()
+        with self.connect() as con:
+            con.executemany("UPDATE manifest SET embedded_at=? WHERE source=? AND key=?",
+                            [(now, s, k) for s, k in keys])
+
+    def unembedded(self, newest_first: bool = True) -> list[tuple[str, str]]:
+        order = "DESC" if newest_first else "ASC"
+        with self.connect() as con:
+            return [(r[0], r[1]) for r in con.execute(
+                "SELECT source, key FROM manifest WHERE indexed_at IS NOT NULL AND embedded_at IS NULL "
+                f"AND source NOT LIKE '%division%' ORDER BY substr(key, -10) {order}, source, key")]
+
     def unindexed(self) -> list[tuple[str, str]]:
         with self.connect() as con:
             return [(r[0], r[1]) for r in con.execute(
-                "SELECT source, key FROM manifest WHERE indexed_at IS NULL ORDER BY source, key")]
+                "SELECT source, key FROM manifest WHERE indexed_at IS NULL AND source NOT LIKE '%division%' "
+                "ORDER BY source, key")]
 
     # ---- sync log --------------------------------------------------------------
     def start_run(self, kind: str) -> int:

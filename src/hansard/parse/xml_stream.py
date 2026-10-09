@@ -272,12 +272,13 @@ def parse_divisions(path: Path, directory: str | None = None) -> tuple[list[dict
                 "colnum": el.get("colnum"),
                 "major_heading": major,
                 "minor_heading": minor,
-                "ayes": int(counts.get("ayes", counts.get("content", 0)) or 0),
-                "noes": int(counts.get("noes", counts.get("not-content", 0)) or 0),
+                "ayes": _count(counts.get("ayes", counts.get("content"))),
+                "noes": _count(counts.get("noes", counts.get("not-content"))),
                 "official_url": official_url("debates" if house == "commons" else "lordspages",
                                              el.get("url"), meta.file_date)[0],
                 "twfy_url": twfy_url("debates" if house == "commons" else "lordspages", div_id),
             })
+            div_votes_start = len(votes)
             for voter in el.iter("mpname", "lord"):
                 pid = voter.get("person_id") or voter.get("id")
                 if not pid:
@@ -292,5 +293,19 @@ def parse_divisions(path: Path, directory: str | None = None) -> tuple[list[dict
                     "teller": voter.get("teller") == "yes",
                     "proxy_person_id": voter.get("proxy"),
                 })
+            # A few files carry malformed counts (e.g. noes="21\n14", or two deferred
+            # divisions run together as ayes="538482"); fall back to the vote lists.
+            for side, key in (("aye", "ayes"), ("no", "noes")):
+                if divisions[-1][key] is None or divisions[-1][key] > MAX_PLAUSIBLE_VOTES:
+                    divisions[-1][key] = sum(1 for v in votes[div_votes_start:]
+                                             if v["vote"] == side and not v["teller"])
         _free(el)
     return divisions, votes
+
+
+MAX_PLAUSIBLE_VOTES = 1000  # more than either House's membership
+
+
+def _count(value: str | None) -> int | None:
+    value = (value or "").strip()
+    return int(value) if value.isdigit() else None

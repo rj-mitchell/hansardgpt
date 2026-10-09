@@ -1,0 +1,217 @@
+"""Search index: LanceDB tables for BM25 keyword search and vector search.
+
+Two tables share the same filter columns:
+
+* ``passages``  every searchable passage, with a BM25 full-text index on
+  ``search_text``. Built straight after ingest, so keyword search is available
+  immediately.
+* ``vectors``   one embedding per passage. Filled by the (slower, resumable)
+  embedding job; hybrid search uses whatever is embedded so far.
+
+Rows are keyed by ``source_key`` (one scrapedxml file), so a corrected
+Hansard revision is applied by deleting that key's rows and adding the new
+ones. Speaker columns (name, party, region, offices) come from the reference
+data on the record's date and are refreshed per person when member data changes.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from datetime import date
+from pathlib import Path
+from typing import Any
+
+import lancedb
+import numpy as np
+import pyarrow as pa
+from lancedb.index import FTS, BTree
+
+log = logging.getLogger(__name__)
+
+PASSAGES = "passages"
+VECTORS = "vectors"
+
+FILTER_FIELDS = [
+    ("passage_id", pa.string()),
+    ("record_id", pa.string()),
+    ("source", pa.string()),
+    ("source_key", pa.string()),
+    ("record_type", pa.string()),
+    ("house", pa.string()),
+    ("date", pa.date32()),
+    ("year", pa.int32()),
+    ("person_id", pa.string()),
+    ("party_id", pa.string()),
+    ("region", pa.string()),
+    ("is_gov", pa.bool_()),
+    ("is_shadow", pa.bool_()),
+    ("is_chair", pa.bool_()),
+    ("gov_portfolios", pa.list_(pa.string())),
+    ("shadow_portfolios", pa.list_(pa.string())),
+    ("chair_portfolios", pa.list_(pa.string())),
+]
+SPEAKER_FIELDS = ["person_id", "party_id", "region", "is_gov", "is_shadow", "is_chair",
+                  "gov_portfolios", "shadow_portfolios", "chair_portfolios", "speaker_name", "party",
+                  "constituency", "member_house"]
+
+PASSAGE_SCHEMA = pa.schema([
+    *FILTER_FIELDS,
+    ("chunk", pa.int32()),
+    ("chamber", pa.string()),
+    ("speaker_name", pa.string()),
+    ("party", pa.string()),
+    ("constituency", pa.string()),
+    ("member_house", pa.string()),
+    ("heading", pa.string()),
+    ("text", pa.string()),
+    ("search_text", pa.string()),
+])
+
+
+def vector_schema(dim: int) -> pa.Schema:
+    return pa.schema([*FILTER_FIELDS, ("vector", pa.list_(pa.float32(), dim))])
+
+
+_QUERY_JUNK = re.compile(r"[\"'()\[\]{}:^~*+\-!?\\/<>=|&]")
+
+
+def sanitise_query(text: str) -> str:
+    """Plain words only: user text must never be read as full-text query syntax."""
+    return " ".join(_QUERY_JUNK.sub(" ", text or "").split())
+
+
+def sql_str(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def sql_list(values) -> str:
+    return "[" + ", ".join(sql_str(v) for v in values) + "]"
+
+
+class SearchIndex:
+    def __init__(self, path: Path, dim: int):
+        self.path = Path(path)
+        self.path.mkdir(parents=True, exist_ok=True)
+        self.dim = dim
+        self.db = lancedb.connect(str(self.path))
+
+    # ---- tables ---------------------------------------------------------------
+    def _names(self) -> set[str]:
+        res = self.db.list_tables()
+        return set(getattr(res, "tables", res))
+
+    def passages(self):
+        if PASSAGES not in self._names():
+            return self.db.create_table(PASSAGES, schema=PASSAGE_SCHEMA)
+        return self.db.open_table(PASSAGES)
+
+    def vectors(self):
+        if VECTORS not in self._names():
+            return self.db.create_table(VECTORS, schema=vector_schema(self.dim))
+        return self.db.open_table(VECTORS)
+
+    def has_data(self) -> bool:
+        return PASSAGES in self._names() and self.passages().count_rows() > 0
+
+    # ---- writes ---------------------------------------------------------------
+    def replace_keys(self, keys: list[str], rows: list[dict[str, Any]], drop_vectors: bool = True) -> None:
+        """Replace all passages (and, by default, their vectors) for the given source keys."""
+        tbl = self.passages()
+        if keys:
+            where = f"source_key IN ({', '.join(sql_str(k) for k in keys)})"
+            tbl.delete(where)
+            if drop_vectors and VECTORS in self._names():
+                self.vectors().delete(where)
+        if rows:
+            tbl.add(pa.Table.from_pylist(rows, schema=PASSAGE_SCHEMA))
+
+    def add_vectors(self, keys: list[str], rows: list[dict[str, Any]], vectors: np.ndarray) -> None:
+        tbl = self.vectors()
+        if keys:
+            tbl.delete(f"source_key IN ({', '.join(sql_str(k) for k in keys)})")
+        if not rows:
+            return
+        cols = {name: [r[name] for r in rows] for name, _ in FILTER_FIELDS}
+        cols["vector"] = list(vectors.astype(np.float32))
+        tbl.add(pa.Table.from_pydict(cols, schema=vector_schema(self.dim)))
+
+    def refresh_vector_metadata(self, keys: list[str], rows: list[dict[str, Any]]) -> int:
+        """Rewrite filter columns of existing vectors for ``keys`` from fresh passage rows."""
+        if VECTORS not in self._names() or not keys:
+            return 0
+        tbl = self.vectors()
+        where = f"source_key IN ({', '.join(sql_str(k) for k in keys)})"
+        existing = tbl.search().where(where).select(["passage_id", "vector"]).limit(10_000_000).to_list()
+        vec = {r["passage_id"]: r["vector"] for r in existing}
+        keep = [r for r in rows if r["passage_id"] in vec]
+        tbl.delete(where)
+        if keep:
+            self.add_vectors([], keep, np.array([vec[r["passage_id"]] for r in keep], dtype=np.float32))
+        return len(keep)
+
+    def build_indices(self) -> None:
+        tbl = self.passages()
+        if tbl.count_rows() == 0:
+            return
+        tbl.create_index("search_text", config=FTS(with_position=False, stem=True, remove_stop_words=True),
+                         replace=True)
+        for col in ("source_key", "record_id", "person_id"):
+            try:
+                tbl.create_index(col, config=BTree(), replace=True)
+            except Exception as exc:  # scalar indices are an optimisation only
+                log.debug("scalar index on %s skipped: %s", col, exc)
+        if VECTORS in self._names():
+            vt = self.vectors()
+            n = vt.count_rows()
+            if n >= 10_000:
+                from lancedb.index import IvfPq
+
+                vt.create_index("vector", config=IvfPq(distance_type="cosine",
+                                                       num_sub_vectors=max(1, self.dim // 8)), replace=True)
+
+    def optimize(self) -> None:
+        for name in (PASSAGES, VECTORS):
+            if name in self._names():
+                self.db.open_table(name).optimize()
+
+    # ---- reads ----------------------------------------------------------------
+    def bm25(self, query: str, where: str | None, limit: int) -> list[dict[str, Any]]:
+        q = sanitise_query(query)
+        if not q or PASSAGES not in self._names():
+            return []
+        search = self.passages().search(q, query_type="fts")
+        if where:
+            search = search.where(where, prefilter=True)
+        return search.limit(limit).to_list()
+
+    def vector(self, vec: np.ndarray, where: str | None, limit: int) -> list[dict[str, Any]]:
+        if VECTORS not in self._names() or self.vectors().count_rows() == 0:
+            return []
+        search = self.vectors().search(vec.astype(np.float32), vector_column_name="vector").distance_type("cosine")
+        if where:
+            search = search.where(where, prefilter=True)
+        return search.limit(limit).to_list()
+
+    def passages_for(self, passage_ids: list[str]) -> dict[str, dict[str, Any]]:
+        if not passage_ids:
+            return {}
+        rows = self.passages().search().where(
+            f"passage_id IN ({', '.join(sql_str(p) for p in passage_ids)})").limit(len(passage_ids)).to_list()
+        return {r["passage_id"]: r for r in rows}
+
+    def rows_for_key(self, key: str) -> list[dict[str, Any]]:
+        tbl = self.passages()
+        return tbl.search().where(f"source_key = {sql_str(key)}").limit(tbl.count_rows() or 1).to_list()
+
+    def stats(self) -> dict[str, Any]:
+        out = {"passages": 0, "vectors": 0}
+        if PASSAGES in self._names():
+            out["passages"] = self.passages().count_rows()
+        if VECTORS in self._names():
+            out["vectors"] = self.vectors().count_rows()
+        return out
+
+
+def date_lit(d: date) -> str:
+    return f"DATE '{d.isoformat()}'"

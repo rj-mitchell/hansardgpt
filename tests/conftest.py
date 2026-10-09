@@ -44,6 +44,32 @@ def settings(tmp_path, monkeypatch):
     return load_settings(**{"embedding.backend": "hashing", "embedding.dim": 64})
 
 
+@pytest.fixture(scope="session")
+def indexed_settings(tmp_path_factory):
+    """A complete, offline data directory built from the fixtures (hashing embedder)."""
+    import dataclasses
+    from datetime import date
+
+    from hansard.embed.base import HashingEmbedder
+    from hansard.index.build import Indexer, embed_pending
+    from hansard.index.lance import SearchIndex
+    from hansard.ingest import ingest
+    from hansard.store.state import StateDB
+
+    root = tmp_path_factory.mktemp("indexed")
+    base = load_settings(**{"embedding.backend": "hashing", "embedding.dim": 64})
+    s = dataclasses.replace(base, data_dir=root / "data")
+    shutil.copytree(XML, s.raw_xml_dir)
+    write_reference(build_reference(MEMBERS, GEO_CSV), s.reference_dir)
+    state = StateDB(s.state_db)
+    ingest(s, workers=1, since=date(2010, 1, 1), state=state)
+    idx = SearchIndex(s.index_dir, 64)
+    Indexer(s, idx, state).index_pending()
+    idx.build_indices()
+    embed_pending(s, idx, state, HashingEmbedder(64))
+    return s
+
+
 @pytest.fixture()
 def xml_mirror(settings) -> Path:
     """Copy the XML fixtures into the settings' raw mirror directory."""
