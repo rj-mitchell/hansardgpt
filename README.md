@@ -112,8 +112,11 @@ Recommended: 4–8 vCPU, 16 GB RAM and 60 GB of disk.
 |---|---|
 | Raw XML since 2010 | 4.9 GB |
 | Parquet store | 1.2 GB |
-| Keyword index | 4.1 GB |
+| Keyword index | 7.9 GB (4.6 GB of passages, 3.3 GB of full-text and filter indices) |
 | Vectors | about 8 GB |
+
+Each sync deletes index versions more than an hour old. A large update, such as a big member reshuffle,
+can temporarily add several GB until the next sync cleans it up.
 
 On a fresh Ubuntu 24.04 server pointed at by a domain name:
 

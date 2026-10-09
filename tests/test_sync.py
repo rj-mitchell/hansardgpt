@@ -2,12 +2,14 @@
 
 import json
 import shutil
-from datetime import date
+from datetime import date, timedelta
 
 import pyarrow as pa
 import pyarrow.compute  # noqa: F401  (pa.compute)
+import pytest
 
 from hansard.embed.base import HashingEmbedder
+from hansard.index import lance
 from hansard.index.build import Indexer
 from hansard.index.lance import SearchIndex, sql_str
 from hansard.store.state import StateDB
@@ -203,3 +205,20 @@ def test_member_changes_survive_a_failed_sync(settings, xml_mirror, tmp_path, mo
     after = _passages(settings, f"person_id = {sql_str(target)} AND date >= DATE '2026-01-01'")
     assert after and all("transport" in r["gov_portfolios"] for r in after)
     assert sync()["index"]["people_reenriched"] == 0
+
+
+@pytest.mark.filterwarnings("ignore:optimize.cleanup_older_than=0")
+def test_superseded_index_versions_are_deleted(settings, xml_mirror, tmp_path, monkeypatch):
+    members = tmp_path / "members"
+    shutil.copytree(MEMBERS, members)
+    run_sync(settings, fetch=False, members_dir=members, embedder=HashingEmbedder(64), embed_minutes=None, workers=1,
+             today=date(2026, 10, 1))
+    _republish_answer(xml_mirror)
+    idx = SearchIndex(settings.index_dir, 64)
+    Indexer(settings, idx, StateDB(settings.state_db)).index_pending()
+    before = len(idx.passages().list_versions())
+    assert before > 2
+    monkeypatch.setattr(lance, "KEEP_OLD_VERSIONS", timedelta(0))
+    idx.optimize()
+    assert len(idx.passages().list_versions()) < before
+    assert _copies(settings, "passages", ANSWER)  # the current data is intact

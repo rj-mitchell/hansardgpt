@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +84,11 @@ def sql_str(value: str) -> str:
 
 def sql_list(values) -> str:
     return "[" + ", ".join(sql_str(v) for v in values) + "]"
+
+
+# Every read opens the latest table version, so older versions only take disk space.
+# Lance would keep them for a week: about 10 GB after one large re-enrichment or clean-up.
+KEEP_OLD_VERSIONS = timedelta(hours=1)
 
 
 class SearchIndex:
@@ -174,9 +179,10 @@ class SearchIndex:
                 log.warning("scalar index on %s skipped: %s", col, exc)
 
     def optimize(self) -> None:
+        """Merge new rows into the indices, compact small files and drop superseded versions."""
         for name in (PASSAGES, VECTORS):
             if name in self._names():
-                self.db.open_table(name).optimize()
+                self.db.open_table(name).optimize(cleanup_older_than=KEEP_OLD_VERSIONS)
 
     # ---- reads ----------------------------------------------------------------
     def bm25(self, query: str, where: str | None, limit: int) -> list[dict[str, Any]]:
