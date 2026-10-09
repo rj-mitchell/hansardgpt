@@ -25,7 +25,7 @@ from typing import Any
 import lancedb
 import numpy as np
 import pyarrow as pa
-from lancedb.index import FTS, BTree
+from lancedb.index import FTS, Bitmap, BTree
 
 log = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ class SearchIndex:
             return 0
         tbl = self.vectors()
         where = f"source_key IN ({', '.join(sql_str(k) for k in keys)})"
-        existing = tbl.search().where(where).select(["passage_id", "vector"]).limit(10_000_000).to_list()
+        existing = tbl.search().where(where).select(["passage_id", "vector"]).limit(None).to_list()
         vec = {r["passage_id"]: r["vector"] for r in existing}
         keep = [r for r in rows if r["passage_id"] in vec]
         tbl.delete(where)
@@ -156,11 +156,7 @@ class SearchIndex:
             return
         tbl.create_index("search_text", config=FTS(with_position=False, stem=True, remove_stop_words=True),
                          replace=True)
-        for col in ("source_key", "record_id", "person_id"):
-            try:
-                tbl.create_index(col, config=BTree(), replace=True)
-            except Exception as exc:  # scalar indices are an optimisation only
-                log.debug("scalar index on %s skipped: %s", col, exc)
+        self.build_scalar_indices(tbl)
         if VECTORS in self._names():
             vt = self.vectors()
             n = vt.count_rows()
@@ -169,6 +165,17 @@ class SearchIndex:
 
                 vt.create_index("vector", config=IvfPq(distance_type="cosine",
                                                        num_sub_vectors=max(1, self.dim // 8)), replace=True)
+
+    def build_scalar_indices(self, tbl) -> None:
+        """Indices that let filtered (prefilter) searches skip non-matching rows."""
+        specs = [(c, BTree()) for c in ("passage_id", "source_key", "record_id", "person_id", "date")]
+        specs += [(c, Bitmap()) for c in ("source", "house", "record_type", "region", "party_id",
+                                         "is_gov", "is_shadow", "is_chair", "year")]
+        for col, cfg in specs:
+            try:
+                tbl.create_index(col, config=cfg, replace=True)
+            except Exception as exc:  # scalar indices are an optimisation only
+                log.warning("scalar index on %s skipped: %s", col, exc)
 
     def optimize(self) -> None:
         for name in (PASSAGES, VECTORS):
@@ -197,12 +204,16 @@ class SearchIndex:
         if not passage_ids:
             return {}
         rows = self.passages().search().where(
-            f"passage_id IN ({', '.join(sql_str(p) for p in passage_ids)})").limit(len(passage_ids)).to_list()
+            f"passage_id IN ({', '.join(sql_str(p) for p in passage_ids)})").limit(None).to_list()
         return {r["passage_id"]: r for r in rows}
 
-    def rows_for_key(self, key: str) -> list[dict[str, Any]]:
-        tbl = self.passages()
-        return tbl.search().where(f"source_key = {sql_str(key)}").limit(tbl.count_rows() or 1).to_list()
+    def rows_for_keys(self, keys: list[str]) -> list[dict[str, Any]]:
+        if not keys:
+            return []
+        # limit(None): an explicit huge limit makes LanceDB size buffers for it (GBs of RSS)
+        where = f"source_key IN ({', '.join(sql_str(k) for k in keys)})"
+        cols = [name for name, _ in FILTER_FIELDS] + ["heading", "search_text"]
+        return self.passages().search().where(where).select(cols).limit(None).to_list()
 
     def stats(self) -> dict[str, Any]:
         out = {"passages": 0, "vectors": 0}

@@ -118,6 +118,16 @@ def _dates(q: str, today: date) -> tuple[date | None, date | None]:
     return None, None
 
 
+_FILTER_WORDS = set(["how", "have", "has", "had", "did", "do", "does", "what", "which", "who", "whom", "whose", "when", "where", "why", "is", "are", "was", "were", "be", "been", "being", "the", "a", "an", "of", "to", "in", "on", "for", "by", "with", "about", "from", "at", "as", "and", "or", "not", "any", "all", "this", "that", "these", "those", "there", "their", "they", "them", "it", "its", "into", "over", "under", "between", "since", "before", "after", "during", "until", "than", "then", "so", "such", "said", "say", "says", "saying", "stated", "mps", "mp", "members", "member", "ministers", "minister", "government", "governments", "lords", "lord", "peers", "peer", "commons", "house", "parliament", "parliamentary", "shadow", "backbench", "backbenchers", "backbencher", "chairs", "chair", "committee", "committees", "northern", "southern", "midlands", "north", "south", "east", "west", "party", "parties", "labour", "conservative", "conservatives", "tory", "tories", "liberal", "democrat", "democrats", "snp", "year", "years", "last", "this"])
+
+
+def topic_words(question: str) -> str:
+    """Retrieval words: drop question words, filter words and years (they become filters)."""
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*", question)
+    keep = [w for w in words if w.lower() not in _FILTER_WORDS and not re.fullmatch(r"(19|20)\d\d", w)]
+    return " ".join(keep)
+
+
 def parse_offline(question: str, region_groups: dict[str, list[str]], today: date | None = None) -> QueryPlan:
     today = today or date.today()
     ql = question.lower()
@@ -147,7 +157,7 @@ def parse_offline(question: str, region_groups: dict[str, list[str]], today: dat
     wants_votes = bool(re.search(r"\bvot(e|ed|es|ing)\b|dissent|rebel|divisions?\b", ql))
     return QueryPlan(
         question=question,
-        search_text=question,
+        search_text=topic_words(question) or question,
         filters=Filters(date_from=date_from, date_to=date_to, houses=sorted(set(houses)) if len(set(houses)) == 1 else [],
                         regions=regions, offices=offices),
         portfolios=list(portfolios_for_query(question)),

@@ -256,12 +256,14 @@ def bootstrap(sample: bool = typer.Option(False, help="offline demo using bundle
 
 
 @app.command()
-def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False):
+def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False,
+          behind_proxy: bool = typer.Option(False, help="trust X-Forwarded-* headers (e.g. behind Caddy)")):
     """Run the web application."""
     import uvicorn
 
     _setup_logging()
-    uvicorn.run("hansard.api.app:create_app", host=host, port=port, factory=True, reload=reload)
+    uvicorn.run("hansard.api.app:create_app", host=host, port=port, factory=True, reload=reload,
+                proxy_headers=behind_proxy, forwarded_allow_ips="*" if behind_proxy else None)
 
 
 @user_app.command("add")

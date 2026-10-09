@@ -65,3 +65,26 @@ def test_unlettered_file_rewritten_in_place_is_reparsed(settings, xml_mirror):
     os.utime(f, (time.time() + 5, time.time() + 5))
     stats = ingest(settings, workers=1, since=date(2026, 1, 1), directories=["wrans"])
     assert stats.files_revised == 1
+
+
+def test_correction_to_an_already_compacted_day(settings, xml_mirror):
+    from datetime import date
+
+    from hansard.store.parquet import compact
+
+    ingest(settings, workers=1, since=date(2010, 1, 1))
+    total = _count(settings, "SELECT count(*) FROM records")[0][0]
+    stats = compact(settings.parquet_dir, "2099-01-01")
+    assert stats["files_merged"] > 0
+    assert not list((settings.parquet_dir / "records").glob("**/debates2012-03-07.parquet"))
+    assert _count(settings, "SELECT count(*) FROM records")[0][0] == total
+
+    src = xml_mirror / "debates" / "debates2012-03-07a.xml"
+    raw = src.read_bytes().replace(b"2012-03-07a.", b"2012-03-07b.")
+    (xml_mirror / "debates" / "debates2012-03-07b.xml").write_bytes(raw)
+    ingest(settings, workers=1, since=date(2010, 1, 1))
+    rows = _count(settings, "SELECT count(*), count(DISTINCT record_id), min(revision), max(revision) "
+                            "FROM records WHERE source_key = 'debates2012-03-07'")[0]
+    n = rows[0]
+    assert rows == (n, n, "b", "b") and n > 0
+    assert _count(settings, "SELECT count(*) FROM records")[0][0] == total

@@ -114,6 +114,7 @@ class Engine:
         self._embedder = embedder
         self.today = today
         self.con = duckdb.connect()
+        self.con.execute("SET enable_object_cache = true")  # cache Parquet footers between queries
 
     @property
     def embedder(self) -> Embedder | None:
@@ -143,19 +144,21 @@ class Engine:
         def cand_for(hit: dict[str, Any]) -> Candidate:
             c = cands.get(hit["record_id"])
             if c is None:
+                hit = dict(hit)
                 c = Candidate(
                     record_id=hit["record_id"], date=hit["date"],
                     is_gov=bool(hit["is_gov"]), is_shadow=bool(hit["is_shadow"]), is_chair=bool(hit["is_chair"]),
                     gov_portfolios=list(hit["gov_portfolios"] or []),
                     shadow_portfolios=list(hit["shadow_portfolios"] or []),
                     chair_portfolios=list(hit["chair_portfolios"] or []),
-                    data={"source": hit["source"], "source_key": hit["source_key"]},
+                    data={"source": hit["source"], "source_key": hit["source_key"], "passages": {}},
                 )
                 cands[hit["record_id"]] = c
             return c
 
         for h in bm:
             c = cand_for(h)
+            c.data["passages"][h["passage_id"]] = {"text": h["text"], "heading": h["heading"]}
             if c.bm25 is None or h["_score"] > c.bm25:
                 c.bm25 = float(h["_score"])
                 c.best_passage_id = h["passage_id"]
@@ -167,8 +170,11 @@ class Engine:
                 if c.bm25 is None:
                     c.best_passage_id = h["passage_id"]
 
-        params = RankParams.from_settings(r, recency=recency, role_weight=role_weight,
-                                          **({"today": self.today} if self.today else {}))
+        floor, ceiling = getattr(self.embedder, "similarity_range", (0.5, 0.85)) if semantic else (0.5, 0.85)
+        params = RankParams.from_settings(
+            r, recency=recency, role_weight=role_weight,
+            semantic_floor=r.get("semantic_floor", floor), semantic_ceiling=r.get("semantic_ceiling", ceiling),
+            **({"today": self.today} if self.today else {}))
         scored = rank(list(cands.values()), set(portfolios or []), params)
         best_cos = max((c.cosine or 0.0 for c in cands.values()), default=0.0)
         no_records = not scored or (semantic and best_cos < float(r.get("no_records_cosine", 0.0))
@@ -179,15 +185,23 @@ class Engine:
 
     # ---- full records for display / grounding ---------------------------------
     def records_for(self, scored: list[Scored]) -> list[dict[str, Any]]:
-        by_part: dict[tuple[str, int], list[str]] = {}
+        by_part: dict[tuple[str, int], list[Scored]] = {}
         for s in scored:
-            by_part.setdefault((s.candidate.data["source"], s.candidate.date.year), []).append(s.candidate.record_id)
+            by_part.setdefault((s.candidate.data["source"], s.candidate.date.year), []).append(s)
         rows: dict[str, dict[str, Any]] = {}
-        for (source, year), ids in by_part.items():
-            for rec in read_partition_rows(self.con, self.settings.parquet_dir, "records", source, year,
-                                           f"record_id IN {sql_list(ids)}"):
+        for (source, year), items in by_part.items():
+            ids = [s.candidate.record_id for s in items]
+            keys = sorted({s.candidate.data["source_key"] for s in items})
+            dates = sorted({s.candidate.date for s in items})
+            # date and source_key predicates let DuckDB skip row groups of the date-sorted files
+            where = (f"date BETWEEN DATE '{dates[0].isoformat()}' AND DATE '{dates[-1].isoformat()}' "
+                     f"AND source_key IN {sql_list(keys)} AND record_id IN {sql_list(ids)}")
+            for rec in read_partition_rows(self.con, self.settings.parquet_dir, "records", source, year, where):
                 rows[rec["record_id"]] = rec
-        passages = self.index.passages_for([s.candidate.best_passage_id for s in scored if s.candidate.best_passage_id])
+        passages = {pid: p for s in scored for pid, p in s.candidate.data.get("passages", {}).items()}
+        missing = [s.candidate.best_passage_id for s in scored
+                   if s.candidate.best_passage_id and s.candidate.best_passage_id not in passages]
+        passages.update(self.index.passages_for(missing))
         profiles = self.resolver.profiles([(rid, rows[rid]["xml_person_id"], rows[rid]["date"]) for rid in rows])
         out = []
         for s in scored:

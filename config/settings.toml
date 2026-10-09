@@ -54,6 +54,8 @@ summary_effort = "medium"
 comprehensive_effort = "high"
 query_parse_effort = "low"
 max_tokens = 16000
+# Server-side refusal fallback (beta). Disable if your account or platform rejects it.
+use_fallbacks = true
 
 [embedding]
 # "fastembed" (local ONNX model; weights fetched once from Hugging Face and pinned)
@@ -64,7 +66,8 @@ backend = "fastembed"
 model = "snowflake/snowflake-arctic-embed-xs"
 dim = 384
 passage_words = 250
-batch_size = 64
+# Small batches: same CPU throughput as 64, a fifth of the memory (ONNX attention buffers).
+batch_size = 8
 
 [usage]
 per_user_daily_questions = 60
@@ -72,6 +75,13 @@ monthly_spend_cap_usd = 150.0
 # USD per million tokens, used for spend tracking only.
 price_input_per_mtok = 4.0
 price_output_per_mtok = 20.0
+price_cache_read_per_mtok = 0.4
+
+[auth]
+# Invite-only accounts. Set required = false only for a private, single-user
+# install that is not reachable from the internet.
+required = true
+session_days = 14
 
 [sync]
 # UK local times the systemd timer runs `hansard sync`.

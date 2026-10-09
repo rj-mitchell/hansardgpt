@@ -98,11 +98,17 @@ def load_settings(config_path: str | Path | None = None, **overrides: Any) -> Se
     path = _resolve(config_path or os.environ.get("HANSARD_CONFIG") or DEFAULT_CONFIG)
     with open(path, "rb") as fh:
         raw = tomllib.load(fh)
+    data_dir = _resolve(os.environ.get("HANSARD_DATA_DIR") or raw.get("paths", {}).get("data_dir", "data"))
+    # Per-installation overrides written by `hansard bootstrap` (e.g. the offline sample demo).
+    local = data_dir / "settings.local.toml"
+    if local.exists():
+        with open(local, "rb") as fh:
+            for section, values in tomllib.load(fh).items():
+                raw.setdefault(section, {}).update(values)
     for dotted, value in overrides.items():
         section, _, key = dotted.partition(".")
         raw.setdefault(section, {})[key] = value
-    data_dir = os.environ.get("HANSARD_DATA_DIR") or raw.get("paths", {}).get("data_dir", "data")
-    return Settings(raw=raw, data_dir=_resolve(data_dir), config_path=path, overrides=overrides)
+    return Settings(raw=raw, data_dir=data_dir, config_path=path, overrides=overrides)
 
 
 @lru_cache(maxsize=1)

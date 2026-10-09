@@ -81,10 +81,21 @@ def test_hybrid_relevance_combines_keyword_and_semantic():
     d = date(2024, 1, 1)
     cands = [Candidate("kw-only", d, bm25=10.0), Candidate("sem-only", d, cosine=0.8),
              Candidate("both", d, bm25=8.0, cosine=0.7)]
-    scored = rank(cands, set(), params(recency=0.0, role_weight=1.0))
+    scored = rank(cands, set(), params(recency=0.0, role_weight=1.0, semantic_floor=0.0, semantic_ceiling=0.8))
     assert ids(scored)[0] == "both"
     rel = {s.candidate.record_id: s.relevance for s in scored}
     assert rel["kw-only"] == pytest.approx(0.5) and rel["sem-only"] == pytest.approx(0.5)
+
+
+def test_weak_semantic_matches_are_not_inflated():
+    """A semantic-only hit near the model's 'unrelated' similarity must not outrank a strong keyword hit,
+    even when it is the best semantic hit in the candidate set."""
+    d = date(2024, 1, 1)
+    cands = [Candidate("weak-semantic", d, cosine=0.52), Candidate("strong-keyword", d, bm25=15.0)]
+    scored = rank(cands, set(), params(recency=0.0, role_weight=1.0, semantic_floor=0.5, semantic_ceiling=0.85))
+    rel = {s.candidate.record_id: s.relevance for s in scored}
+    assert ids(scored)[0] == "strong-keyword"
+    assert rel["weak-semantic"] < 0.05
 
 
 def test_sliders_are_clamped():

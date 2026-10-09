@@ -182,7 +182,7 @@ class Indexer:
         tbl = self.index.passages()
         where = f"person_id IN ({', '.join(sql_str(p) for p in sorted(person_ids))})"
         keys = sorted({(r["source"], r["source_key"]) for r in
-                       tbl.search().where(where).select(["source", "source_key"]).limit(10_000_000).to_list()})
+                       tbl.search().where(where).select(["source", "source_key"]).limit(None).to_list()})
         # Re-indexing those files recomputes every derived column consistently;
         # the text is unchanged, so embeddings are kept.
         self.index_keys(keys, keep_vectors=True)
@@ -199,9 +199,7 @@ def embed_pending(settings: Settings, index: SearchIndex, state: StateDB, embedd
     total = 0
     for i in range(0, len(keys), batch_files):
         part = keys[i:i + batch_files]
-        rows: list[dict[str, Any]] = []
-        for _, key in part:
-            rows.extend(index.rows_for_key(key))
+        rows = index.rows_for_keys([k for _, k in part])
         texts = [f"{r['heading']}: {r['search_text'].split(chr(10), 1)[-1]}" if r["heading"] else r["search_text"]
                  for r in rows]
         vecs = embedder.embed_documents(texts)

@@ -31,6 +31,8 @@ DOC_PREFIXES = {"nomic-ai/nomic-embed-text-v1.5": "search_document: "}
 class Embedder(Protocol):
     name: str
     dim: int
+    # cosine of unrelated text (floor) and of a strong match (ceiling) for this model
+    similarity_range: tuple[float, float]
 
     def embed_documents(self, texts: list[str]) -> np.ndarray: ...
 
@@ -51,6 +53,7 @@ class HashingEmbedder:
     def __init__(self, dim: int = 256):
         self.dim = dim
         self.name = f"hashing-{dim}"
+        self.similarity_range = (0.0, 0.6)
 
     def _vec(self, text: str) -> np.ndarray:
         v = np.zeros(self.dim, dtype=np.float32)
@@ -75,6 +78,8 @@ class FastEmbedEmbedder:
 
         self.name = model
         self.batch_size = batch_size
+        # retrieval-tuned sentence embedders score unrelated passages around 0.5
+        self.similarity_range = (0.5, 0.85)
         self._model = TextEmbedding(model, cache_dir=str(cache_dir), threads=threads)
         self.dim = len(next(iter(self._model.embed(["dimension probe"]))))
         self._qp = QUERY_PREFIXES.get(model, "")

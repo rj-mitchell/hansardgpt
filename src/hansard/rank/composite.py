@@ -4,8 +4,11 @@ Nothing here excludes a record. Recency and role only re-weight relevance, so
 a much stronger textual match from 2011 still outranks a weak 2025 one. Hard
 exclusions happen only through filters the user sets explicitly.
 
-relevance  = w * bm25 / max(bm25) + (1 - w) * cosine / max(cosine)
-             (each component in [0, 1]; a retriever that missed a record adds 0)
+relevance  = w * bm25 / max(bm25) + (1 - w) * calibrated(cosine)
+             calibrated(c) = clamp((c - floor) / (ceiling - floor), 0, 1), using the
+             embedding model's similarity range (unrelated text scores ~floor), so a
+             weak semantic match is not inflated just because it was the best of a
+             weak set. A retriever that missed a record adds 0.
 recency    = floor + (1 - floor) * 0.5 ** (age_years / half_life)
              slider s in [0, 1]: s = 0 -> recency = 1 for every record;
              otherwise half_life = min_half_life_years / s (s = 1 -> 2 years)
@@ -37,6 +40,8 @@ class RankParams:
     m_shadow_other: float = 0.3
     m_chair_match: float = 1.0
     m_chair_other: float = 0.5
+    semantic_floor: float = 0.5
+    semantic_ceiling: float = 0.85
     today: date = field(default_factory=date.today)
 
     @classmethod
@@ -122,12 +127,13 @@ def rank(candidates: list[Candidate], query_portfolios: set[str] | list[str], p:
         return []
     qp = set(query_portfolios)
     bm_max = max((c.bm25 for c in candidates if c.bm25), default=0.0)
-    cos_max = max((c.cosine for c in candidates if c.cosine and c.cosine > 0), default=0.0)
-    w = p.bm25_weight if (bm_max and cos_max) else (1.0 if bm_max else 0.0)
+    has_sem = any(c.cosine is not None for c in candidates)
+    w = p.bm25_weight if (bm_max and has_sem) else (1.0 if bm_max else 0.0)
+    span = max(p.semantic_ceiling - p.semantic_floor, 1e-6)
     out: list[Scored] = []
     for c in candidates:
         kw = (c.bm25 or 0.0) / bm_max if bm_max else 0.0
-        sem = max(c.cosine or 0.0, 0.0) / cos_max if cos_max else 0.0
+        sem = 0.0 if c.cosine is None else min(max((c.cosine - p.semantic_floor) / span, 0.0), 1.0)
         rel = w * kw + (1 - w) * sem
         rec = recency_factor(c.date, p)
         m, why = authority_m(c, qp, p)
