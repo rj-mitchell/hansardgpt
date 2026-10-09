@@ -193,15 +193,18 @@ def build_reference(
     posts = {p["id"]: p for p in people["posts"]}
     overrides = load_overrides(overrides_csv)
     by_set: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
-    by_gss = {}
+    # A few unchanged seats (e.g. Orkney and Shetland) keep their GSS code across
+    # boundary sets, so codes map to every entry and the one valid on the date wins.
+    by_gss: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for c in ref.constituencies:
         by_set[c["boundary_set"]][normalise_place(c["name"])] = c
-        by_gss[c["gss_code"]] = c
+        by_gss[c["gss_code"]].append(c)
 
     def seat_for(post: dict[str, Any], on: date) -> dict[str, Any] | None:
         for ident in post.get("identifiers", []):
             if ident["scheme"] == "gss" and ident["identifier"] in by_gss:
-                return by_gss[ident["identifier"]]
+                entries = by_gss[ident["identifier"]]
+                return next((c for c in entries if c["valid_from"] <= on <= c["valid_to"]), entries[-1])
         bset = "2024" if on >= date(2024, 7, 4) else "2010" if on >= date(2010, 5, 6) else None
         if bset is None:
             return None

@@ -81,7 +81,12 @@ class Settings:
 
     @property
     def state_db(self) -> Path:
-        return self.data_dir / "state.duckdb"
+        # SQLite: shared safely by the web app and the sync job (WAL mode).
+        return self.data_dir / "state.sqlite"
+
+    @property
+    def log_dir(self) -> Path:
+        return self.data_dir / "logs"
 
 
 def _resolve(path: str | Path) -> Path:
