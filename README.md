@@ -82,22 +82,24 @@ which groups. If the archive has nothing relevant, the tool says **"No records f
   frontbench, select committee chairs, backbench MPs in city, town and rural seats, and backbench peers. The
   evidence set is then drawn round-robin across those groups, with at most two contributions per speaker and a
   relevance floor, so a briefing can compare groups instead of echoing one minister six times.
-* **Seat type.** Every constituency in both boundary sets is classified by the size of the continuous urban
-  area most of its residents live in, not by official city status (`data_static/geo/constituencies.csv`):
-  * **city:** the main urban area has about 200,000 people or more (the ONS "major" built-up area size).
-    Reading, Milton Keynes and Bolton count; Bolton because it is part of the Greater Manchester urban area;
-  * **town:** a smaller urban area. St Albans, Bath and Durham count, despite their city status;
-  * **rural:** most residents live outside towns of 10,000 or more (the ONS rural definition). Wells and Ely
-    count.
+* **Seat type.** Every constituency in both boundary sets is classified from official statistics by the size of
+  the urban area most of its residents live in, not by city status (`data_static/geo/constituencies.csv`):
+  * **city:** the main urban area has 200,000+ people (ONS's "major" built-up area class). Reading, Milton
+    Keynes and Bolton count; Bolton because it is part of the Greater Manchester built-up area;
+  * **town:** a smaller urban area. Bath, Canterbury and Lichfield count, despite their city status;
+  * **rural:** most residents live outside urban areas of 10,000+, the official ONS rural definition. Wells
+    and Ely count.
 
-  Urban areas are built the way ONS builds its built-up areas: patches of built land less than about 200 m apart
-  join up. The location of every GB postcode (Ordnance Survey Code-Point Open) stands in for built land, and
-  population comes from each 2024 seat's census population. Checked against the ONS 2011 built-up areas, the
-  median size error is 7%, and 39 of the 51 largest areas are within 20%. Teesside and Sunderland come out
-  smaller than ONS's figures, so their seats count as towns. Northern Ireland postcodes are not in Code-Point
-  Open, so its four Belfast seats are city seats and the rest are town or rural by population density. Each
-  source label names the urban area and its size, so readers can check. That gives about 320 city, 195 town and
-  140 rural seats in each set. The thresholds are in `scripts/build_geo_lookups.py`.
+  The urban areas are:
+  * England and Wales: ONS's 2011 built-up areas, which keep conurbations whole, with 2011 Census populations;
+  * Scotland: National Records of Scotland's Census 2022 settlements, where Greater Glasgow includes Paisley;
+  * Northern Ireland: NISRA's 2015 settlements, where Belfast City is the only one of 200,000+.
+
+  Each source's own lookups link small areas to both sets of seats. Note that ONS's Greater London built-up area
+  takes in towns physically joined to London around the M25 (Watford, St Albans, Woking, Guildford, Hemel
+  Hempstead), so their seats count as city seats. That gives about 340 city, 205 town and 108 rural seats in each
+  set. Each source label names the urban area and its size. The rules and source URLs are in
+  `scripts/build_geo_lookups.py`.
 
 ## Look and feel
 

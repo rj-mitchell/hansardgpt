@@ -83,17 +83,18 @@ def _seat(name, boundary="2024"):
 def test_seat_type_follows_urban_area_size_not_city_status():
     for s in seats():
         assert s["settlement"] in {"city", "town", "rural"}, s
-        if s["settlement"] == "city" and s["nation"] != "Northern Ireland":
-            assert s["urban_area"] and s["urban_area_pop"] >= 190_000, s
+        if s["settlement"] == "city":
+            assert s["urban_area"] and s["urban_area_pop"] >= 200_000, s
         if s["settlement"] == "town" and s["urban_area_pop"]:
-            assert s["urban_area_pop"] < 190_000, s
+            assert s["urban_area_pop"] < 200_000, s
     # small places with city status
     assert _seat("Wells and Mendip Hills")["settlement"] == "rural"
     assert _seat("Ely and East Cambridgeshire")["settlement"] == "rural"
-    assert {_seat(n)["settlement"] for n in ("St Albans", "Bath", "City of Durham", "Lichfield")} == {"town"}
+    assert {_seat(n)["settlement"] for n in ("Bath", "Canterbury", "Lichfield", "Hereford and South Herefordshire")} \
+        == {"town"}
     # large places without it
-    assert {_seat(n)["settlement"] for n in ("Reading Central", "Milton Keynes Central", "Northampton North",
-                                             "Swindon South")} == {"city"}
+    assert {_seat(n)["settlement"] for n in ("Reading Central", "Milton Keynes Central", "Northampton North")} \
+        == {"city"}
     # a town inside a conurbation takes the conurbation's size; a separate town keeps its own
     bolton = _seat("Bolton North East")
     assert (bolton["settlement"], bolton["urban_area"]) == ("city", "Greater Manchester")
@@ -101,6 +102,7 @@ def test_seat_type_follows_urban_area_size_not_city_status():
     assert _seat("Wigan")["settlement"] == "town"
     assert _seat("Leeds Central", "2010")["urban_area"] == "West Yorkshire"
     assert {_seat(n)["settlement"] for n in ("Belfast East", "Belfast West")} == {"city"}
+    assert _seat("Paisley and Renfrewshire South")["urban_area"] == "Greater Glasgow"  # NRS settlement
 
 
 def test_seat_types_are_balanced_enough_to_compare():
