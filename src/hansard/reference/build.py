@@ -133,6 +133,8 @@ def load_constituencies(csv_path: Path) -> list[dict[str, Any]]:
                 "valid_to": date.fromisoformat(r["valid_to"]),
                 "settlement": r.get("settlement") or None,
                 "main_area": r.get("main_area") or None,
+                "urban_area": r.get("urban_area") or None,
+                "urban_area_pop": int(r["urban_area_pop"]) if r.get("urban_area_pop") else None,
             })
     return rows
 
@@ -254,6 +256,8 @@ def build_reference(
             "region": seat["region"] if seat else None,
             "nation": seat["nation"] if seat else None,
             "settlement": seat.get("settlement") if seat else None,
+            "urban_area": seat.get("urban_area") if seat else None,
+            "urban_area_pop": seat.get("urban_area_pop") if seat else None,
             "party_id": party,
             "party_name": party_names.get(party, party),
             "start": start,
@@ -382,7 +386,8 @@ _SCHEMAS = {
     "memberships": pa.schema([
         ("membership_id", pa.string()), ("person_id", pa.string()), ("house", pa.string()),
         ("constituency", pa.string()), ("gss_code", pa.string()), ("region", pa.string()),
-        ("nation", pa.string()), ("settlement", pa.string()), ("party_id", pa.string()), ("party_name", pa.string()),
+        ("nation", pa.string()), ("settlement", pa.string()), ("urban_area", pa.string()),
+        ("urban_area_pop", pa.int32()), ("party_id", pa.string()), ("party_name", pa.string()),
         ("start", pa.date32()), ("end", pa.date32()), ("start_reason", pa.string()),
         ("end_reason", pa.string())]),
     "offices": pa.schema([
@@ -393,7 +398,8 @@ _SCHEMAS = {
     "constituencies": pa.schema([
         ("gss_code", pa.string()), ("name", pa.string()), ("region", pa.string()),
         ("nation", pa.string()), ("boundary_set", pa.string()), ("valid_from", pa.date32()),
-        ("valid_to", pa.date32()), ("settlement", pa.string()), ("main_area", pa.string())]),
+        ("valid_to", pa.date32()), ("settlement", pa.string()), ("main_area", pa.string()),
+        ("urban_area", pa.string()), ("urban_area_pop", pa.int32())]),
     "parties": pa.schema([("party_id", pa.string()), ("party_name", pa.string()),
                           ("whip_group", pa.string())]),
 }

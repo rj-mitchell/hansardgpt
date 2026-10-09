@@ -222,3 +222,15 @@ def test_superseded_index_versions_are_deleted(settings, xml_mirror, tmp_path, m
     idx.optimize()
     assert len(idx.passages().list_versions()) < before
     assert _copies(settings, "passages", ANSWER)  # the current data is intact
+
+
+def test_display_only_member_fields_do_not_trigger_reindexing(reference_dir):
+    from hansard.reference.build import build_reference
+    from hansard.sync import changed_people
+
+    from .conftest import GEO_CSV
+
+    fresh = build_reference(MEMBERS, GEO_CSV)
+    for m in fresh.memberships:
+        m["settlement"], m["urban_area"] = "city", "Somewhere new"
+    assert changed_people(reference_dir, fresh) == set()

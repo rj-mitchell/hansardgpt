@@ -74,3 +74,36 @@ def test_name_normalisation():
     assert normalise_place("Airdrie & Shotts") == normalise_place("Airdrie and Shotts")
     assert normalise_place("Aldridge - Brownhills") == normalise_place("Aldridge-Brownhills")
     assert normalise_place("Ynys Môn") == "ynys mon"
+
+
+def _seat(name, boundary="2024"):
+    return next(s for s in seats() if s["name"] == name and s["boundary_set"] == boundary)
+
+
+def test_seat_type_follows_urban_area_size_not_city_status():
+    for s in seats():
+        assert s["settlement"] in {"city", "town", "rural"}, s
+        if s["settlement"] == "city" and s["nation"] != "Northern Ireland":
+            assert s["urban_area"] and s["urban_area_pop"] >= 190_000, s
+        if s["settlement"] == "town" and s["urban_area_pop"]:
+            assert s["urban_area_pop"] < 190_000, s
+    # small places with city status
+    assert _seat("Wells and Mendip Hills")["settlement"] == "rural"
+    assert _seat("Ely and East Cambridgeshire")["settlement"] == "rural"
+    assert {_seat(n)["settlement"] for n in ("St Albans", "Bath", "City of Durham", "Lichfield")} == {"town"}
+    # large places without it
+    assert {_seat(n)["settlement"] for n in ("Reading Central", "Milton Keynes Central", "Northampton North",
+                                             "Swindon South")} == {"city"}
+    # a town inside a conurbation takes the conurbation's size; a separate town keeps its own
+    bolton = _seat("Bolton North East")
+    assert (bolton["settlement"], bolton["urban_area"]) == ("city", "Greater Manchester")
+    assert bolton["urban_area_pop"] > 2_000_000
+    assert _seat("Wigan")["settlement"] == "town"
+    assert _seat("Leeds Central", "2010")["urban_area"] == "West Yorkshire"
+    assert {_seat(n)["settlement"] for n in ("Belfast East", "Belfast West")} == {"city"}
+
+
+def test_seat_types_are_balanced_enough_to_compare():
+    for boundary in ("2010", "2024"):
+        counts = Counter(s["settlement"] for s in seats() if s["boundary_set"] == boundary)
+        assert all(100 <= n <= 350 for n in counts.values()), counts

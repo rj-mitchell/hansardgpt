@@ -32,6 +32,26 @@ GROUPS = {
 SETTLEMENT_LABEL = {"city": "city seat", "town": "town seat", "rural": "rural seat"}
 
 
+def people(n: int) -> str:
+    return f"{n / 1e6:.1f}m" if n >= 1_000_000 else f"{round(n, -3):,}"
+
+
+def seat_type_label(sp: dict[str, Any]) -> str | None:
+    """e.g. 'city seat (Greater Manchester urban area, 2.8m people)' or 'town seat (urban area of 172,000)'."""
+    kind = sp.get("settlement")
+    if not kind:
+        return None
+    label = SETTLEMENT_LABEL.get(kind, kind)
+    pop, area = sp.get("urban_area_pop"), sp.get("urban_area")
+    if kind == "city":
+        detail = ", ".join(x for x in (f"{area} urban area" if area else None,
+                                       f"{people(pop)} people" if pop else None) if x)
+        return f"{label} ({detail})" if detail else label
+    if kind == "town" and pop:
+        return f"{label} (urban area of {people(pop)})"
+    return label
+
+
 def speaker_group(profile: Any) -> str:
     """Group key for a speaker profile (``SpeakerProfile`` or its dict form)."""
     p = profile.to_dict() if hasattr(profile, "to_dict") else (profile or {})

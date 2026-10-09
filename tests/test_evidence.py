@@ -62,3 +62,18 @@ def test_labour_includes_labour_cooperative(indexed_settings):
     e = Engine(indexed_settings, embedder=HashingEmbedder(64))
     assert set(e.expand_parties(["labour"])) >= {"labour", "labourco-operative"}
     assert e.expand_parties(["conservative"]) == ["conservative"]
+
+
+def test_seat_type_labels_say_how_big_the_urban_area_is():
+    from hansard.rank.evidence import seat_type_label
+
+    assert seat_type_label({"settlement": "city", "urban_area": "Greater Manchester", "urban_area_pop": 2_776_363}) \
+        == "city seat (Greater Manchester urban area, 2.8m people)"
+    assert seat_type_label({"settlement": "city", "urban_area": "Milton Keynes", "urban_area_pop": 195_063}) \
+        == "city seat (Milton Keynes urban area, 195,000 people)"
+    assert seat_type_label({"settlement": "city", "urban_area": "Belfast", "urban_area_pop": None}) \
+        == "city seat (Belfast urban area)"
+    assert seat_type_label({"settlement": "town", "urban_area": "Wigan", "urban_area_pop": 172_345}) \
+        == "town seat (urban area of 172,000)"
+    assert seat_type_label({"settlement": "rural", "urban_area_pop": 11_087}) == "rural seat"
+    assert seat_type_label({"settlement": None}) is None

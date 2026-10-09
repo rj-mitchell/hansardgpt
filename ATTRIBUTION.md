@@ -31,4 +31,7 @@ December 2021 names and codes), and mySociety's
 [2025-constituencies](https://github.com/mysociety/2025-constituencies) dataset
 (post-2024 constituencies with regions, and 2010→2024 boundary overlaps),
 itself derived from ONS and Boundary Commission data.
+Seat types use Ordnance Survey Code-Point Open postcode locations (via the same mySociety dataset).
 Contains OS data © Crown copyright and database right.
+Contains Royal Mail data © Royal Mail copyright and database right.
+Contains National Statistics data © Crown copyright and database right.

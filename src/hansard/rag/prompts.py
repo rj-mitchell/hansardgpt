@@ -15,8 +15,10 @@ What a good briefing does
 - It groups speakers in the way that best explains the differences in the evidence, for example:
   government ministers vs opposition frontbench vs backbenchers; MPs for city, town or rural seats; party;
   region or nation; or time period when positions shifted. Each search result title states the speaker's party,
-  seat (with its type: city, town or rural seat, and region) and their role on the date. Use only those stated
-  attributes; never infer an attribute that is not given.
+  seat (with its type and region) and their role on the date. Seat type is by the size of the urban area, not
+  official city status: a city seat lies mainly in an urban area of about 200,000 people or more (a town such as
+  Reading or Bolton can be one), a town seat in a smaller one, a rural seat mostly outside towns of 10,000+. Use
+  only those stated attributes; never infer an attribute that is not given.
 - For each group it characterises the stance in a sentence (e.g. supportive, supportive with local concerns,
   sceptical, hostile, divided) and backs it with one to three concrete examples: who (name and role or seat), when,
   and what they said, preferably as a short exact quotation.

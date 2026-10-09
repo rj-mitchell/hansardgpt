@@ -81,65 +81,22 @@ which groups. If the archive has nothing relevant, the tool says **"No records f
   frontbench, select committee chairs, backbench MPs in city, town and rural seats, and backbench peers. The
   evidence set is then drawn round-robin across those groups, with at most two contributions per speaker and a
   relevance floor, so a briefing can compare groups instead of echoing one minister six times.
-* **Seat type.** Every constituency in both boundary sets is classified (`data_static/geo/constituencies.csv`):
-  * **city:** most of the seat's population lives in London or a Core City (Belfast, Birmingham, Bristol,
-    Cardiff, Glasgow, Leeds, Liverpool, Manchester, Newcastle, Nottingham, Sheffield) or Edinburgh;
-  * **rural:** fewer than 250 people per km²;
-  * **town:** all other seats.
+* **Seat type.** Every constituency in both boundary sets is classified by the size of the continuous urban
+  area most of its residents live in, not by official city status (`data_static/geo/constituencies.csv`):
+  * **city:** the main urban area has about 200,000 people or more (the ONS "major" built-up area size).
+    Reading, Milton Keynes and Bolton count; Bolton because it is part of the Greater Manchester urban area;
+  * **town:** a smaller urban area. St Albans, Bath and Durham count, despite their city status;
+  * **rural:** most residents live outside towns of 10,000 or more (the ONS rural definition). Wells and Ely
+    count.
 
-  That gives about 140 city, 360 town and 150 rural seats in each set. The thresholds are in
-  `scripts/build_geo_lookups.py`.
-
-## Trying it (offline sample)
-
-Needs Python 3.12+, [uv](https://docs.astral.sh/uv/) and Node 20+.
-
-```bash
-uv sync --extra embed
-(cd web && npm ci && npm run build)
-uv run hansard bootstrap --sample     # ~5 seconds, no downloads, uses real Hansard excerpts
-uv run hansard serve                  # open http://127.0.0.1:8000
-```
-
-The sample uses a small set of real Hansard excerpts, sign-in is turned off, and it uses a simple offline
-embedder. Set `ANTHROPIC_API_KEY` to get written answers; without a key you see ranked, cited sources only.
-
-## Running it on a server
-
-Recommended: 4–8 vCPU, 16 GB RAM and 60 GB of disk.
-
-| Data | Size |
-|---|---|
-| Raw XML since 2010 | 4.9 GB |
-| Parquet store | 1.2 GB |
-| Keyword index | 7.9 GB (4.6 GB of passages, 3.3 GB of full-text and filter indices) |
-| Vectors | about 8 GB |
-
-Each sync deletes index versions more than an hour old. A large update, such as a big member reshuffle,
-can temporarily add several GB until the next sync cleans it up.
-
-On a fresh Ubuntu 24.04 server pointed at by a domain name:
-
-```bash
-sudo bash deploy/provision.sh
-```
-
-The script:
-* installs Docker;
-* starts the app behind Caddy, which provides automatic HTTPS;
-* runs the first data load in the background (30–60 minutes);
-* installs a timer that runs the sync at 07:15 and 19:15 UK time.
-
-Then create your account:
-
-```bash
-cd /opt/hansardgpt/deploy && docker compose exec app hansard user add you@example.org --admin
-```
-
-**Semantic-search build time.** The initial embedding of about 4.7 million passages is resumable and runs
-newest first. It takes roughly a day on 4 cores, and less on 8. Keyword search works from the start, and
-recent years become semantically searchable within the first hours. Each sync continues the embedding for up
-to 4 hours.
+  Urban areas are built the way ONS builds its built-up areas: patches of built land less than about 200 m apart
+  join up. The location of every GB postcode (Ordnance Survey Code-Point Open) stands in for built land, and
+  population comes from each 2024 seat's census population. Checked against the ONS 2011 built-up areas, the
+  median size error is 7%, and 39 of the 51 largest areas are within 20%. Teesside and Sunderland come out
+  smaller than ONS's figures, so their seats count as towns. Northern Ireland postcodes are not in Code-Point
+  Open, so its four Belfast seats are city seats and the rest are town or rural by population density. Each
+  source label names the urban area and its size, so readers can check. That gives about 320 city, 195 town and
+  140 rural seats in each set. The thresholds are in `scripts/build_geo_lookups.py`.
 
 ## Day-to-day operation
 

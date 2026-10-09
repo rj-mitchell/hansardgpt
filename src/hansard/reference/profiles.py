@@ -47,6 +47,7 @@ ms AS (
     SELECT r.record_id,
            arg_max(struct_pack(house := m.house, constituency := m.constituency, gss_code := m.gss_code,
                                region := m.region, nation := m.nation, settlement := m.settlement,
+                               urban_area := m.urban_area, urban_area_pop := m.urban_area_pop,
                                party_id := m.party_id, party_name := m.party_name), m.start) AS mem
     FROM r JOIN ref_memberships m ON m.person_id = r.person_id AND r.date BETWEEN m.start AND m."end"
     GROUP BY r.record_id
@@ -64,6 +65,7 @@ SELECT r.record_id, r.person_id, nm.speaker_name,
        ms.mem.house AS member_house, ms.mem.constituency AS constituency, ms.mem.gss_code AS gss_code,
        ms.mem.region AS region, ms.mem.nation AS nation, ms.mem.party_id AS party_id,
        ms.mem.party_name AS party_name, ms.mem.settlement AS settlement,
+       ms.mem.urban_area AS urban_area, ms.mem.urban_area_pop AS urban_area_pop,
        coalesce(of.offices, []) AS offices
 FROM r
 LEFT JOIN nm ON nm.record_id = r.record_id
@@ -111,7 +113,9 @@ class SpeakerProfile:
     nation: str | None = None
     party: str | None = None
     party_id: str | None = None
-    settlement: str | None = None   # city | town | rural (Commons seats only)
+    settlement: str | None = None   # city | town | rural, by size of urban area (Commons seats only)
+    urban_area: str | None = None   # the seat's main urban area, named for city seats
+    urban_area_pop: int | None = None
     offices: list[dict[str, Any]] = field(default_factory=list)
     other_names: list[str] = field(default_factory=list)
 
@@ -132,6 +136,8 @@ class SpeakerProfile:
             "party": self.party,
             "party_id": self.party_id,
             "settlement": self.settlement,
+            "urban_area": self.urban_area,
+            "urban_area_pop": self.urban_area_pop,
             "offices": [{**o, "title": office_display(o, self.on)} for o in self.offices],
             "other_names": self.other_names,
         }
@@ -161,7 +167,7 @@ class ProfileResolver:
         }))
         rows = enrich(self.con).fetchall()
         cols = ["record_id", "person_id", "speaker_name", "member_house", "constituency", "gss_code",
-                "region", "nation", "party_id", "party_name", "settlement", "offices"]
+                "region", "nation", "party_id", "party_name", "settlement", "urban_area", "urban_area_pop", "offices"]
         dates = {rid: d for rid, _, d in items}
         out: dict[str, SpeakerProfile] = {}
         person_ids = set()
@@ -172,7 +178,7 @@ class ProfileResolver:
                 person_id=r["person_id"], on=dates[r["record_id"]], name=r["speaker_name"],
                 house=r["member_house"], constituency=r["constituency"], gss_code=r["gss_code"],
                 region=r["region"], nation=r["nation"], party=r["party_name"], party_id=r["party_id"],
-                settlement=r["settlement"],
+                settlement=r["settlement"], urban_area=r["urban_area"], urban_area_pop=r["urban_area_pop"],
                 offices=sorted(r["offices"], key=lambda o: (o["kind"], o["display_name"] or "")),
             )
         names = self._all_names([p for p in person_ids if p])

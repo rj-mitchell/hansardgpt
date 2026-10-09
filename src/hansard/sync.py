@@ -43,13 +43,18 @@ PERSON_TABLES = ("names", "memberships", "offices")
 PENDING_PEOPLE = "reenrich_pending_people"
 
 
+# Shown on source cards (profiled live from the reference tables), never stored in the index.
+DISPLAY_ONLY = {"settlement", "urban_area", "urban_area_pop"}
+
+
 def _person_fingerprints(rows_by_table: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
     acc: dict[str, list[str]] = defaultdict(list)
     for table, rows in rows_by_table.items():
         for r in rows:
             pid = r.get("person_id")
             if pid:
-                acc[pid].append(table + json.dumps(r, sort_keys=True, default=str))
+                kept = {k: v for k, v in r.items() if k not in DISPLAY_ONLY}
+                acc[pid].append(table + json.dumps(kept, sort_keys=True, default=str))
     return {pid: hashlib.sha256("\n".join(sorted(parts)).encode()).hexdigest() for pid, parts in acc.items()}
 
 
