@@ -12,7 +12,7 @@ FROM python:3.12.7-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git rsync ca-certificates \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
+RUN pip install --no-cache-dir uv==0.11.32
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md LICENSE ATTRIBUTION.md ./
 COPY src ./src

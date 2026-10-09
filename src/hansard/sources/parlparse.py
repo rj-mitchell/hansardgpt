@@ -9,17 +9,22 @@ any answer can be traced to the exact member-data version used.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 SPARSE_PATHS = ["members"]
+# a clean environment, apart from network settings a proxied machine needs to reach GitHub
+_PASS_THROUGH = ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy",
+                 "SSL_CERT_FILE", "GIT_SSL_CAINFO")
 
 
 def _git(*args: str, cwd: Path | None = None) -> str:
     out = subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True,
-                         env={"GIT_LFS_SKIP_SMUDGE": "1", "PATH": "/usr/bin:/bin:/usr/local/bin"})
+                         env={"GIT_LFS_SKIP_SMUDGE": "1", "PATH": "/usr/bin:/bin:/usr/local/bin",
+                              **{k: v for k in _PASS_THROUGH if (v := os.environ.get(k))}})
     return out.stdout.strip()
 
 

@@ -85,8 +85,9 @@ def _is_connective(text: str) -> bool:
 _LABEL = re.compile(r"^\s*(#+ .*|\*\*[^*]+\*\*:?)\s*$")
 # statements about the evidence itself (what was or was not retrieved), not about what anyone said
 _EVIDENCE_NOTE = re.compile(
-    r"\b(records? (retrieved|supplied|shown)|in the records|no (division|voting) records|evidence (base|is|set)|"
-    r"gaps?\b|caveats?\b|cannot be (reported|attributed))", re.I)
+    r"\b(records? (retrieved|supplied|shown)|(retrieved|supplied) (records|results|sources)|in the records|"
+    r"no (division|voting) records|evidence (base|is|set)|gaps?\b|caveats?\b|cannot be (reported|attributed)|"
+    r"(were|was) not relevant|been excluded)", re.I)
 _SENTENCE_END = re.compile(r"[.!?][\"')\]]*\s+\S")
 _ATTRIBUTION_MAX = 220
 

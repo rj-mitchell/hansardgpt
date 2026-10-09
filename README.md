@@ -31,15 +31,16 @@ which groups. If the archive has nothing relevant, the tool says **"No records f
 ## Contents
 
 1. [How it works](#how-it-works)
-2. [Trying it (offline sample)](#trying-it-offline-sample)
-3. [Running it on a server](#running-it-on-a-server)
-4. [Day-to-day operation](#day-to-day-operation)
-5. [Ranking: recency and role weighting](#ranking-recency-and-role-weighting)
-6. [How answers stay grounded](#how-answers-stay-grounded)
-7. [Data sources and licensing](#data-sources-and-licensing)
-8. [Development](#development)
-9. [Measured performance](#measured-performance)
-10. [Known limitations](#known-limitations)
+2. [Look and feel](#look-and-feel)
+3. [Try it on your own computer](#try-it-on-your-own-computer)
+4. [Running it on a server](#running-it-on-a-server)
+5. [Day-to-day operation](#day-to-day-operation)
+6. [Ranking: recency and role weighting](#ranking-recency-and-role-weighting)
+7. [How answers stay grounded](#how-answers-stay-grounded)
+8. [Data sources and licensing](#data-sources-and-licensing)
+9. [Development](#development)
+10. [Measured performance](#measured-performance)
+11. [Known limitations](#known-limitations)
 
 ---
 
@@ -117,6 +118,93 @@ Dark mode follows the system setting. The CSS follows [good-css](https://github.
 - hover styles only where a mouse is present;
 - visible focus rings and press feedback;
 - animation only for people who have not asked for reduced motion.
+
+## Try it on your own computer
+
+This runs the real site, with real Hansard, on your own Mac or Windows PC at <http://localhost:8000>. Only
+your computer can open it. You need:
+
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/) (free for personal use). Install it and start
+  it. If its *Settings → Resources* page offers a memory setting, give it at least 8 GB.
+* Free disk space: about 5 GB for the most recent year or so, or about 20 GB for everything since 2010.
+* An Anthropic API key for the written briefings. Searching works without one.
+
+**1. Get the code.** On GitHub, use the green **Code** button, then **Download ZIP**, and unzip it.
+
+**2. Open a terminal in that folder.**
+* Mac: open *Terminal*, type `cd ` (with a space), drag the unzipped folder onto the window, and press Return.
+* Windows: open the unzipped folder, right-click an empty space and choose *Open in Terminal*.
+
+**3. Run these commands one at a time.**
+
+```bash
+docker compose build
+docker compose run --rm app hansard set-key
+docker compose run --rm app hansard bootstrap --from 2025-01-01 --embed-minutes 20
+docker compose up -d
+```
+
+| Command | What it does | Time |
+|---|---|---|
+| `build` | Builds the app | 5–10 minutes the first time |
+| `set-key` | Asks for your API key (it stays hidden as you paste it), checks it with Anthropic and saves it in the app's data folder on your computer | seconds |
+| `bootstrap` | Downloads Hansard from 1 January 2025 and member data, builds the search index, and spends up to 20 minutes on semantic matching | about 30 minutes |
+| `up -d` | Starts the site in the background | seconds |
+
+Then open <http://localhost:8000>.
+
+* **The whole archive since 2010:** leave out `--from 2025-01-01`. The download is about 5 GB and takes
+  roughly an hour; keyword search covers everything straight away.
+* **Better semantic matching:** `docker compose run --rm app hansard embed --max-minutes 60` continues it, newest
+  first, and can be repeated.
+* **Bring in the latest debates:** `docker compose run --rm app hansard sync`.
+* **Stop:** `docker compose down`. Your data is kept for next time; `docker compose up -d` starts it again.
+* **Remove everything**, including the downloaded data: `docker compose down -v`.
+
+Briefings are charged to your Anthropic account, at roughly 12 US cents each. The same spending limits as the
+public site apply.
+
+**For developers: offline sample.** With Python 3.12+, [uv](https://docs.astral.sh/uv/) and Node 20+, this needs
+no downloads and finishes in seconds:
+
+```bash
+uv sync --extra embed
+(cd web && npm ci && npm run build)
+uv run hansard bootstrap --sample     # a small set of real Hansard excerpts, simple offline embedder
+uv run hansard serve                  # open http://127.0.0.1:8000
+```
+
+## Running it on a server
+
+Recommended: 4–8 vCPU, 16 GB RAM and 60 GB of disk.
+
+| Data | Size |
+|---|---|
+| Raw XML since 2010 | 4.9 GB |
+| Parquet store | 1.2 GB |
+| Keyword index | 7.9 GB (4.6 GB of passages, 3.3 GB of full-text and filter indices) |
+| Vectors | about 8 GB |
+
+Each sync deletes index versions more than an hour old. A large update, such as a big member reshuffle,
+can temporarily add several GB until the next sync cleans it up.
+
+On a fresh Ubuntu 24.04 server, with a domain name pointing at it:
+
+```bash
+sudo bash deploy/provision.sh
+```
+
+The script:
+* asks for the domain name and the Anthropic API key (the key is not shown as you paste it);
+* installs Docker;
+* starts the app behind Caddy, which provides automatic HTTPS;
+* runs the first data load in the background (30–60 minutes);
+* installs a timer that runs the sync at 07:15 and 19:15 UK time.
+
+**Semantic-search build time.** The initial embedding of about 4.7 million passages is resumable and runs
+newest first. It takes roughly a day on 4 cores, and less on 8. Keyword search works from the start, and
+recent years become semantically searchable within the first hours. Each sync continues the embedding for up
+to 4 hours.
 
 ## Day-to-day operation
 

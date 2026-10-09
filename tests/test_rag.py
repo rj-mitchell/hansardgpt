@@ -69,7 +69,9 @@ def test_verify_separates_lead_ins_and_evidence_notes_from_uncited_claims():
                  "Shadow ministers attacked the decision to cancel the northern legs.\n"
                  "- Louise Haigh (Sheffield Heeley, Lab), 4 October 2023, said ", "citations": []},
         {"text": "the line to Manchester would be delivered", "citations": [cite]},
-        {"text": ".\n\nNo division records were supplied, so votes cannot be reported.", "citations": []},
+        {"text": ".\n\nNo division records were supplied, so votes cannot be reported.\n"
+                 "- The retrieved records contain no revised opening date.\n"
+                 "- Two results on prison building were not relevant and have been excluded.", "citations": []},
     ]
     v = verify(blocks, sources)
     by_status = {}
@@ -79,6 +81,7 @@ def test_verify_separates_lead_ins_and_evidence_notes_from_uncited_claims():
     assert "attacked the decision" in unsupported
     assert "Louise Haigh" not in unsupported and "Labour MPs" not in unsupported
     assert "No division records" not in unsupported
+    assert "opening date" not in unsupported and "prison" not in unsupported
     assert v.to_dict()["unsupported_segments"] == 1
 
 
@@ -195,3 +198,16 @@ def test_offline_parse_northern_labour_mps():
     assert plan.filters.parties == ["labour"]
     assert plan.filters.regions == GROUPS["northern"] and plan.filters.houses == ["commons"]
     assert plan.search_text == "HS2" and plan.portfolios == ["transport"]
+
+
+def test_api_key_falls_back_to_the_key_file_in_the_data_folder(tmp_path, monkeypatch):
+    from hansard.rag.answer import KEY_FILE, api_key
+
+    for name in ("HANSARD_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HANSARD_DATA_DIR", str(tmp_path))
+    assert api_key() is None
+    (tmp_path / KEY_FILE).write_text("sk-ant-from-file\n")
+    assert api_key() == "sk-ant-from-file"
+    monkeypatch.setenv("HANSARD_ANTHROPIC_API_KEY", "sk-ant-from-env")
+    assert api_key() == "sk-ant-from-env"

@@ -83,6 +83,6 @@ def run_bootstrap(settings: Settings, *, sample: bool = False, since: date | Non
     if sample:
         stats["next"] = "Run `hansard serve` and open http://127.0.0.1:8000 (sign-in disabled for the sample)."
     else:
-        stats["next"] = ("Create an account with `hansard user add you@example.org --admin`, then `hansard serve`. "
+        stats["next"] = ("Run `hansard serve` (or `docker compose up -d`) and open http://localhost:8000. "
                          "If embedding was time-limited, `hansard embed` (or the daily sync) continues it.")
     return stats

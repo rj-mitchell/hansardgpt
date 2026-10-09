@@ -15,15 +15,25 @@ from hansard.rag.sources import Source
 log = logging.getLogger(__name__)
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+KEY_FILE = "anthropic_api_key"  # in the data folder; written by `hansard set-key`
 
 
 def api_key() -> str | None:
-    """HANSARD_ANTHROPIC_API_KEY wins over ANTHROPIC_API_KEY.
+    """HANSARD_ANTHROPIC_API_KEY, then ANTHROPIC_API_KEY, then the key file in the data folder.
 
     The app's own name avoids clashing with tools that reserve the ANTHROPIC_* variables
-    for themselves (such as a Claude Code cloud session, which withholds them).
+    for themselves (such as a Claude Code cloud session, which withholds them). The key file
+    is for running on your own computer, where setting environment variables is a chore.
     """
-    return os.environ.get("HANSARD_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY") or None
+    key = os.environ.get("HANSARD_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+    if key:
+        return key
+    from hansard.config import load_settings
+
+    try:
+        return (load_settings().data_dir / KEY_FILE).read_text().strip() or None
+    except OSError:
+        return None
 
 
 def make_client():

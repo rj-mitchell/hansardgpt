@@ -258,6 +258,39 @@ def bootstrap(sample: bool = typer.Option(False, help="offline demo using bundle
 # --------------------------------------------------------------------------- web
 
 
+@app.command("set-key")
+def set_key(key: str = typer.Option(..., prompt="Paste your Anthropic API key (it will not be shown)",
+                                    hide_input=True)):
+    """Save the Anthropic API key in the data folder (handy when running on your own computer)."""
+    import os
+
+    from hansard.rag.answer import KEY_FILE, make_client
+
+    key = key.strip()
+    if not key.startswith("sk-ant-"):
+        raise typer.BadParameter("that doesn't look like an Anthropic API key (they start with sk-ant-)")
+    path = _settings().data_dir / KEY_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(key + "\n")
+    os.chmod(path, 0o600)
+    typer.echo(f"Saved ({len(key)} characters). Checking it with Anthropic...")
+    import anthropic
+
+    try:
+        os.environ["HANSARD_ANTHROPIC_API_KEY"] = key
+        make_client().models.list(limit=1)
+    except anthropic.AuthenticationError:
+        path.unlink()
+        typer.echo("Anthropic did not accept that key, so it was not kept. Check it and run this again.")
+        raise typer.Exit(1) from None
+    except Exception as e:  # noqa: BLE001 - network trouble etc.: keep the key, say what happened
+        typer.echo(f"Kept the key, but could not check it just now ({type(e).__name__}).")
+        return
+    typer.echo("The key works. Written briefings are switched on.")
+
+
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False,
           behind_proxy: bool = typer.Option(False, help="trust X-Forwarded-* headers (e.g. behind Caddy)")):
