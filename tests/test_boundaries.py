@@ -100,6 +100,9 @@ def test_seat_type_follows_urban_area_size_not_city_status():
     assert (bolton["settlement"], bolton["urban_area"]) == ("city", "Greater Manchester")
     assert bolton["urban_area_pop"] > 2_000_000
     assert _seat("Wigan")["settlement"] == "town"
+    # ...but a conurbation stops at its county: London's commuter towns are towns
+    assert {_seat(n)["settlement"] for n in ("Watford", "St Albans", "Woking", "Guildford", "Tatton")} == {"town"}
+    assert _seat("Watford")["urban_area"] == "Watford"
     assert _seat("Leeds Central", "2010")["urban_area"] == "West Yorkshire"
     assert {_seat(n)["settlement"] for n in ("Belfast East", "Belfast West")} == {"city"}
     assert _seat("Paisley and Renfrewshire South")["urban_area"] == "Greater Glasgow"  # NRS settlement

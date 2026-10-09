@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["duckdb", "openpyxl", "pyarrow"]
+# dependencies = ["duckdb==1.5.6", "openpyxl==3.1.5", "pyarrow>=17"]
 # ///
 """Build data_static/geo/constituencies.csv: every Westminster seat in both boundary
 sets, with its region and seat type (city, town or rural) from official statistics.
@@ -34,10 +34,12 @@ residents live in, not by city status:
 Official urban areas, small-area populations and lookups (all best-fit by
 population-weighted centroid, as published):
 
-* England and Wales - ONS 2011 Built-up Areas, which keep each conurbation whole
-  (Greater Manchester, West Midlands, West Yorkshire, ...), with 2011 Census
-  output-area populations (KS101EW) and ONS output-area lookups to both
-  boundary sets.
+* England and Wales - ONS 2011 Built-up Areas with 2011 Census output-area
+  populations (KS101EW) and ONS output-area lookups to both boundary sets. A
+  conurbation stops at its county: in a built-up area that is mostly London
+  boroughs or metropolitan districts (Greater London, Greater Manchester, West
+  Midlands, ...), each ONS sub-division outside them (Watford, St Albans, Woking,
+  Wilmslow, ...) is a town in its own right. Bolton stays in Greater Manchester.
 * Scotland - National Records of Scotland Census 2022 settlements (Greater
   Glasgow includes Paisley and Clydebank), with Census 2022 output-area
   populations and NRS lookups to both boundary sets.
@@ -54,6 +56,7 @@ Sources: ONS, NRS and NISRA, Open Government Licence v3.0; mySociety (CC BY 4.0)
 from __future__ import annotations
 
 import csv
+import http.client
 import io
 import os
 import ssl
@@ -104,16 +107,26 @@ def fetch(cache: Path, key: str) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     ctx = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE"))
     for attempt in range(8):
+        if attempt:
+            time.sleep(5 * attempt)
         req = urllib.request.Request(url, headers={"User-Agent": "hansardgpt-geo-build"})
-        with urllib.request.urlopen(req, timeout=300, context=ctx) as resp:
-            if resp.status == 202:  # the geoportal builds the file on first request
-                time.sleep(5 * (attempt + 1))
-                continue
-            data = resp.read()
-        dest.write_bytes(data)
+        try:
+            with urllib.request.urlopen(req, timeout=300, context=ctx) as resp:
+                if resp.status == 202:  # the geoportal builds the file on first request
+                    continue
+                data = resp.read()
+        except (OSError, http.client.HTTPException) as exc:  # includes timeouts and 5xx responses
+            print(f"  {key}: {exc}; retrying")
+            continue
+        expect_zip = dest.suffix in (".zip", ".xlsx")
+        if expect_zip != data.startswith(b"PK") or data.lstrip()[:1] in (b"<", b"{"):
+            raise SystemExit(f"{url} returned something other than the expected {dest.suffix} file")
+        tmp = dest.with_suffix(dest.suffix + ".part")
+        tmp.write_bytes(data)
+        tmp.replace(dest)
         print(f"  downloaded {key}: {len(data) / 1e6:.1f} MB")
         return dest
-    raise SystemExit(f"{url} was not ready after several attempts; try again later")
+    raise SystemExit(f"{url} could not be downloaded after several attempts; try again later")
 
 
 def zip_member(path: Path, suffix: str, encoding: str = "utf-8-sig") -> str:
@@ -128,6 +141,9 @@ def csv_table(text: str, columns: dict[str, str]) -> pa.Table:
     """Read selected CSV columns (source name -> output name) as strings."""
     reader = csv.DictReader(io.StringIO(text))
     reader.fieldnames = [f.strip().lstrip("﻿") for f in reader.fieldnames or []]
+    missing = [c for c in columns if c not in reader.fieldnames]
+    if missing:
+        raise SystemExit(f"columns {missing} not found (have {reader.fieldnames[:12]}); has the source changed?")
     rows = list(reader)
     return pa.table({out: [(r.get(src) or "").strip() or None for r in rows] for src, out in columns.items()})
 
@@ -149,8 +165,9 @@ def sheet_table(path: Path, sheet: str, header: str, columns: dict[str, str]) ->
 # Each yields rows (area, pop, ua_code, ua_name, seat2010, seat2024).
 
 def england_wales(con: duckdb.DuckDBPyConnection, cache: Path) -> None:
-    con.register("ew_bua", csv_table(fetch(cache, "ew_oa_bua").read_text(encoding="utf-8-sig"),
-                                     {"OA11CD": "area", "BUA11CD": "ua_code", "BUA11NM": "ua_name"}))
+    con.register("ew_bua", csv_table(fetch(cache, "ew_oa_bua").read_text(encoding="utf-8-sig"), {
+        "OA11CD": "area", "BUA11CD": "bua", "BUA11NM": "bua_name", "BUASD11CD": "sd", "BUASD11NM": "sd_name",
+        "LAD11CD": "lad", "LAD11NM": "lad_name"}))
     con.register("ew_p10", csv_table(fetch(cache, "ew_oa_pcon10").read_text(encoding="utf-8-sig"),
                                      {"OA11CD": "area", "PCON11CD": "seat"}))
     con.register("ew_p24", csv_table(fetch(cache, "ew_oa_pcon24").read_text(encoding="utf-8-sig"),
@@ -158,12 +175,39 @@ def england_wales(con: duckdb.DuckDBPyConnection, cache: Path) -> None:
     con.register("ew_pop", csv_table(zip_member(fetch(cache, "ew_oa_pop"), "KS101EWDATA.CSV"),
                                      {"GeographyCode": "area", "KS101EW0001": "pop"}))
     con.execute("""
+        CREATE TABLE ew_oa AS
+        SELECT b.*, CAST(p.pop AS INTEGER) pop, s10.seat seat2010, s24.seat seat2024,
+               b.lad LIKE 'E08%' OR b.lad LIKE 'E09%' AS core  -- London boroughs and metropolitan districts
+        FROM ew_bua b JOIN ew_pop p USING (area) JOIN ew_p10 s10 USING (area) JOIN ew_p24 s24 USING (area)
+        WHERE b.area LIKE 'E00%' OR b.area LIKE 'W00%'""")
+    # A conurbation stops at its county: in a built-up area that is mostly London or metropolitan
+    # districts, the sub-divisions outside them (Watford, St Albans, Woking, ...) are towns of their own.
+    con.execute("""
         CREATE TABLE ew AS
-        SELECT b.area, CAST(p.pop AS INTEGER) pop, b.ua_code,
-               regexp_replace(regexp_replace(b.ua_name, ' BUA$', ''), ' \\(.*\\)$', '') ua_name,
-               s10.seat seat2010, s24.seat seat2024,
-               NULL::VARCHAR band
-        FROM ew_bua b JOIN ew_pop p USING (area) JOIN ew_p10 s10 USING (area) JOIN ew_p24 s24 USING (area)""")
+        WITH metro AS (SELECT bua FROM ew_oa WHERE bua IS NOT NULL GROUP BY bua
+                       HAVING sum(CASE WHEN core THEN pop ELSE 0 END) > 0.5 * sum(pop)),
+             straddling AS (  -- sub-divisions partly inside a borough or metropolitan district
+                SELECT sd, sum(CASE WHEN NOT core THEN pop ELSE 0 END) >= 0.5 * sum(pop) AS mostly_outside
+                FROM ew_oa WHERE sd IS NOT NULL GROUP BY sd HAVING bool_or(core)),
+             units AS (
+                SELECT o.*, (m.bua IS NOT NULL AND NOT o.core AND o.sd IS NOT NULL) AS split,
+                       st.sd IS NOT NULL AS straddles, coalesce(st.mostly_outside, true) AS mostly_outside
+                FROM ew_oa o LEFT JOIN metro m USING (bua) LEFT JOIN straddling st USING (sd))
+        SELECT area, pop, seat2010, seat2024, NULL::VARCHAR band,
+               CASE WHEN split THEN sd || '/' || CASE WHEN straddles THEN lad ELSE '' END ELSE bua END ua_code,
+               CASE WHEN split AND NOT mostly_outside THEN lad_name  -- e.g. the Dartford end of "Bexley"
+                    WHEN split THEN regexp_replace(sd_name, ' BUASD$', '')
+                    ELSE regexp_replace(bua_name, ' BUA$', '') END ua_name
+        FROM units""")
+    # drop ONS's disambiguating "(Place)" only where the shorter name stays unique
+    con.execute("""
+        CREATE OR REPLACE TABLE ew AS
+        WITH n AS (SELECT ua_code, any_value(ua_name) full_name,
+                          regexp_replace(any_value(ua_name), ' \\(.*\\)$', '') short_name
+                   FROM ew WHERE ua_code IS NOT NULL GROUP BY ua_code),
+             dup AS (SELECT short_name FROM n GROUP BY short_name HAVING count(*) > 1)
+        SELECT ew.* REPLACE (CASE WHEN dup.short_name IS NULL THEN n.short_name ELSE n.full_name END AS ua_name)
+        FROM ew LEFT JOIN n USING (ua_code) LEFT JOIN dup ON dup.short_name = n.short_name""")
     n = con.execute("SELECT count(*), sum(pop) FROM ew").fetchone()
     if n != (181_408, 56_075_912):
         raise SystemExit(f"England and Wales: expected 181,408 output areas and 56,075,912 people, got {n}")
@@ -199,8 +243,11 @@ def northern_ireland(con: duckdb.DuckDBPyConnection, cache: Path) -> None:
     con.execute("""
         CREATE TABLE ni AS
         SELECT d.area, CAST(p.pop AS INTEGER) pop, d.ua_code,
-               regexp_replace(d.ua_name, '\\s*\\(.*$', '') ua_name, d.seat2010, d.seat2024, d.band
+               regexp_replace(d.ua_name, '\\s*(\\(.*|including .*)$', '', 'i') ua_name, d.seat2010, d.seat2024,
+               d.band
         FROM ni_dz d JOIN ni_pop p USING (area)""")
+    con.create_function("title", lambda v: v.title() if v else v, ["VARCHAR"], "VARCHAR")
+    con.execute("UPDATE ni SET ua_name = title(lower(ua_name))")  # NISRA names are in capitals
     n = con.execute("SELECT count(*), sum(pop) FROM ni").fetchone()
     if n[0] != 3_780 or not 1_900_000 < n[1] < 1_910_000:
         raise SystemExit(f"Northern Ireland: expected 3,780 data zones and ~1.9m people, got {n}")
@@ -225,15 +272,14 @@ def classify(con: duckdb.DuckDBPyConnection, seat_col: str) -> dict[str, tuple]:
         SELECT t.seat, t.total, t.urban_pop, m.ua_name, m.ua_pop
         FROM (SELECT seat, sum(pop) total, sum(CASE WHEN urban THEN pop ELSE 0 END) urban_pop
               FROM a GROUP BY seat) t
-        LEFT JOIN (SELECT seat, arg_max(ua_name, p) ua_name, arg_max(ua_pop, p) ua_pop FROM by_ua GROUP BY seat) m
+        LEFT JOIN (SELECT seat, ua_name, ua_pop FROM by_ua
+                   QUALIFY row_number() OVER (PARTITION BY seat ORDER BY p DESC, ua_pop DESC, ua_code) = 1) m
           USING (seat)""").fetchall()
     out = {}
     for seat, total, urban_pop, ua_name, ua_pop in rows:
         share = urban_pop / total
         kind = "rural" if share < 0.5 else ("city" if ua_pop >= CITY_POPULATION else "town")
-        if ua_name and ua_name.isupper():  # NISRA names are in capitals
-            ua_name = ua_name.title()
-        out[seat] = (kind, ua_name, ua_pop, round(share, 2))
+        out[seat] = (kind, ua_name, ua_pop, round(share, 4))
     return out
 
 
@@ -242,7 +288,9 @@ def main(repo: Path, cache: Path) -> None:
     c25 = pkg / "parliament_con_2025" / "parl_constituencies_2025.parquet"
     ov = pkg / "geographic_overlaps" / "PARL10_PARL25_combo_overlap.parquet"
     c21 = repo / "data" / "raw" / "external" / "Westminster_Parliamentary_Constituencies_(Dec_2021)_UK_BFC.parquet"
-    lad_file = next((repo / "data" / "raw" / "external").glob("Local_Authority_Districts_May_2023*.parquet"))
+    lad_file = next((repo / "data" / "raw" / "external").glob("Local_Authority_Districts_May_2023*.parquet"), None)
+    if lad_file is None:
+        raise SystemExit("mySociety checkout lacks data/raw/external/Local_Authority_Districts_May_2023*.parquet")
     con = duckdb.connect()
     con.execute(f"create view c25 as select short_code, gss_code, name as cname, nation, region from '{c25}'")
     con.execute(f"create view ov as select * from '{ov}'")

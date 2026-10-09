@@ -91,14 +91,14 @@ which groups. If the archive has nothing relevant, the tool says **"No records f
     and Ely count.
 
   The urban areas are:
-  * England and Wales: ONS's 2011 built-up areas, which keep conurbations whole, with 2011 Census populations;
+  * England and Wales: ONS's 2011 built-up areas, with 2011 Census populations. A conurbation stops at its
+    own county: Bolton is part of Greater Manchester, but towns physically joined to London or another
+    conurbation from outside it (Watford, St Albans, Woking, Guildford, Wilmslow) count as towns in their own
+    right, using ONS's own sub-division populations;
   * Scotland: National Records of Scotland's Census 2022 settlements, where Greater Glasgow includes Paisley;
   * Northern Ireland: NISRA's 2015 settlements, where Belfast City is the only one of 200,000+.
 
-  Each source's own lookups link small areas to both sets of seats. Note that ONS's Greater London built-up area
-  takes in towns physically joined to London around the M25 (Watford, St Albans, Woking, Guildford, Hemel
-  Hempstead), so their seats count as city seats. That gives about 340 city, 205 town and 108 rural seats in each
-  set. Each source label names the urban area and its size. The rules and source URLs are in
+  Each source's own lookups link small areas to both sets of seats. That gives about 315 city, 225 town and 110 rural seats in each set. Each source label names the urban area and its size. The rules and source URLs are in
   `scripts/build_geo_lookups.py`.
 
 ## Look and feel
