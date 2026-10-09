@@ -19,11 +19,18 @@ def _write_file(path, n_speeches: int) -> int:
 
 
 def _peak_mb(path) -> tuple[int, int]:
+    # VmHWM is this program's own peak. On Linux ru_maxrss survives exec, so it would
+    # report the (much larger) pytest parent's peak instead.
     script = textwrap.dedent(f"""
         import resource
         from hansard.parse.xml_stream import parse_file
         n = sum(1 for _ in parse_file({str(path)!r}, "debates"))
-        print(n, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024)
+        try:
+            with open("/proc/self/status") as fh:
+                peak = next(int(line.split()[1]) for line in fh if line.startswith("VmHWM:")) // 1024
+        except OSError:
+            peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 2**20  # macOS: bytes
+        print(n, peak)
     """)
     out = subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True).stdout.split()
     return int(out[0]), int(out[1])
