@@ -12,8 +12,8 @@
 #   5. starts the one-off bootstrap in the background (downloads ~5 GB of Hansard
 #      since 2010, ingests, indexes; embeddings continue in later syncs)
 #   6. installs the twice-daily sync timer
-# Afterwards create your account:
-#   cd /opt/hansardgpt/deploy && docker compose exec app hansard user add you@example.org --admin
+# The site is public. An admin token (for /api/admin/usage and /api/admin/sync) is
+# generated into deploy/.env. For an invite-only site instead, see the README.
 set -euo pipefail
 
 REPO="${REPO:-https://github.com/rj-mitchell/hansardgpt.git}"
@@ -27,7 +27,7 @@ fi
 
 echo "==> Installing Docker and git"
 apt-get update -y
-apt-get install -y ca-certificates curl git
+apt-get install -y ca-certificates curl git openssl
 if ! command -v docker >/dev/null; then
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
@@ -52,7 +52,7 @@ if [[ ! -f .env ]]; then
   read -rsp "Anthropic API key (leave blank for sources-only mode): " KEY
   echo
   umask 077
-  printf 'DOMAIN=%s\nANTHROPIC_API_KEY=%s\n' "$DOMAIN" "$KEY" > .env
+  printf 'DOMAIN=%s\nANTHROPIC_API_KEY=%s\nHANSARD_ADMIN_TOKEN=%s\n' "$DOMAIN" "$KEY" "$(openssl rand -hex 24)" > .env
 fi
 
 echo "==> Building and starting"
@@ -72,6 +72,7 @@ HansardGPT is starting at https://$(grep ^DOMAIN= .env | cut -d= -f2)/
 The first data load takes roughly 30-60 minutes (follow /var/log/hansard-bootstrap.log).
 Semantic search improves as embeddings complete over the next syncs.
 
-Create your account:
-  cd $DIR/deploy && docker compose exec app hansard user add you@example.org --admin
+The site is open to everyone. Usage and spend:
+  curl -H "Authorization: Bearer \$(grep ^HANSARD_ADMIN_TOKEN= $DIR/deploy/.env | cut -d= -f2)" \\
+    https://$(grep ^DOMAIN= .env | cut -d= -f2)/api/admin/usage
 MSG

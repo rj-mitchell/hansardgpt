@@ -2,7 +2,8 @@
 
 **Sourced briefings on what the UK Parliament has said, and who stands where.**
 
-HansardGPT is an open-source research tool for journalists, researchers and policy analysts. It is deliberately
+HansardGPT is an open-source research tool for anyone: journalists, researchers, policy analysts and the public.
+The site is open, with no sign-in. It is deliberately
 *not* another keyword search; [Hansard's own search](https://hansard.parliament.uk/search) is excellent at finding
 every speech that mentions a word. Instead, ask a question such as "What have northern Labour MPs said about
 HS2?" and get a short **analytical briefing** that groups the positions taken. For example:
@@ -105,7 +106,7 @@ The web app takes its look from the printed Official Report:
 - column numbers in the margin, and speakers attributed the way Hansard prints them: "Hilary Benn (Leeds Central)
   (Lab)";
 - the bound volumes' cloth, green for the Commons and red for the Lords, with gilt lettering. Sources are edged
-  in their House's colour, and the sign-in page is a volume cover.
+  in their House's colour, and the sign-in page (invite-only mode) is a volume cover.
 
 Dark mode follows the system setting. The CSS follows [good-css](https://github.com/vojtaholik/good-css):
 - logical properties;
@@ -122,20 +123,28 @@ Dark mode follows the system setting. The CSS follows [good-css](https://github.
 | `hansard sync` | Full incremental update (this is what the timer runs): member data, new and corrected Hansard, index, embeddings, compaction, sync log |
 | `hansard status` | Files ingested, indexed and embedded; parlparse commit; recent runs |
 | `hansard search "…" --from 2018-01-01 --region "North East"` | Ranked sources from the terminal (no model call) |
-| `hansard user add/list/disable` | Invite-only accounts (argon2 password hashes) |
+| `hansard user add/list/disable` | Accounts, only if you switch on invite-only mode (argon2 password hashes) |
 | `hansard embed --max-minutes 60` | Continue building semantic vectors |
 | `hansard reference` | Rebuild member and role tables from parlparse; the next sync refreshes the changed people in the index |
 
-**Cost control** (in `config/settings.toml`, `[usage]`):
+**Open access and cost control.** The site is public. Searching costs nothing, but each new briefing is
+written by Claude and costs money. So, in `config/settings.toml`, `[usage]`:
 
-* a per-user daily question cap;
-* a monthly spend cap for the whole service;
-* each answer's token usage and cost logged to SQLite.
+* each visitor may have 15 new briefings a day. Visitors are told apart by a salted hash of their IP address;
+  the address itself is never stored;
+* each visitor may make 20 requests a minute;
+* the whole site has a daily budget ($10) and a monthly budget ($150). When one is reached, briefings pause,
+  and source search keeps working;
+* identical questions with the same settings are answered from a 24-hour cache, which is cleared whenever new
+  data arrives. Popular questions are paid for once;
+* each briefing's token usage and cost is logged to SQLite.
 
-Admins can view usage at `/api/admin/usage`.
+Usage and the sync log are at `/api/admin/usage` and `/api/admin/sync`, with the header
+`Authorization: Bearer $HANSARD_ADMIN_TOKEN` (`provision.sh` generates the token). For a private site instead,
+set `[auth] required = true` and create accounts with `hansard user add`.
 
-**Backups.** Everything can be rebuilt from public sources except `data/state.sqlite`, which holds users,
-usage and the sync log. Back that file up.
+**Backups.** Everything can be rebuilt from public sources except `data/state.sqlite`, which holds usage, the
+answer cache, the sync log and any accounts. Back that file up.
 
 ## Ranking: recency and role weighting
 

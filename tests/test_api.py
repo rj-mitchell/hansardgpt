@@ -1,4 +1,4 @@
-"""Web API: authentication, caps, streaming answers, retrieval-only search."""
+"""Web API: public access with caps and cache, optional sign-in, streaming answers, search."""
 
 from __future__ import annotations
 
@@ -19,19 +19,33 @@ from hansard.store.state import StateDB
 from .test_rag import TODAY, FakeClient
 
 
+def make_app(indexed_settings, tmp_path, *, auth: bool, **usage):
+    # each test gets its own state DB (users, usage, cache) on top of the shared index
+    s = dataclasses.replace(indexed_settings, raw={
+        **indexed_settings.raw,
+        "auth": {"required": auth},
+        "usage": {**indexed_settings.raw["usage"], "per_user_daily_questions": 2, "per_visitor_daily_questions": 2,
+                  **usage}})
+    client = FakeClient()
+    pipeline = Pipeline(s, Engine(s, embedder=HashingEmbedder(64), today=TODAY), client=client, today=TODAY)
+    state = StateDB(tmp_path / "state.sqlite")
+    return create_app(s, pipeline, state), state, client
+
+
 @pytest.fixture()
 def api(indexed_settings, tmp_path):
-    # each test gets its own state DB (users, usage) on top of the shared index
-    s = dataclasses.replace(indexed_settings,
-                            raw={**indexed_settings.raw,
-                                 "usage": {**indexed_settings.raw["usage"], "per_user_daily_questions": 2}})
-    state_path = tmp_path / "state.sqlite"
-    pipeline = Pipeline(s, Engine(s, embedder=HashingEmbedder(64), today=TODAY), client=FakeClient(), today=TODAY)
-    state = StateDB(state_path)
-    app = create_app(s, pipeline, state)
+    """Invite-only mode."""
+    app, state, _ = make_app(indexed_settings, tmp_path, auth=True, answer_cache_hours=0)
     create_user(state, "researcher@example.org", "correct horse battery")
     create_user(state, "admin@example.org", "admin password 123", admin=True)
     return TestClient(app), state
+
+
+@pytest.fixture()
+def public(indexed_settings, tmp_path):
+    """The default: open to everyone."""
+    app, state, client = make_app(indexed_settings, tmp_path, auth=False)
+    return TestClient(app), state, client
 
 
 def login(client, email="researcher@example.org", password="correct horse battery"):
@@ -125,3 +139,65 @@ def test_admin_usage_is_admin_only(api):
 def test_cost_calculation():
     assert cost_usd({"input_tokens": 1_000_000, "output_tokens": 100_000, "cache_read_tokens": 0},
                     {"price_input_per_mtok": 4.0, "price_output_per_mtok": 20.0}) == pytest.approx(6.0)
+
+
+# ---- public mode (the default) -------------------------------------------------------------------
+
+
+def test_public_site_needs_no_sign_in(public):
+    client, state, _ = public
+    assert client.get("/api/me").json() == {"email": None, "is_admin": False, "auth_required": False}
+    assert client.get("/api/meta").status_code == 200
+    evs = events(client.post("/api/ask", json={"question": "What has been said about trial by jury?"}))
+    assert evs[-1]["type"] == "final" and evs[-1]["answer"]["citations_total"] == 1
+    with state.connect() as con:
+        visitor = con.execute("SELECT visitor FROM usage WHERE kind = 'answer'").fetchone()[0]
+    assert visitor and "testclient" not in visitor  # a salted hash, never the address
+
+
+def test_repeat_questions_come_from_the_cache_and_cost_nothing(public):
+    client, state, model = public
+    first = events(client.post("/api/ask", json={"question": "What has been said about trial by jury?"}))
+    again = events(client.post("/api/ask", json={"question": "what has been said about  trial by jury?"}))
+    assert len(model.calls) == 1
+    assert again[-1]["cached"] is True and again[-1]["answer"] == first[-1]["answer"]
+    assert [e["type"] for e in again] == ["plan", "sources", "text", "final"]
+    other = events(client.post("/api/ask", json={"question": "What has been said about trial by jury?",
+                                                 "mode": "comprehensive"}))
+    assert len(model.calls) == 2 and "cached" not in other[-1]
+    with state.connect() as con:
+        assert con.execute("SELECT count(*) FROM usage WHERE kind = 'answer'").fetchone()[0] == 2
+
+
+def test_each_visitor_has_a_daily_limit_but_cached_answers_still_load(public):
+    client, _, _ = public
+    for q in ("trial by jury", "jury trials and courts"):
+        assert events(client.post("/api/ask", json={"question": q}))[-1]["type"] == "final"
+    blocked = events(client.post("/api/ask", json={"question": "security in Northern Ireland"}))
+    assert blocked[-1]["type"] == "error" and "limit" in blocked[-1]["message"]
+    assert events(client.post("/api/ask", json={"question": "trial by jury"}))[-1]["type"] == "final"
+    other = TestClient(client.app, client=("203.0.113.9", 50000))
+    assert events(other.post("/api/ask", json={"question": "security in Northern Ireland"}))[-1]["type"] == "final"
+
+
+def test_site_wide_daily_budget(public):
+    client, state, _ = public
+    record_usage(state, None, "answer", "claude-opus-5-5", {"input_tokens": 3_000_000}, {})
+    evs = events(client.post("/api/ask", json={"question": "trial by jury"}))
+    assert evs[-1]["type"] == "error" and "budget" in evs[-1]["message"]
+
+
+def test_requests_per_minute_limit(indexed_settings, tmp_path):
+    app, _, _ = make_app(indexed_settings, tmp_path, auth=False, requests_per_minute=3)
+    client = TestClient(app)
+    codes = [client.post("/api/search", json={"question": "trial by jury"}).status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]
+
+
+def test_admin_endpoints_need_the_admin_token(indexed_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("HANSARD_ADMIN_TOKEN", "s3cret-token")
+    app, _, _ = make_app(indexed_settings, tmp_path, auth=False)
+    client = TestClient(app)
+    assert client.get("/api/admin/usage").status_code == 403
+    assert client.get("/api/admin/usage", headers={"Authorization": "Bearer wrong"}).status_code == 403
+    assert client.get("/api/admin/sync", headers={"Authorization": "Bearer s3cret-token"}).status_code == 200

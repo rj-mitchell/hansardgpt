@@ -74,7 +74,12 @@ passage_words = 250
 batch_size = 8
 
 [usage]
-per_user_daily_questions = 60
+# The site is public; each new model-written briefing costs money.
+per_visitor_daily_questions = 15   # anonymous visitors (keyed by a salted hash of their IP address)
+per_user_daily_questions = 60      # signed-in users, when invite-only sign-in is on
+requests_per_minute = 20           # questions and searches per visitor
+answer_cache_hours = 24            # identical questions within this window are not re-run
+daily_spend_cap_usd = 10.0
 monthly_spend_cap_usd = 150.0
 # USD per million tokens, used for spend tracking only.
 price_input_per_mtok = 4.0
@@ -82,9 +87,9 @@ price_output_per_mtok = 20.0
 price_cache_read_per_mtok = 0.4
 
 [auth]
-# Invite-only accounts. Set required = false only for a private, single-user
-# install that is not reachable from the internet.
-required = true
+# Public by default. Set required = true for an invite-only site (accounts are
+# created with `hansard user add`). Admin endpoints need HANSARD_ADMIN_TOKEN either way.
+required = false
 session_days = 14
 
 [sync]

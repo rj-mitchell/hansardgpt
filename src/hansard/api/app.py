@@ -1,9 +1,15 @@
-"""FastAPI application: auth, streaming answers, source search, record drawer, metadata."""
+"""FastAPI application: streaming answers, source search, record drawer, metadata.
+
+Public by default: anyone may ask. Model-written briefings cost money, so they are
+limited per visitor and overall, and identical requests are served from a cache.
+Invite-only sign-in remains available (``[auth] required = true``)."""
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+import secrets
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -22,7 +28,16 @@ from hansard.api.auth import (
     end_session,
     user_for_token,
 )
-from hansard.api.usage import check_caps, record_usage, summary
+from hansard.api.usage import (
+    RateLimiter,
+    cache_key,
+    cached_events,
+    check_caps,
+    record_usage,
+    store_events,
+    summary,
+    visitor_key,
+)
 from hansard.config import REPO_ROOT, Settings, load_settings
 from hansard.engine import Engine, Scope
 from hansard.rag.pipeline import AskRequest, Pipeline
@@ -70,7 +85,10 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     state = state or StateDB(settings.state_db)
     app = FastAPI(title="HansardGPT", docs_url="/api/docs", openapi_url="/api/openapi.json")
     throttle = LoginThrottle()
-    auth_required = bool(settings.section("auth").get("required", True))
+    auth_required = bool(settings.section("auth").get("required", False))
+    limiter = RateLimiter(int(settings.usage.get("requests_per_minute", 20)))
+    cache_hours = float(settings.usage.get("answer_cache_hours", 24))
+    admin_token = os.environ.get("HANSARD_ADMIN_TOKEN") or None
     lock = threading.Lock()
     holder: dict[str, Pipeline] = {}
     if pipeline is not None:
@@ -88,10 +106,21 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             raise HTTPException(401, "Please sign in.")
         return user
 
-    def admin_user(user=Depends(current_user)):
-        if auth_required and not (user and user["is_admin"]):
-            raise HTTPException(403, "Admins only.")
-        return user
+    def admin_user(request: Request, user=Depends(current_user)):
+        if user and user["is_admin"]:
+            return user
+        given = request.headers.get("authorization", "")
+        if admin_token and secrets.compare_digest(given.encode(), f"Bearer {admin_token}".encode()):
+            return None
+        raise HTTPException(403, "Admins only.")
+
+    def requester(request: Request, user: dict[str, Any] | None) -> tuple[str | None, str]:
+        """(visitor hash for anonymous people, rate-limit key); 429 when over the per-minute limit."""
+        visitor = None if user else visitor_key(state, request.client.host if request.client else None)
+        key = f"user:{user['user_id']}" if user else f"visitor:{visitor}"
+        if not limiter.allow(key):
+            raise HTTPException(429, "Too many requests. Please wait a minute and try again.")
+        return visitor, key
 
     # ---- auth --------------------------------------------------------------------
     @app.post("/api/auth/login")
@@ -152,35 +181,60 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             yield f"event: {ev['type']}\ndata: {json.dumps(ev, default=str)}\n\n".encode()
 
     @app.post("/api/ask")
-    def ask(body: AskBody, user=Depends(current_user)):
+    def ask(body: AskBody, request: Request, user=Depends(current_user)):
+        visitor, _ = requester(request, user)
         p = get_pipeline()
         uid = user["user_id"] if user else None
         req = AskRequest(question=body.question, mode=body.mode, recency=body.recency,
                          role_weight=body.role_weight, scope=Scope(**body.scope.model_dump()), plan=body.plan,
                          history=body.history)
-        blocked = check_caps(state, uid, settings.usage) if p.has_model() else None
+        model_on = p.has_model()
+        key = None
+        if model_on and cache_hours > 0:
+            last = state.runs(1)
+            key = cache_key({"q": " ".join(body.question.lower().split()), **body.model_dump(exclude={"question"}),
+                             "model": settings.answer.get("model"), "data": last[0]["run_id"] if last else None})
+        hit = cached_events(state, key, cache_hours) if key else None
+        blocked = check_caps(state, uid, settings.usage, visitor) if model_on and hit is None else None
 
         def events() -> Iterator[dict[str, Any]]:
+            if hit is not None:
+                yield from hit
+                return
             if blocked:
                 yield {"type": "error", "message": blocked}
                 return
+            kept: list[dict[str, Any]] = []
+            text: list[str] = []
             try:
                 for ev in p.run(req):
                     if ev["type"] == "plan" and ev.get("usage"):
-                        record_usage(state, uid, "parse", settings.answer.get("model"), ev["usage"], settings.usage)
+                        record_usage(state, uid, "parse", settings.answer.get("model"), ev["usage"], settings.usage,
+                                     visitor)
                     if ev["type"] == "final" and ev.get("usage"):
-                        record_usage(state, uid, "answer", ev.get("model"), ev["usage"], settings.usage)
+                        record_usage(state, uid, "answer", ev.get("model"), ev["usage"], settings.usage, visitor)
+                    if ev["type"] == "text":
+                        text.append(ev["text"])
+                    else:
+                        kept.append(ev)
                     yield ev
             except Exception as exc:  # never leave the client hanging
                 log.exception("ask failed")
                 yield {"type": "error", "message": f"Something went wrong: {type(exc).__name__}"}
+                return
+            final = kept[-1] if kept else {}
+            if key and final.get("type") == "final" and final.get("answer"):
+                replay = [e for e in kept if e["type"] in ("plan", "sources")]
+                replay += [{"type": "text", "text": "".join(text)}, {**final, "usage": None, "cached": True}]
+                store_events(state, key, replay, cache_hours)
 
         return StreamingResponse(_sse(events()), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.post("/api/search")
-    def search(body: AskBody, user=Depends(current_user)):
+    def search(body: AskBody, request: Request, user=Depends(current_user)):
         """Retrieval only (no model call): ranked sources for the question or edited plan."""
+        requester(request, user)
         p = get_pipeline()
         if body.plan:
             plan = QueryPlan.from_dict({"question": body.question, **body.plan})

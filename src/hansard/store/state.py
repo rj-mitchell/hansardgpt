@@ -1,4 +1,4 @@
-"""Operational state in SQLite (WAL): file manifest, sync log, users, sessions, usage.
+"""Operational state in SQLite (WAL): file manifest, sync log, users, sessions, usage, answer cache.
 
 SQLite rather than DuckDB because the web app and the scheduled sync are
 separate processes that both write here; DuckDB permits one writing process.
@@ -68,7 +68,17 @@ CREATE TABLE IF NOT EXISTS usage (
     cost_usd      REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS usage_user_at ON usage(user_id, at);
+CREATE TABLE IF NOT EXISTS answer_cache (
+    key        TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    events     TEXT NOT NULL
+);
 """
+
+# Columns added after the first release; created on open if missing.
+MIGRATIONS = [
+    ("usage", "visitor", "ALTER TABLE usage ADD COLUMN visitor TEXT"),
+]
 
 
 def utcnow() -> str:
@@ -82,6 +92,10 @@ class StateDB:
         self._local = threading.local()
         with self.connect() as con:
             con.executescript(SCHEMA)
+            for table, column, sql in MIGRATIONS:
+                if column not in {r[1] for r in con.execute(f"PRAGMA table_info({table})")}:
+                    con.execute(sql)
+            con.execute("CREATE INDEX IF NOT EXISTS usage_visitor_at ON usage(visitor, at)")
 
     def _conn(self) -> sqlite3.Connection:
         con = getattr(self._local, "con", None)

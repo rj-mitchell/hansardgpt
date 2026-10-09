@@ -97,7 +97,13 @@ export default function App() {
           });
         else if (ev.type === "text") update(id, (t) => ({ streamText: t.streamText + (ev.text as string) }));
         else if (ev.type === "final")
-          update(id, { answer: (ev.answer as Answer | null) ?? null, note: ev.note as string | undefined, status: "done" });
+          update(id, {
+            answer: (ev.answer as Answer | null) ?? null,
+            note: ev.cached
+              ? "This briefing was written earlier for the same question and settings, from the same data."
+              : (ev.note as string | undefined),
+            status: "done",
+          });
         else if (ev.type === "error") update(id, { status: "error", error: ev.message as string });
       }
     } catch (e) {
