@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterator
 from datetime import date
 from typing import Any
@@ -16,10 +17,22 @@ log = logging.getLogger(__name__)
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
+def api_key() -> str | None:
+    """HANSARD_ANTHROPIC_API_KEY wins over ANTHROPIC_API_KEY.
+
+    The app's own name avoids clashing with tools that reserve the ANTHROPIC_* variables
+    for themselves (such as a Claude Code cloud session, which withholds them).
+    """
+    return os.environ.get("HANSARD_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY") or None
+
+
 def make_client():
     import anthropic
 
-    return anthropic.Anthropic()
+    # Never follow an ANTHROPIC_BASE_URL inherited from another tool; the app talks to the API itself.
+    base_url = os.environ.get("HANSARD_ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+    key = api_key()
+    return anthropic.Anthropic(api_key=key, base_url=base_url) if key else anthropic.Anthropic(base_url=base_url)
 
 
 def usage_dict(usage: Any) -> dict[str, int]:

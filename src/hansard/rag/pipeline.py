@@ -82,7 +82,9 @@ class Pipeline:
             return True
         import os
 
-        return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+        from hansard.rag.answer import api_key
+
+        return bool(api_key() or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
 
     def parties(self) -> list[tuple[str, str]]:
         rows = self.engine.resolver.con.execute(
