@@ -15,6 +15,8 @@ export interface Speaker {
   region: string | null;
   nation?: string | null;
   settlement?: string | null;
+  urban_area?: string | null;
+  urban_area_pop?: number | null;
   party: string | null;
   offices: Office[];
   other_names: string[];

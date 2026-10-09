@@ -24,9 +24,14 @@ export function Login({ onDone }: { onDone: () => void }) {
 
   return (
     <main className="login">
+      <div className="cover" aria-hidden="true">
+        <p className="cover-kicker">Parliamentary Debates</p>
+        <p className="cover-title">HansardGPT</p>
+        <p className="cover-years">Sourced briefings since 2010</p>
+      </div>
       <form onSubmit={submit} className="login-card" aria-label="Sign in">
-        <h1>HansardGPT</h1>
-        <p className="muted">Verifiable answers from the UK Parliament record. Every claim is cited to Hansard.</p>
+        <h1>Sign in to HansardGPT</h1>
+        <p className="muted">Briefings on what Parliament has said. Every claim is cited to Hansard.</p>
         <label>
           Email
           <input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />

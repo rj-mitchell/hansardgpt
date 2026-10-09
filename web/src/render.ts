@@ -29,7 +29,7 @@ export function renderAnswer(md: string): string {
   html = html.replace(/⁣⟦S:([\d,]+)⟧⁣/g, (_m, nums: string) =>
     nums
       .split(",")
-      .map((n) => `<button type="button" class="cite" data-source="${n}" aria-label="Open source ${n}">[Source ${n}]</button>`)
+      .map((n) => `<button type="button" class="cite" data-source="${n}" aria-label="Open source ${n}">${n}</button>`)
       .join(""),
   );
   html = html

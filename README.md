@@ -98,6 +98,23 @@ which groups. If the archive has nothing relevant, the tool says **"No records f
   source label names the urban area and its size, so readers can check. That gives about 320 city, 195 town and
   140 rural seats in each set. The thresholds are in `scripts/build_geo_lookups.py`.
 
+## Look and feel
+
+The web app takes its look from the printed Official Report:
+- ivory paper, black serif type (Source Serif 4, bundled), and small-capital headings set between rules;
+- column numbers in the margin, and speakers attributed the way Hansard prints them: "Hilary Benn (Leeds Central)
+  (Lab)";
+- the bound volumes' cloth, green for the Commons and red for the Lords, with gilt lettering. Sources are edged
+  in their House's colour, and the sign-in page is a volume cover.
+
+Dark mode follows the system setting. The CSS follows [good-css](https://github.com/vojtaholik/good-css):
+- logical properties;
+- OKLCH colour tokens that hold both the light and dark values;
+- one fluid type scale;
+- hover styles only where a mouse is present;
+- visible focus rings and press feedback;
+- animation only for people who have not asked for reduced motion.
+
 ## Day-to-day operation
 
 | Command | What it does |

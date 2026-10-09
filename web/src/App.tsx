@@ -7,6 +7,7 @@ import { PlanChips } from "./components/PlanChips";
 import { EvidenceBar } from "./components/Evidence";
 import { SourceDrawer, SourceList } from "./components/Sources";
 import { ATTRIBUTION } from "./attribution";
+import { fmtDate } from "./render";
 import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const EXAMPLES = [
@@ -120,32 +121,32 @@ export default function App() {
 
   return (
     <div className={drawerSource ? "app with-drawer" : "app"}>
-      <header className="topbar">
-        <div className="brand">
-          <span className="logo" aria-hidden="true">
-            H
+      <header className="masthead full-width">
+        <div className="running-head">
+          <span>
+            Debates, written answers and votes{meta ? `, ${meta.archive_start.slice(0, 4)} to date` : ""}
           </span>
-          <div>
-            <h1>HansardGPT</h1>
-            <p className="muted small">
-              Sourced briefings on what Parliament has said{meta ? `, ${meta.archive_start.slice(0, 4)} to date` : ""}
-              {meta?.last_sync?.finished_at ? ` · updated ${meta.last_sync.finished_at.slice(0, 10)}` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="top-actions">
-          <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
-            Settings
-          </button>
-          {user && (
-            <button type="button" className="link" onClick={() => void api.logout().then(() => setAuth("out"))}>
-              Sign out
+          <span className="masthead-actions">
+            <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
+              Settings
             </button>
-          )}
+            {user && (
+              <button type="button" className="link" onClick={() => void api.logout().then(() => setAuth("out"))}>
+                Sign out
+              </button>
+            )}
+          </span>
         </div>
+        <h1 className="wordmark">HansardGPT</h1>
+        <p className="tagline">
+          Sourced briefings on what Parliament has said
+          {meta?.last_sync?.finished_at ? ` · updated ${fmtDate(meta.last_sync.finished_at.slice(0, 10))}` : ""}
+        </p>
       </header>
 
-      {showControls && <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />}
+      {showControls && (
+        <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />
+      )}
       {meta && !meta.answers_enabled && (
         <p className="banner">
           Briefings need an Anthropic API key on the server. Until one is set you will see the balanced evidence set only.
@@ -156,16 +157,17 @@ export default function App() {
         {turns.length === 0 && (
           <section className="empty">
             <h2>Who said what in Parliament, and where they stand</h2>
-            <p className="muted">
-              Ask a question and get a short briefing on the positions taken (ministers, the opposition, city, town and
-              rural MPs, peers), written only from Hansard. Every example links to the verbatim speech, with the
+            <p>
+              Ask a question and get a short briefing on the positions taken by ministers, the opposition, city, town
+              and rural MPs, and peers, written only from Hansard. Every example links to the verbatim speech, with the
               speaker's role on that date and the official reference.
             </p>
             <p className="muted small">Looking for every mention of a word? Hansard's own search does that best.</p>
+            <h3 className="examples-head">Try</h3>
             <ul className="examples">
               {EXAMPLES.map((ex) => (
                 <li key={ex}>
-                  <button type="button" className="link" onClick={() => setQuestion(ex)}>
+                  <button type="button" className="example" onClick={() => setQuestion(ex)}>
                     {ex}
                   </button>
                 </li>
@@ -228,7 +230,7 @@ export default function App() {
 
       <SourceDrawer source={drawerSource} quotes={drawer?.h.quotes ?? []} onClose={() => setDrawer(null)} />
 
-      <footer className="footer">
+      <footer className="footer full-width">
         {(meta?.attribution ?? ATTRIBUTION).map((a) => (
           <a key={a.url} href={a.url} target="_blank" rel="noreferrer">
             {a.text}

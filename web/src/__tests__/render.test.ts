@@ -14,7 +14,7 @@ describe("answer rendering", () => {
   it("turns citations into clickable source badges", () => {
     const html = renderAnswer(segmentsToMarkdown([seg("Ministers cited costs", "cited", [1, 3]), seg(".", "connective")]));
     expect(html).toContain('data-source="1"');
-    expect(html).toContain("[Source 3]");
+    expect(html).toContain('aria-label="Open source 3">3</button>');
     expect(html).not.toContain("⟦");
   });
 
@@ -49,5 +49,31 @@ describe("server-sent events", () => {
   it("parses data lines", () => {
     const evs = [...parseChunk('event: text\ndata: {"type":"text","text":"Hi"}')];
     expect(evs).toEqual([{ type: "text", text: "Hi" }]);
+  });
+});
+
+describe("people", () => {
+  it("attributes speakers the way Hansard prints them", async () => {
+    const { attribution, seatTypeLabel, partyAbbr, houseOf } = await import("../people");
+    const sp = {
+      person_id: "p",
+      date: "2024-01-01",
+      name: "Hilary Benn",
+      house: "commons",
+      constituency: "Leeds Central",
+      region: "Yorkshire and The Humber",
+      party: "Labour",
+      settlement: "city",
+      urban_area: "West Yorkshire",
+      urban_area_pop: 1_864_516,
+      offices: [],
+      other_names: [],
+    };
+    expect(attribution(sp)).toEqual({ name: "Hilary Benn", tail: "(Leeds Central) (Lab)" });
+    expect(seatTypeLabel(sp)).toBe("city seat (West Yorkshire urban area, 1.9m people)");
+    expect(seatTypeLabel({ ...sp, settlement: "town", urban_area_pop: 172_345 })).toBe("town seat (urban area of 172,000)");
+    expect(partyAbbr("Labour/Co-operative")).toBe("Lab/Co-op");
+    expect(houseOf({ chamber: "Lords written answers", speaker: null })).toBe("lords");
+    expect(houseOf({ chamber: "Westminster Hall", speaker: null })).toBe("commons");
   });
 });

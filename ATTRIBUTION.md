@@ -35,3 +35,9 @@ Seat types use Ordnance Survey Code-Point Open postcode locations (via the same 
 Contains OS data © Crown copyright and database right.
 Contains Royal Mail data © Royal Mail copyright and database right.
 Contains National Statistics data © Crown copyright and database right.
+
+## Typeface
+
+The web app bundles [Source Serif 4](https://github.com/adobe-fonts/source-serif) (Adobe),
+licensed under the [SIL Open Font License 1.1](https://openfontlicense.org), via Fontsource.
+No fonts are loaded from third-party servers.
