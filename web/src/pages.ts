@@ -168,7 +168,7 @@ reportForm?.addEventListener("submit", async (e) => {
     errorEl.textContent =
       err instanceof Error && err.message !== "failed"
         ? err.message
-        : "The report could not be sent. Please try again, or email wheretheystanduk@gmail.com.";
+        : "The report could not be sent. Please try again, or email admin@wheretheystand.uk.";
     errorEl.hidden = false;
     button.disabled = false;
   }

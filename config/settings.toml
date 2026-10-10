@@ -99,4 +99,4 @@ times = ["07:15", "19:15"]
 [site]
 # The "Support this site" link (a Ko-fi or similar page). Empty: the link is not shown anywhere.
 # HANSARD_DONATE_URL in the server's .env overrides this.
-donate_url = ""
+donate_url = "https://ko-fi.com/wheretheystand"

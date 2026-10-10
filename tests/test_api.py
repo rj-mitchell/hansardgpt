@@ -379,9 +379,12 @@ def test_reports_are_limited_per_visitor(indexed_settings, tmp_path):
 
 
 def test_donate_link_is_hidden_until_set(indexed_settings, tmp_path, monkeypatch):
-    app, _, _ = make_app(indexed_settings, tmp_path, auth=False)
-    client = TestClient(app)
     monkeypatch.delenv("HANSARD_DONATE_URL", raising=False)
+    app, _, _ = make_app(indexed_settings, tmp_path, auth=False)
+    assert TestClient(app).get("/api/site").json() == {"donate_url": "https://ko-fi.com/wheretheystand"}
+    unset = dataclasses.replace(indexed_settings, raw={**indexed_settings.raw, "site": {"donate_url": ""}})
+    app, _, _ = make_app(unset, tmp_path, auth=False)
+    client = TestClient(app)
     assert client.get("/api/site").json() == {"donate_url": None}
     monkeypatch.setenv("HANSARD_DONATE_URL", "https://ko-fi.com/example")
     assert client.get("/api/site").json() == {"donate_url": "https://ko-fi.com/example"}

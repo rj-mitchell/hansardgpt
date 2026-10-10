@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 MEMBERS_API = "https://members-api.parliament.uk/api/Members/Search"
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
-USER_AGENT = "WhereTheyStand/1.0 (https://github.com/rj-mitchell/hansardgpt; wheretheystanduk@gmail.com)"
+USER_AGENT = "WhereTheyStand/1.0 (https://github.com/rj-mitchell/hansardgpt; admin@wheretheystand.uk)"
 REFRESH = timedelta(days=7)
 SOURCES = {"gender": "UK Parliament Members API", "birth_date": "Wikidata (P569, matched by P10428)"}
 
