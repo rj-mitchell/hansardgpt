@@ -211,3 +211,13 @@ def test_api_key_falls_back_to_the_key_file_in_the_data_folder(tmp_path, monkeyp
     assert api_key() == "sk-ant-from-file"
     monkeypatch.setenv("HANSARD_ANTHROPIC_API_KEY", "sk-ant-from-env")
     assert api_key() == "sk-ant-from-env"
+
+
+def test_briefing_instructions_require_neutral_wording():
+    from hansard.rag.prompts import system_prompt
+
+    text = system_prompt(TODAY)
+    assert "Report in neutral words" in text
+    for loaded in ("lied", "misled", "U-turn", "admitted"):
+        assert loaded in text  # named as forbidden in the model's own voice
+    assert "exact, cited quotation" in text

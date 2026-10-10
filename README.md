@@ -278,17 +278,22 @@ The authority multiplier `m` depends on the speaker's role on the date of the re
 1. **Editable filters.** The question becomes an editable filter plan: dates, Houses, regions, parties,
    speakers, roles and boosted portfolios. "Northern MPs" means the North East, North West, and Yorkshire and
    The Humber; you can change this in settings. You see and can edit every filter.
-1. **Synthesis rules.** The model is told to synthesise rather than list, to group speakers by the attributes
+2. **Synthesis rules.** The model is told to synthesise rather than list, to group speakers by the attributes
    given in each source's title (role on the date, party, seat type, region), and to use no other attributes.
    It characterises each group's stance with one to three cited examples, preferably short exact quotations,
    and describes the strength of evidence honestly ("two MPs", "in the records retrieved").
-2. **Deterministic retrieval.** The same plan and sliders always give the same sources.
-3. **Sources only.** Claude (Opus 5.5) receives only those sources, as search-result blocks with citations
+3. **Neutral wording.** The model reports with plain verbs (said, argued, criticised) and may not use loaded or
+   judgemental words in its own voice (lied, misled, U-turn, admitted, attacked and the like). Such words can
+   appear only inside an exact, cited quotation from the speaker who used them. It never says an individual
+   contradicted themselves; it gives what they said on each date. Fair and accurate reports of Parliament have
+   legal protection; editorialising would fall outside it.
+4. **Deterministic retrieval.** The same plan and sliders always give the same sources.
+5. **Sources only.** Claude (Opus 5.5) receives only those sources, as search-result blocks with citations
    enabled, under rules that forbid outside knowledge. When the sources don't answer the question, it must say
    "No records found."
-4. **Verification.** Every citation is re-checked against our copy of the source text. Any uncited
+6. **Verification.** Every citation is re-checked against our copy of the source text. Any uncited
    substantive sentence is flagged in the UI as unsupported, never passed off as sourced.
-5. **No guessing on empty results.** If retrieval finds nothing, the model is not called at all.
+7. **No guessing on empty results.** If retrieval finds nothing, the model is not called at all.
 
 ## Data sources and licensing
 
