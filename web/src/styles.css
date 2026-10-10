@@ -1,10 +1,12 @@
 /*
- * HansardGPT — styles.
+ * Hansard Guru — styles.
  *
  * The look borrows from the printed Official Report: ivory paper and black serif
  * type, small-capital headings between rules, column numbers in the margin, and
  * the bound volumes' cloth — green for the Commons, red for the Lords — with gilt
- * lettering. Techniques follow good-css (github.com/vojtaholik/good-css): logical
+ * lettering. A lighter hand on top keeps it friendly: rounder shapes, a speech-bubble
+ * mark, example questions as book spines and a ribbon marker on each briefing.
+ * Techniques follow good-css (github.com/vojtaholik/good-css): logical
  * properties, OKLCH tokens that hold both light and dark values, one fluid type
  * scale, hover only where hover exists, and motion only when it is welcome.
  */
@@ -91,6 +93,10 @@ button,
   --gilt: light-dark(oklch(62% 0.1 80), oklch(80% 0.11 85));
   --gilt-on-cloth: oklch(83% 0.105 86);
   --on-cloth: oklch(96% 0.02 88);
+  /* the mark and the ribbon brighten at night so they still read on the dark page */
+  --mark-bubble: light-dark(var(--cloth-commons), oklch(52% 0.09 162));
+  --mark-quote: light-dark(var(--gilt-on-cloth), oklch(90% 0.11 88));
+  --ribbon: light-dark(var(--cloth-lords), oklch(52% 0.15 24));
 
   --accent: var(--commons);
   --accent-strong: color-mix(in oklch, var(--accent), var(--ink) 25%);
@@ -103,7 +109,9 @@ button,
 
   --serif: "Source Serif 4 Variable", "Iowan Old Style", Charter, Georgia, serif;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --radius: 0.3rem;
+  --radius: 0.6rem;
+  --radius-l: 1rem;
+  --radius-pill: 999px;
   --shadow: 0 1px 2px oklch(0.2 0.02 160 / 0.08), 0 8px 28px oklch(0.2 0.02 160 / 0.1);
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -241,9 +249,9 @@ button.secondary {
   font-size: var(--step--1);
   font-weight: 600;
   letter-spacing: 0.01em;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   padding-block: 0.6em;
-  padding-inline: 1.15em;
+  padding-inline: 1.25em;
 }
 
 button.primary {
@@ -435,18 +443,78 @@ legend,
 }
 
 .wordmark {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.28em;
   font-size: var(--step-4);
   font-weight: 650;
-  letter-spacing: 0.015em;
+  letter-spacing: 0.01em;
   font-variation-settings: "opsz" 60;
   line-height: 1;
   margin-block-start: var(--space-xs);
 }
 
+/* the mark is sized by the type beside it (good-css: icon sized by the text) */
+.wordmark > .mark {
+  flex: none;
+  block-size: 1.15em;
+  inline-size: auto;
+  rotate: -6deg;
+  translate: 0 -0.04em;
+}
+
+.wordmark em {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--lords);
+  text-decoration: underline wavy var(--gilt);
+  text-decoration-thickness: 0.045em;
+  text-underline-offset: 0.16em;
+  text-decoration-skip-ink: none;
+}
+
+.mark-bubble {
+  fill: var(--mark-bubble);
+}
+
+.mark-quote {
+  fill: var(--mark-quote);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wordmark:hover > .mark {
+    rotate: 4deg;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wordmark > .mark {
+    transition: rotate 300ms var(--ease-out);
+  }
+}
+
 .tagline {
   font-style: italic;
   color: var(--ink-soft);
-  margin-block-start: var(--space-2xs);
+  margin-block-start: var(--space-xs);
+}
+
+/* a small rubber stamp: independent, and sourced */
+.stamp {
+  justify-self: center;
+  margin-block-start: var(--space-xs);
+  padding-block: 0.3em;
+  padding-inline: 0.9em;
+  border: 1.5px solid color-mix(in oklch, var(--lords) 70%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--lords);
+  font-family: var(--sans);
+  font-size: var(--step--2);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  rotate: -1.5deg;
 }
 
 .banner {
@@ -544,40 +612,94 @@ legend,
   margin-block-start: var(--space-s);
 }
 
+/* example questions: cards with a coloured spine, like volumes on a shelf */
 .examples {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-block-start: 1px solid var(--rule);
+  display: grid;
+  gap: var(--space-s);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
 }
 
 .examples li {
-  border-block-end: 1px solid var(--rule);
+  --spine: var(--cloth-commons);
+  display: grid;
+}
+
+.examples li[data-house="lords"] {
+  --spine: var(--cloth-lords);
+}
+
+.examples li[data-house="gilt"] {
+  --spine: var(--gilt);
 }
 
 .example {
+  position: relative;
+  isolation: isolate;
   display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
   inline-size: 100%;
   text-align: start;
-  background: none;
-  border: 0;
-  padding-block: var(--space-xs);
-  padding-inline: 0;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-inline-start: 0.45rem solid var(--spine);
+  border-radius: var(--radius-l);
+  padding-block: var(--space-s);
+  padding-inline: var(--space-s);
   font-style: italic;
+  line-height: 1.35;
   color: var(--ink);
 }
 
 .example::after {
-  content: "→" / "";
-  margin-inline-start: auto;
-  padding-inline-start: var(--space-s);
-  color: var(--gilt);
+  content: "Ask this →" / "";
+  margin-block-start: auto;
+  font-family: var(--sans);
+  font-size: var(--step--2);
   font-style: normal;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* the lift on hover cross-fades two painted shadows (good-css) */
+.example::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    0 4px 8px oklch(0.25 0.03 160 / 0.06),
+    0 14px 32px oklch(0.25 0.03 160 / 0.14);
+  opacity: 0;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .example:hover {
-    color: var(--accent);
+    translate: 0 -2px;
+  }
+
+  .example:hover::before {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* doubled class: outranks the shared button transition above */
+  .examples .example {
+    transition:
+      transform 160ms var(--ease-out),
+      translate 200ms var(--ease-out);
+  }
+
+  .example::before {
+    transition: opacity 300ms var(--ease-out);
   }
 }
 
@@ -596,7 +718,7 @@ legend,
 }
 
 .turn > .question::before {
-  content: "Question" / "";
+  content: "You asked" / "";
   display: block;
   font-family: var(--sans);
   font-size: var(--step--2);
@@ -612,24 +734,34 @@ legend,
   color: var(--ink-soft);
 }
 
+/* three dots in the colours of the Commons, the Lords and the gilt */
 .status::before {
   content: "" / "";
   display: inline-block;
-  inline-size: 0.5em;
+  inline-size: 2.1em;
   block-size: 0.5em;
   margin-inline-end: 0.6em;
-  border-radius: 50%;
-  background: var(--gilt);
   vertical-align: 0.1em;
-  animation: pulse 1.2s var(--ease-in-out) infinite alternate;
+  background:
+    radial-gradient(circle closest-side, var(--commons) 92%, transparent) 0 50% / 0.5em 0.5em no-repeat,
+    radial-gradient(circle closest-side, var(--lords) 92%, transparent) 50% 50% / 0.5em 0.5em no-repeat,
+    radial-gradient(circle closest-side, var(--gilt) 92%, transparent) 100% 50% / 0.5em 0.5em no-repeat;
 }
 
-@keyframes pulse {
+@media (prefers-reduced-motion: no-preference) {
+  .status::before {
+    animation: think 1.1s var(--ease-in-out) infinite alternate;
+  }
+}
+
+@keyframes think {
   from {
-    opacity: 0.25;
+    opacity: 0.35;
+    translate: 0 0.08em;
   }
   to {
     opacity: 1;
+    translate: 0 -0.08em;
   }
 }
 
@@ -805,7 +937,7 @@ legend,
   background: var(--paper-raised);
   border: 1px solid var(--rule);
   border-block-start: 3px solid var(--accent);
-  border-radius: var(--radius);
+  border-radius: var(--radius-l);
   padding: var(--space-m);
   padding-block-start: var(--space-l);
   box-shadow: var(--shadow);
@@ -822,6 +954,19 @@ legend,
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--gilt);
+}
+
+/* a ribbon marker, as bound into each volume of the report */
+.answer::after {
+  content: "" / "";
+  position: absolute;
+  inset-block-start: -3px;
+  inset-inline-end: var(--space-m);
+  inline-size: 1.1rem;
+  block-size: 2.6rem;
+  background: var(--ribbon);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+  box-shadow: inset 0 0 0 1px oklch(0 0 none / 0.1);
 }
 
 .answer-body {
@@ -1138,8 +1283,9 @@ legend,
   font-size: max(16px, var(--step-0));
   line-height: 1.45;
   padding-block: 0.7em;
-  padding-inline: 0.9em;
+  padding-inline: 1.1em;
   border-color: color-mix(in oklch, var(--ink) 25%, var(--paper));
+  border-radius: var(--radius-l);
   box-shadow: var(--shadow);
 }
 
@@ -1430,6 +1576,16 @@ legend,
   color: inherit;
 }
 
+.footer > .independence {
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-block-end: var(--space-xs);
+}
+
+.login .footer > .independence {
+  color: inherit;
+}
+
 .footer > a + a {
   margin-block-start: 0.2em;
 }
@@ -1473,6 +1629,22 @@ html:has(.login) body {
 
 .cover p {
   text-wrap: balance;
+}
+
+.cover-mark {
+  block-size: 3.2rem;
+  inline-size: auto;
+  margin-inline: auto;
+  margin-block-end: var(--space-xs);
+  rotate: -6deg;
+}
+
+.cover-mark .mark-bubble {
+  fill: var(--paper);
+}
+
+.cover-mark .mark-quote {
+  fill: var(--cloth-commons);
 }
 
 .cover-kicker,

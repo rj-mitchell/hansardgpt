@@ -88,7 +88,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                state: StateDB | None = None) -> FastAPI:
     settings = settings or load_settings()
     state = state or StateDB(settings.state_db)
-    app = FastAPI(title="HansardGPT", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(title="Hansard Guru", docs_url="/api/docs", openapi_url="/api/openapi.json")
     throttle = LoginThrottle()
     auth_required = bool(settings.section("auth").get("required", False))
     limiter = RateLimiter(int(settings.usage.get("requests_per_minute", 20)))

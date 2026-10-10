@@ -1,8 +1,8 @@
-# HansardGPT
+# Hansard Guru
 
 **Sourced briefings on what the UK Parliament has said, and who stands where.**
 
-HansardGPT is an open-source research tool for anyone: journalists, researchers, policy analysts and the public.
+Hansard Guru ([hansard.guru](https://hansard.guru)) is an open-source research tool for anyone: journalists, researchers, policy analysts and the public.
 The site is open, with no sign-in. It is deliberately
 *not* another keyword search; [Hansard's own search](https://hansard.parliament.uk/search) is excellent at finding
 every speech that mentions a word. Instead, ask a question such as "What have northern Labour MPs said about
@@ -22,6 +22,9 @@ Every example is a `[Source n]` citation that opens the verbatim record, with:
 The evidence behind each briefing is chosen for balance across speaker groups, not just keyword score. A summary
 computed from the data, not written by the model, shows how many contributions, from how many speakers, and from
 which groups. If the archive has nothing relevant, the tool says **"No records found."** instead of guessing.
+
+> Hansard Guru is an independent project. It is not affiliated with or endorsed by the UK Parliament, and it
+> does not use Parliament's logo or the crowned portcullis.
 
 > Status: v1, covering May 2010 (the 2010 general election) to today. Commons, Lords, Westminster Hall, written
 > answers and statements (both Houses), Public Bill Committees and every division (vote).
@@ -110,6 +113,13 @@ The web app takes its look from the printed Official Report:
   (Lab)";
 - the bound volumes' cloth, green for the Commons and red for the Lords, with gilt lettering. Sources are edged
   in their House's colour, and the sign-in page (invite-only mode) is a volume cover.
+
+A lighter hand on top keeps it friendly:
+- a speech-bubble mark holding a gilt quotation mark, and "Guru" in Lords red with a gilt squiggle;
+- a small "independent · every claim sourced" stamp under the title;
+- example questions as cards with coloured spines, like volumes on a shelf;
+- a red ribbon marker on each briefing, as bound into each volume of the report;
+- rounder buttons and fields, and three "thinking" dots in Commons green, Lords red and gilt.
 
 Dark mode follows the system setting. The CSS follows [good-css](https://github.com/vojtaholik/good-css):
 - logical properties;

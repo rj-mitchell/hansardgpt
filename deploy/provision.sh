@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision HansardGPT on a fresh Ubuntu 24.04 server (run as root).
+# Provision Hansard Guru on a fresh Ubuntu 24.04 server (run as root).
 #
 #   curl -fsSL https://raw.githubusercontent.com/rj-mitchell/hansardgpt/main/deploy/provision.sh | bash
 #   (or copy this file to the server and run: sudo bash provision.sh)
@@ -39,7 +39,7 @@ if ! command -v docker >/dev/null; then
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 fi
 
-echo "==> Fetching HansardGPT into $DIR"
+echo "==> Fetching Hansard Guru into $DIR"
 if [[ -d $DIR/.git ]]; then
   git -C "$DIR" pull --ff-only
 else
@@ -48,7 +48,7 @@ fi
 cd "$DIR/deploy"
 
 if [[ ! -f .env ]]; then
-  read -rp "Domain name pointing at this server (e.g. hansard.example.org): " DOMAIN
+  read -rp "Domain name pointing at this server (e.g. hansard.guru): " DOMAIN
   read -rsp "Anthropic API key (leave blank for sources-only mode): " KEY
   echo
   umask 077
@@ -68,7 +68,7 @@ systemctl enable --now hansard-sync.timer
 
 cat <<MSG
 
-HansardGPT is starting at https://$(grep ^DOMAIN= .env | cut -d= -f2)/
+Hansard Guru is starting at https://$(grep ^DOMAIN= .env | cut -d= -f2)/
 The first data load takes roughly 30-60 minutes (follow /var/log/hansard-bootstrap.log).
 Semantic search improves as embeddings complete over the next syncs.
 

@@ -103,7 +103,7 @@ def parse_listing(directory: str, page: str) -> list[RemoteFile]:
 
 class HttpsMirror:
     def __init__(self, base_url: str, dest: Path, *, concurrency: int = 4, timeout: float = 60.0,
-                 user_agent: str = "HansardGPT (open-source research engine; +https://github.com/rj-mitchell/hansardgpt)"):
+                 user_agent: str = "HansardGuru (open-source research tool; +https://github.com/rj-mitchell/hansardgpt)"):
         self.base_url = base_url.rstrip("/")
         self.dest = dest
         self.concurrency = concurrency

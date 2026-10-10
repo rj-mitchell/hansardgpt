@@ -1,4 +1,4 @@
-# HansardGPT on a single server: the app plus Caddy for automatic HTTPS.
+# Hansard Guru on a single server: the app plus Caddy for automatic HTTPS.
 # Usage (from this directory): cp .env.example .env && edit, then
 #   docker compose up -d --build
 services:

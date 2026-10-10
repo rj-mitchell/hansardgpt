@@ -1,7 +1,7 @@
-# Run HansardGPT on your own computer at http://localhost:8000
+# Run Hansard Guru on your own computer at http://localhost:8000
 # (step by step: "Try it on your own computer" in README.md).
 # For a public server with a domain and HTTPS, use deploy/docker-compose.yml instead.
-name: hansardgpt-local
+name: hansardgpt-local   # kept from the old name so existing local data is reused
 services:
   app:
     build: .

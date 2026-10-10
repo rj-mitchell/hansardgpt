@@ -1,6 +1,6 @@
 # Data sources and attribution
 
-HansardGPT is built entirely on open data. The application shows these
+Hansard Guru is built entirely on open data. The application shows these
 attributions in its footer and on its About page.
 
 ## Parliamentary proceedings (Hansard)

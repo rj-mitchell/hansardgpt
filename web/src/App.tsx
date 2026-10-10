@@ -7,14 +7,16 @@ import { PlanChips } from "./components/PlanChips";
 import { EvidenceBar } from "./components/Evidence";
 import { SourceDrawer, SourceList } from "./components/Sources";
 import { ATTRIBUTION } from "./attribution";
+import { BRAND } from "./brand";
+import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
 import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const EXAMPLES = [
-  "What have northern Labour MPs said about HS2?",
-  "How have ministers justified delays to HS2?",
-  "Where do rural and city MPs differ on onshore wind farms?",
-  "Did northern MPs dissent on agricultural planning bills between 2018 and 2022?",
+  { q: "What have northern Labour MPs said about HS2?", house: "commons" },
+  { q: "Where do rural and city MPs differ on onshore wind farms?", house: "gilt" },
+  { q: "What have peers said about assisted dying?", house: "lords" },
+  { q: "How have ministers justified delays to HS2?", house: "commons" },
 ];
 
 function loadSettings(defaults?: Meta["defaults"]): Settings {
@@ -143,11 +145,17 @@ export default function App() {
             )}
           </span>
         </div>
-        <h1 className="wordmark">HansardGPT</h1>
+        <h1 className="wordmark">
+          <Mark />
+          <span className="wordmark-text">
+            Hansard <em>Guru</em>
+          </span>
+        </h1>
         <p className="tagline">
-          Sourced briefings on what Parliament has said
+          {BRAND.tagline}
           {meta?.last_sync?.finished_at ? ` · updated ${fmtDate(meta.last_sync.finished_at.slice(0, 10))}` : ""}
         </p>
+        <p className="stamp">Independent · every claim sourced</p>
       </header>
 
       {showControls && (
@@ -162,19 +170,25 @@ export default function App() {
       <main className="thread" aria-live="polite">
         {turns.length === 0 && (
           <section className="empty">
-            <h2>Who said what in Parliament, and where they stand</h2>
+            <h2>What has Parliament said about…?</h2>
             <p>
-              Ask a question and get a short briefing on the positions taken by ministers, the opposition, city, town
-              and rural MPs, and peers, written only from Hansard. Every example links to the verbatim speech, with the
-              speaker's role on that date and the official reference.
+              Ask a question and the Guru reads Hansard for you, then writes a short briefing on where ministers, the
+              opposition, city, town and rural MPs, and peers stand. It has no opinions of its own: every point links
+              to the speech it came from, with the speaker's role on that date and the official reference.
             </p>
-            <p className="muted small">Looking for every mention of a word? Hansard's own search does that best.</p>
-            <h3 className="examples-head">Try</h3>
+            <p className="muted small">
+              Looking for every mention of a word?{" "}
+              <a href="https://hansard.parliament.uk/search" target="_blank" rel="noreferrer">
+                Hansard's own search
+              </a>{" "}
+              does that best.
+            </p>
+            <h3 className="examples-head">Try one of these</h3>
             <ul className="examples">
               {EXAMPLES.map((ex) => (
-                <li key={ex}>
-                  <button type="button" className="example" onClick={() => setQuestion(ex)}>
-                    {ex}
+                <li key={ex.q} data-house={ex.house}>
+                  <button type="button" className="example" onClick={() => setQuestion(ex.q)}>
+                    {ex.q}
                   </button>
                 </li>
               ))}
@@ -186,8 +200,8 @@ export default function App() {
             <h2 className="question">{t.question}</h2>
             {t.plan && <PlanChips key={JSON.stringify(t.plan)} plan={t.plan} meta={meta} busy={busy} onRerun={(p) => void run(t.question, p, t.id)} />}
             <EvidenceBar evidence={t.evidence} />
-            {t.status === "planning" && <p className="status">Interpreting the question…</p>}
-            {t.status === "searching" && <p className="status">Searching Hansard…</p>}
+            {t.status === "planning" && <p className="status">Reading your question…</p>}
+            {t.status === "searching" && <p className="status">Leafing through Hansard…</p>}
             {t.status === "answering" && !t.streamText && t.sources.length > 0 && (
               <p className="status">Writing a sourced briefing from {t.sources.length} contributions…</p>
             )}
@@ -219,7 +233,7 @@ export default function App() {
         <textarea
           id="q"
           value={question}
-          placeholder="Ask a question about UK Parliament…"
+          placeholder="Ask about anything debated in Parliament…"
           rows={2}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => {
@@ -237,6 +251,7 @@ export default function App() {
       <SourceDrawer source={drawerSource} quotes={drawer?.h.quotes ?? []} onClose={() => setDrawer(null)} />
 
       <footer className="footer full-width">
+        <p className="independence">{BRAND.independence}</p>
         {(meta?.attribution ?? ATTRIBUTION).map((a) => (
           <a key={a.url} href={a.url} target="_blank" rel="noreferrer">
             {a.text}
