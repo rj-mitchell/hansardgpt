@@ -29,6 +29,18 @@ from hansard.api.auth import (
     end_session,
     user_for_token,
 )
+from hansard.api.briefings import (
+    ID_PATTERN,
+    fmt_date,
+    get_briefing,
+    page_with_meta,
+    public_view,
+    recent_briefings,
+    store_briefing,
+    summary_text,
+    withdraw_briefing,
+)
+from hansard.api.cards import card_png
 from hansard.api.usage import (
     RateLimiter,
     cache_key,
@@ -84,6 +96,10 @@ class FeedbackBody(BaseModel):
     briefing_key: str | None = Field(default=None, max_length=128)
 
 
+class WithdrawBody(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class HitBody(BaseModel):
     path: str = Field(min_length=1, max_length=200)
     referrer: str | None = Field(default=None, max_length=500)
@@ -115,6 +131,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     cache_hours = float(settings.usage.get("answer_cache_hours", 24))
     admin_token = os.environ.get("HANSARD_ADMIN_TOKEN") or None
     lock = threading.Lock()
+    dist = Path(settings.section("paths").get("web_dist", REPO_ROOT / "web" / "dist"))
     holder: dict[str, Pipeline] = {}
     if pipeline is not None:
         holder["p"] = pipeline
@@ -225,6 +242,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
 
         def events() -> Iterator[dict[str, Any]]:
             if hit is not None:
+                final = hit[-1]
+                if final.get("answer") and not final["answer"].get("no_records") and not final.get("briefing_id"):
+                    # cached before shareable links existed: give it an address now, and remember it
+                    hit[-1] = {**final, **keep_briefing(body, hit, final)}
+                    store_events(state, key, hit, cache_hours)
                 yield from hit
                 return
             if blocked:
@@ -241,6 +263,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                         record_usage(state, uid, "answer", ev.get("model"), ev["usage"], settings.usage, visitor)
                     if ev["type"] == "final" and key:
                         ev = {**ev, "briefing_key": key}  # lets the reader's feedback refer to this briefing
+                    if ev["type"] == "final" and ev.get("answer") and not ev["answer"].get("no_records"):
+                        ev = {**ev, **keep_briefing(body, kept, ev)}  # a permanent, shareable address
                     if ev["type"] == "text":
                         text.append(ev["text"])
                     else:
@@ -278,6 +302,69 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
 
         return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [])],
                 "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
+
+    def keep_briefing(body: AskBody, kept: list[dict[str, Any]], final: dict[str, Any]) -> dict[str, Any]:
+        records_up_to = state.latest_record_date()
+        events = [e for e in kept if e["type"] in ("plan", "sources")] + [
+            {k: v for k, v in final.items() if k not in ("usage", "briefing_key")}]
+        meta = store_briefing(state, body.question, body.model_dump(exclude={"question", "history"}), events,
+                              records_up_to, final.get("model"))
+        return {"briefing_id": meta["id"], "prepared_at": meta["created_at"], "records_up_to": records_up_to}
+
+    # ---- shared briefings ---------------------------------------------------------------
+    def _briefing_or_error(bid: str) -> dict[str, Any]:
+        b = get_briefing(state, bid)
+        if b is None:
+            raise HTTPException(404, "There is no briefing at this address.")
+        if b["withdrawn_at"]:
+            raise HTTPException(410, "This briefing has been withdrawn.")
+        return b
+
+    @app.get("/api/briefings/{bid}")
+    def briefing(bid: str):
+        return public_view(_briefing_or_error(bid))
+
+    @app.get("/b/{bid}/card.png", include_in_schema=False)
+    def briefing_card(bid: str):
+        b = _briefing_or_error(bid)
+        view = public_view(b)
+        path = card_png(settings.data_dir / "cards", bid, b["question"], fmt_date(b["created_at"]),
+                        fmt_date(b["records_up_to"]), view["evidence"])
+        return FileResponse(path, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+    @app.get("/b/{bid}", include_in_schema=False)
+    def briefing_page(bid: str, request: Request):
+        """The app, with this briefing's title and link-preview card in the page head."""
+        index = dist / "index.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        b = get_briefing(state, bid) if ID_PATTERN.match(bid) else None
+        base = str(request.base_url).rstrip("/")
+        if b is None or b["withdrawn_at"]:
+            gone = b is not None
+            html_page = page_with_meta(
+                page, title="Briefing withdrawn — Where They Stand" if gone else "Briefing not found — Where They Stand",
+                description="This briefing is no longer available." if gone else "There is no briefing at this address.",
+                url=f"{base}/b/{bid}", image=None)
+            return Response(html_page, status_code=410 if gone else 404, media_type="text/html")
+        view = public_view(b)
+        prepared = fmt_date(b["created_at"])
+        description = summary_text(view["answer"]) or "A sourced briefing on the record of Parliament."
+        html_page = page_with_meta(
+            page, title=f"{b['question']} — Where They Stand", description=description, url=f"{base}/b/{bid}",
+            image=f"{base}/b/{bid}/card.png",
+            image_alt=f"Where They Stand briefing: {b['question']} Prepared {prepared}.")
+        return Response(html_page, media_type="text/html")
+
+    @app.post("/api/admin/briefings/{bid}/withdraw")
+    def withdraw(bid: str, body: WithdrawBody, user=Depends(admin_user)):
+        if not withdraw_briefing(state, bid, body.reason):
+            raise HTTPException(404, "There is no briefing at this address.")
+        (settings.data_dir / "cards" / f"{bid}.png").unlink(missing_ok=True)
+        return {"ok": True}
+
+    @app.get("/api/admin/briefings")
+    def briefings_list(limit: int = 50, user=Depends(admin_user)):
+        return {"briefings": recent_briefings(state, min(max(limit, 1), 500))}
 
     # ---- feedback, visit counts and public status ---------------------------------------
     @app.post("/api/feedback")
@@ -321,7 +408,6 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return {"runs": state.runs(30)}
 
     # ---- web app -------------------------------------------------------------------
-    dist = Path(settings.section("paths").get("web_dist", REPO_ROOT / "web" / "dist"))
     if dist.exists():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
 
@@ -329,8 +415,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         def spa(path: str):
             if path.startswith("api/"):
                 return JSONResponse({"detail": "Not found"}, status_code=404)
-            f = dist / path
-            if path and f.is_file():
+            f = (dist / path).resolve()
+            if path and f.is_file() and f.is_relative_to(dist.resolve()):  # never serve outside the build
                 return FileResponse(f)
             page = dist / f"{path.strip('/')}.html"  # static pages: /methodology -> methodology.html
             if path and "/" not in path.strip("/") and page.is_file():

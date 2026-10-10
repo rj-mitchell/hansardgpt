@@ -157,6 +157,25 @@ export interface Turn {
   error?: string;
   note?: string;
   briefingKey?: string;
+  briefingId?: string;
+  preparedAt?: string;
+  recordsUpTo?: string | null;
+  /** loaded from a shared address (/b/<id>) rather than asked in this visit */
+  shared?: boolean;
+}
+
+/** A kept briefing, as returned by /api/briefings/<id>. */
+export interface SavedBriefing {
+  id: string;
+  question: string;
+  created_at: string;
+  records_up_to: string | null;
+  plan: Plan | null;
+  sources: SourceCard[];
+  candidates?: number;
+  semantic?: boolean;
+  evidence?: Evidence;
+  answer: Answer | null;
 }
 
 export interface Meta {

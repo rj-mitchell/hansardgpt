@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { api } from "../api";
 import { briefingWithSources, referencesOnly } from "../export";
-import { renderAnswer, renderPlain, segmentsToMarkdown } from "../render";
+import { fmtDate, renderAnswer, renderPlain, segmentsToMarkdown } from "../render";
 import type { Answer, Highlight, SourceCard } from "../types";
 
 interface Props {
@@ -10,10 +10,24 @@ interface Props {
   streamText: string;
   sources: SourceCard[];
   briefingKey?: string;
+  briefingId?: string;
+  preparedAt?: string;
+  recordsUpTo?: string | null;
   onCite: (h: Highlight) => void;
 }
 
-export function AnswerView({ question, answer, streamText, sources, briefingKey, onCite }: Props) {
+export function AnswerView({
+  question,
+  answer,
+  streamText,
+  sources,
+  briefingKey,
+  briefingId,
+  preparedAt,
+  recordsUpTo,
+  onCite,
+}: Props) {
+  const link = briefingId ? `${window.location.origin}/b/${briefingId}` : undefined;
   const html = useMemo(
     () => (answer ? renderAnswer(segmentsToMarkdown(answer.segments)) : renderPlain(streamText)),
     [answer, streamText],
@@ -36,15 +50,41 @@ export function AnswerView({ question, answer, streamText, sources, briefingKey,
         <>
           <p className="ai-note">
             Written by AI (Claude) from the cited Hansard records only. Check the sources before relying on it.
+            {preparedAt &&
+              ` Prepared ${fmtDate(preparedAt.slice(0, 10))}${recordsUpTo ? ` from records up to ${fmtDate(recordsUpTo)}` : ""}.`}
           </p>
           <div className="answer-actions">
-            <CopyButton label="Copy with sources" text={() => briefingWithSources(question, answer, sources)} />
+            {link && <ShareButton url={link} title={question} />}
+            <CopyButton label="Copy with sources" text={() => briefingWithSources(question, answer, sources, new Date(), link)} />
             <CopyButton label="Copy references" text={() => referencesOnly(answer, sources)} />
             <Feedback question={question} briefingKey={briefingKey} />
           </div>
         </>
       )}
     </div>
+  );
+}
+
+/** The phone's share sheet where there is one; otherwise copy the link. */
+function ShareButton({ url, title }: { url: string; title: string }) {
+  const [done, setDone] = useState(false);
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  async function share() {
+    try {
+      if (canShare) await navigator.share({ url, title: `${title} — Where They Stand` });
+      else {
+        await navigator.clipboard.writeText(url);
+        setDone(true);
+        setTimeout(() => setDone(false), 2000);
+      }
+    } catch {
+      /* cancelled or unavailable */
+    }
+  }
+  return (
+    <button type="button" className="primary" onClick={() => void share()}>
+      {done ? "Link copied" : canShare ? "Share" : "Copy link"}
+    </button>
   );
 }
 

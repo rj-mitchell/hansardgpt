@@ -1,4 +1,4 @@
-import type { Meta, Plan, Settings, SourceCard } from "./types";
+import type { Meta, Plan, SavedBriefing, Settings, SourceCard } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -39,6 +39,7 @@ export const api = {
   login: (email: string, password: string) => post("/api/auth/login", { email, password }).then(json),
   logout: () => post("/api/auth/logout", {}).then(json),
   meta: () => fetch("/api/meta", { credentials: "same-origin" }).then((r) => json<Meta>(r)),
+  briefing: (id: string) => fetch(`/api/briefings/${id}`).then((r) => json<SavedBriefing>(r)),
   feedback: (question: string, useful: boolean, briefingKey?: string) =>
     post("/api/feedback", { question, useful, briefing_key: briefingKey ?? null }).then(json),
   /** Cookie-free page count: the path and the referring site only. */

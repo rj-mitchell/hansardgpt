@@ -45,3 +45,9 @@ Contains NISRA data © Crown copyright.
 The web app bundles [Source Serif 4](https://github.com/adobe-fonts/source-serif) (Adobe),
 licensed under the [SIL Open Font License 1.1](https://openfontlicense.org), via Fontsource.
 No fonts are loaded from third-party servers.
+
+## Typefaces
+
+Preview cards are drawn with Source Serif 4 and Source Sans 3 by Adobe, licensed under the SIL Open Font
+License 1.1 (`data_static/fonts/LICENSE-*.md`). The web app uses Source Serif 4 via Fontsource under the same
+licence.

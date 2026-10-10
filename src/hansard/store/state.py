@@ -73,6 +73,19 @@ CREATE TABLE IF NOT EXISTS answer_cache (
     created_at TEXT NOT NULL,
     events     TEXT NOT NULL
 );
+-- every completed briefing, kept at an unguessable address so it can be shared and cited
+CREATE TABLE IF NOT EXISTS briefings (
+    id             TEXT PRIMARY KEY,
+    created_at     TEXT NOT NULL,
+    question       TEXT NOT NULL,
+    settings       TEXT NOT NULL,
+    events         TEXT NOT NULL,
+    records_up_to  TEXT,
+    model          TEXT,
+    withdrawn_at   TEXT,
+    withdrawn_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS briefings_created ON briefings(created_at);
 -- "Was this briefing useful?" answers
 CREATE TABLE IF NOT EXISTS feedback (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

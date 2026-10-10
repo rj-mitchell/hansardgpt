@@ -251,8 +251,14 @@ Usage and the sync log are at `/api/admin/usage` and `/api/admin/sync`, with the
 `Authorization: Bearer $HANSARD_ADMIN_TOKEN` (`provision.sh` generates the token). For a private site instead,
 set `[auth] required = true` and create accounts with `hansard user add`.
 
-**Backups.** Everything can be rebuilt from public sources except `data/state.sqlite`, which holds usage, the
-answer cache, the sync log and any accounts. Back that file up.
+**Shared briefings.** Every completed briefing is saved at `/b/<id>` (ten unguessable characters), with its
+sources, checks, the date prepared and the most recent record it drew on. The page carries its own title,
+description and a 1200×630 preview card (`/b/<id>/card.png`, drawn with Pillow in the site's typefaces), and is
+marked `noindex`. A briefing can be withdrawn with `POST /api/admin/briefings/<id>/withdraw` (admin token); its
+page, data and card then return 410 Gone. `GET /api/admin/briefings` lists recent ones.
+
+**Backups.** Everything can be rebuilt from public sources except `data/state.sqlite`, which holds the saved
+briefings, usage, the answer cache, feedback, visit counts, the sync log and any accounts. Back that file up.
 
 ## Ranking: recency and role weighting
 

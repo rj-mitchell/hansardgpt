@@ -12,6 +12,8 @@ import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
 import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
+const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
+
 /**
  * Example questions, one set a day. Each set spans parties, both Houses, the nations and kinds of seat, and
  * party-specific examples use topics that party itself campaigns on, not other parties' attack lines.
@@ -92,6 +94,53 @@ export default function App() {
     void api.hit(window.location.pathname, document.referrer); // cookie-free page count
   }, [refresh]);
 
+  // a shared address (/b/<id>) opens that briefing, exactly as it was prepared
+  useEffect(() => {
+    const m = window.location.pathname.match(SHARED);
+    if (!m) return;
+    const id = m[1];
+    api
+      .briefing(id)
+      .then((b) =>
+        setTurns([
+          {
+            id,
+            question: b.question,
+            settings,
+            plan: b.plan ?? undefined,
+            sources: b.sources,
+            candidates: b.candidates,
+            semantic: b.semantic,
+            evidence: b.evidence,
+            streamText: "",
+            answer: b.answer,
+            status: "done",
+            briefingId: b.id,
+            preparedAt: b.created_at,
+            recordsUpTo: b.records_up_to,
+            shared: true,
+          },
+        ]),
+      )
+      .catch((e: unknown) =>
+        setTurns([
+          {
+            id,
+            question: e instanceof ApiError && e.status === 410 ? "Briefing withdrawn" : "Briefing not found",
+            settings,
+            sources: [],
+            streamText: "",
+            status: "error",
+            error:
+              e instanceof ApiError && e.status === 410
+                ? "This briefing has been withdrawn."
+                : "There is no briefing at this address. It may have been mistyped.",
+          },
+        ]),
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem("hgpt.settings", JSON.stringify(settings));
@@ -132,12 +181,19 @@ export default function App() {
           update(id, {
             answer: (ev.answer as Answer | null) ?? null,
             briefingKey: (ev.briefing_key as string | undefined) ?? undefined,
+            briefingId: (ev.briefing_id as string | undefined) ?? undefined,
+            preparedAt: (ev.prepared_at as string | undefined) ?? undefined,
+            recordsUpTo: (ev.records_up_to as string | null | undefined) ?? undefined,
             note: ev.cached
               ? "This briefing was written earlier for the same question and settings, from the same data."
               : (ev.note as string | undefined),
             status: "done",
           });
         else if (ev.type === "error") update(id, { status: "error", error: ev.message as string });
+        if (ev.type === "final" && typeof ev.briefing_id === "string") {
+          // the address bar becomes this briefing's permanent link
+          window.history.replaceState(null, "", `/b/${ev.briefing_id}`);
+        }
       }
     } catch (e) {
       if ((e as Error).name !== "AbortError") update(id, { status: "error", error: (e as Error).message });
@@ -233,6 +289,14 @@ export default function App() {
         {turns.map((t) => (
           <article key={t.id} className="turn">
             <h2 className="question">{t.question}</h2>
+            {t.shared && t.preparedAt && (
+              <p className="shared-note">
+                A saved briefing, prepared {fmtDate(t.preparedAt.slice(0, 10))}. The record may have changed since.{" "}
+                <button type="button" className="link" disabled={busy} onClick={() => void run(t.question)}>
+                  Ask again for an up-to-date briefing
+                </button>
+              </p>
+            )}
             {t.plan && <PlanChips key={JSON.stringify(t.plan)} plan={t.plan} meta={meta} busy={busy} onRerun={(p) => void run(t.question, p, t.id)} />}
             <EvidenceBar evidence={t.evidence} />
             {t.status === "planning" && <p className="status">Interpreting the question…</p>}
@@ -247,6 +311,9 @@ export default function App() {
                 streamText={t.streamText}
                 sources={t.sources}
                 briefingKey={t.briefingKey}
+                briefingId={t.briefingId}
+                preparedAt={t.preparedAt}
+                recordsUpTo={t.recordsUpTo}
                 onCite={(h) => setDrawer({ turn: t.id, h })}
               />
             )}

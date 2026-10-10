@@ -116,13 +116,15 @@ each twice-daily update, newest records first; on 8 cores the whole archive take
 | Install a new version of the site | `cd /opt/hansardgpt && git pull && cd deploy && docker compose up -d --build` |
 | Restart the site | `cd /opt/hansardgpt/deploy && docker compose restart` |
 | Change the API key | edit `/opt/hansardgpt/deploy/.env`, then `docker compose up -d` in the same folder |
+| List recent briefings | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/briefings` |
+| Withdraw a briefing (after a complaint, say) | `curl -X POST -H "Authorization: Bearer YOUR_ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"reason": "complaint about attribution"}' https://wheretheystand.uk/api/admin/briefings/THE_ID/withdraw` |
 
 Your admin token is in `/opt/hansardgpt/deploy/.env` (`HANSARD_ADMIN_TOKEN=`).
 
 ## Backups
 
-Everything can be rebuilt from public sources except one small file: the usage records, cached briefings,
-feedback and visit counts. Turn on Hostkey's snapshot backups if offered, or ask for the nightly off-site copy to
+Everything can be rebuilt from public sources except one file: the saved briefings, usage records, feedback and
+visit counts. Turn on Hostkey's snapshot backups if offered, or ask for the nightly off-site copy to
 be set up.
 
 ## Spending limits

@@ -165,3 +165,43 @@ describe("example questions", () => {
     }
   });
 });
+
+describe("shared briefings", () => {
+  it("shows when the briefing was prepared and offers its link", () => {
+    render(
+      <AnswerView
+        question="q"
+        answer={answer}
+        streamText=""
+        sources={[]}
+        briefingId="abcdefghjk"
+        preparedAt="2026-10-10T09:00:00+00:00"
+        recordsUpTo="2026-10-08"
+        onCite={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Prepared 10 October 2026 from records up to 8 October 2026/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copy link|Share/ })).toBeInTheDocument();
+  });
+
+  it("opens the briefing at a shared address", async () => {
+    window.history.pushState(null, "", "/b/abcdefghjk");
+    const replies: Record<string, unknown> = {
+      "/api/me": { email: null, is_admin: false, auth_required: false },
+      "/api/briefings/abcdefghjk": {
+        id: "abcdefghjk", question: "What has been said about jury trials?", created_at: "2026-10-10T09:00:00+00:00",
+        records_up_to: "2026-10-08", plan: null, sources: [], answer,
+      },
+    };
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const body = replies[String(url)];
+      return new Response(JSON.stringify(body ?? {}), { status: body ? 200 : 404 });
+    });
+    const { default: App } = await import("../App");
+    render(<App />);
+    expect(await screen.findByText("What has been said about jury trials?")).toBeInTheDocument();
+    expect(screen.getByText(/A saved briefing, prepared 10 October 2026/)).toBeInTheDocument();
+    spy.mockRestore();
+    window.history.pushState(null, "", "/");
+  });
+});

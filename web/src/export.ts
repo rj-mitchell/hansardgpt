@@ -42,7 +42,13 @@ function plain(markdown: string): string {
 }
 
 /** The briefing as plain text with numbered citations, followed by the full source list. */
-export function briefingWithSources(question: string, answer: Answer, sources: SourceCard[], today = new Date()): string {
+export function briefingWithSources(
+  question: string,
+  answer: Answer,
+  sources: SourceCard[],
+  today = new Date(),
+  link?: string,
+): string {
   const used = new Set(answer.segments.flatMap((s) => s.sources));
   const cited = sources.filter((s) => used.has(s.n));
   return [
@@ -53,7 +59,7 @@ export function briefingWithSources(question: string, answer: Answer, sources: S
     "Sources",
     ...cited.map(sourceLine),
     "",
-    `${BRAND.name} (wheretheystand.uk), ${fmtDate(today.toISOString().slice(0, 10))}. Written by AI from the cited ` +
+    `${BRAND.name} (${link ?? "wheretheystand.uk"}), ${fmtDate(today.toISOString().slice(0, 10))}. Written by AI from the cited ` +
       "Hansard records; check the sources. Contains Parliamentary information licensed under the Open Parliament " +
       "Licence v3.0.",
   ].join("\n");

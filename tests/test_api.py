@@ -263,3 +263,71 @@ def test_public_endpoints_show_only_when_and_whether_updates_ran(public):
     state.finish_run(run, {"reference": {"parlparse_sha": "abc123"}})
     for body in (client.get("/api/status").json()["last_update"], client.get("/api/meta").json()["last_sync"]):
         assert set(body) == {"finished_at", "status"} and body["status"] == "ok"
+
+
+def _app_with_dist(indexed_settings, tmp_path, monkeypatch=None):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text(
+        '<!doctype html><html><head><title>Where They Stand</title>'
+        '<meta property="og:title" content="Where They Stand" />'
+        '<meta property="og:image" content="https://wheretheystand.uk/og-image.png" />'
+        '<link rel="canonical" href="https://wheretheystand.uk/" /></head><body>app</body></html>')
+    s = dataclasses.replace(indexed_settings, raw={
+        **indexed_settings.raw, "paths": {**indexed_settings.raw.get("paths", {}), "web_dist": str(dist)}})
+    app, state, _ = make_app(s, tmp_path, auth=False)
+    return TestClient(app), state
+
+
+def test_every_briefing_gets_a_permanent_shareable_address(indexed_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("HANSARD_ADMIN_TOKEN", "s3cret-token")
+    client, _ = _app_with_dist(indexed_settings, tmp_path)
+    final = events(client.post("/api/ask", json={"question": "What has been said about trial by jury?"}))[-1]
+    bid = final["briefing_id"]
+    assert len(bid) == 10 and final["prepared_at"]
+    # a repeat question replays the same briefing, at the same address
+    again = events(client.post("/api/ask", json={"question": "What has been said about trial by jury?"}))[-1]
+    assert again["cached"] and again["briefing_id"] == bid
+
+    view = client.get(f"/api/briefings/{bid}").json()
+    assert view["question"] == "What has been said about trial by jury?"
+    assert view["answer"]["citations_total"] == 1 and view["sources"] and view["plan"]
+    assert "usage" not in json.dumps(view) and "briefing_key" not in view
+
+    page = client.get(f"/b/{bid}")
+    assert page.status_code == 200 and "<body>app</body>" in page.text
+    assert '<meta property="og:title" content="What has been said about trial by jury? — Where They Stand" />' in page.text
+    assert f'/b/{bid}/card.png" />' in page.text and 'content="noindex"' in page.text
+    assert "og-image.png" not in page.text and page.text.count("<title>") == 1  # site-wide tags replaced
+
+    card = client.get(f"/b/{bid}/card.png")
+    assert card.status_code == 200 and card.headers["content-type"] == "image/png"
+    from io import BytesIO
+
+    from PIL import Image
+    assert Image.open(BytesIO(card.content)).size == (1200, 630)
+
+    # withdrawing a briefing takes down the page, the data and the card
+    admin = {"Authorization": "Bearer s3cret-token"}
+    assert client.post(f"/api/admin/briefings/{bid}/withdraw", json={"reason": "complaint"}).status_code == 403
+    assert client.post(f"/api/admin/briefings/{bid}/withdraw", json={"reason": "complaint"}, headers=admin).json()
+    assert client.get(f"/api/briefings/{bid}").status_code == 410
+    assert client.get(f"/b/{bid}").status_code == 410
+    assert client.get(f"/b/{bid}/card.png").status_code == 410
+    listed = client.get("/api/admin/briefings", headers=admin).json()["briefings"]
+    assert listed[0]["id"] == bid and listed[0]["withdrawn_reason"] == "complaint"
+
+
+def test_unknown_or_malformed_briefing_addresses(indexed_settings, tmp_path):
+    client, _ = _app_with_dist(indexed_settings, tmp_path)
+    assert client.get("/api/briefings/abcdefghij").status_code == 404
+    assert client.get("/b/abcdefghij").status_code == 404
+    assert client.get("/b/ZZZ'%3Cscript%3E").status_code == 404
+
+
+def test_preview_text_starts_with_the_summary():
+    from hansard.api.briefings import summary_text
+
+    md = "# Onshore wind: city and rural MPs\n\n**Headline:** In the records retrieved, rural MPs objected [Source 3].\n\n**Ministers - supportive**"
+    assert summary_text({"markdown": md}).startswith("In the records retrieved, rural MPs objected.")
+    assert summary_text({"markdown": "Headline\n\n" + "word " * 100}, limit=40).endswith("…")

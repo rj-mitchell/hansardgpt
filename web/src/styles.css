@@ -984,6 +984,14 @@ legend,
   transform: scale(0.95);
 }
 
+.shared-note {
+  font-family: var(--sans);
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+  border-inline-start: 3px solid var(--gilt);
+  padding-inline-start: var(--space-s);
+}
+
 /* a judgemental word in the briefing's own voice: flagged for the reader, never silently changed */
 .loaded {
   text-decoration: underline wavy var(--danger);
