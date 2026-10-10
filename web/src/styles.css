@@ -82,7 +82,7 @@ button,
   --paper-sunk: light-dark(oklch(94.6% 0.018 86), oklch(16.5% 0.012 165));
   --ink: light-dark(oklch(22% 0.012 70), oklch(93% 0.016 88));
   --ink-soft: color-mix(in oklch, var(--ink) 74%, var(--paper));
-  --ink-faint: color-mix(in oklch, var(--ink) 56%, var(--paper));
+  --ink-faint: color-mix(in oklch, var(--ink) 60%, var(--paper));
   --rule: color-mix(in oklch, var(--ink) 15%, var(--paper));
   --rule-strong: color-mix(in oklch, var(--ink) 80%, var(--paper));
 
@@ -330,6 +330,19 @@ input[type="checkbox"],
 input[type="radio"],
 input[type="range"] {
   accent-color: var(--accent);
+}
+
+/* large enough to tap (WCAG 2.2 target size): 18px boxes in rows at least 24px apart */
+input[type="checkbox"],
+input[type="radio"] {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  margin: 0;
+  flex: none;
+}
+
+fieldset label {
+  min-block-size: 1.75rem;
 }
 
 fieldset {
@@ -2002,6 +2015,29 @@ html:has(.login) body {
 
 .small {
   font-size: var(--step--1);
+}
+
+/* hidden until a keyboard user tabs to it */
+.skip-link {
+  position: absolute;
+  inset-block-start: var(--space-2xs);
+  inset-inline-start: var(--space-2xs);
+  z-index: 50;
+  padding: var(--space-2xs) var(--space-s);
+  background: var(--paper-raised);
+  color: var(--accent-strong);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  font-family: var(--sans);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+main:focus {
+  outline: none;
 }
 
 .visually-hidden {

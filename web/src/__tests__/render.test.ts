@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseChunk } from "../api";
-import { highlightParts, renderAnswer, segmentsToMarkdown } from "../render";
+import { demoteHeadings, highlightParts, renderAnswer, segmentsToMarkdown } from "../render";
 import type { Segment } from "../types";
 
 const seg = (text: string, status: Segment["status"], sources: number[] = []): Segment => ({
@@ -90,5 +90,12 @@ describe("references", () => {
       "HC Deb 9 March 2023, col 120WH (Westminster Hall)");
     expect(formalReference({ ...base, chamber: "Written answers", record_type: "answer", uin: "12345" })).toBe(
       "Written question 12345, answered 9 March 2023");
+  });
+});
+
+describe("demoteHeadings", () => {
+  it("starts a briefing's headings below the question", () => {
+    expect(demoteHeadings("<h1 id=x>T</h1><h2>S</h2><h5>Deep</h5>")).toBe("<h3 id=x>T</h3><h4>S</h4><h6>Deep</h6>");
+    expect(demoteHeadings("<header>ok</header>")).toBe("<header>ok</header>");
   });
 });

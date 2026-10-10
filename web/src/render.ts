@@ -35,9 +35,14 @@ export function segmentsToMarkdown(segments: Segment[]): string {
     .join("");
 }
 
+/** The question is the page's h2, so a briefing's own headings start at h3 (keeps the outline in order). */
+export function demoteHeadings(html: string): string {
+  return html.replace(/<(\/?)h([1-6])\b/g, (_m, close: string, level: string) => `<${close}h${Math.min(Number(level) + 2, 6)}`);
+}
+
 /** Render answer markdown to sanitised HTML with clickable [Source n] badges. */
 export function renderAnswer(md: string): string {
-  let html = marked.parse(md, { async: false }) as string;
+  let html = demoteHeadings(marked.parse(md, { async: false }) as string);
   html = html.replace(/⁣⟦S:([\d,]+)⟧⁣/g, (_m, nums: string) =>
     nums
       .split(",")
@@ -54,7 +59,7 @@ export function renderAnswer(md: string): string {
 
 /** Plain streaming text (no citations yet). */
 export function renderPlain(md: string): string {
-  return DOMPurify.sanitize(marked.parse(md, { async: false }) as string);
+  return DOMPurify.sanitize(demoteHeadings(marked.parse(md, { async: false }) as string));
 }
 
 /** Split text into parts, marking exact quotes to highlight. */

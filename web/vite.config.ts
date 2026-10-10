@@ -40,6 +40,7 @@ export default defineConfig({
         changelog: here("./changelog.html"),
         status: here("./status.html"),
         corrections: here("./corrections.html"),
+        accessibility: here("./accessibility.html"),
         admin: here("./admin.html"),
       },
     },

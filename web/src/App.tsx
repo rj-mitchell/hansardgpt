@@ -216,7 +216,7 @@ export default function App() {
   const drawerSource = drawerTurn?.sources.find((s) => s.n === drawer?.h.source) ?? null;
 
   const composer = (className: string) => (
-    <form className={className} onSubmit={submit}>
+    <form className={className} onSubmit={submit} role="search" aria-label="Ask a question">
       <label htmlFor="q" className="visually-hidden">
         Your question
       </label>
@@ -242,13 +242,16 @@ export default function App() {
 
   return (
     <div className={drawerSource ? "app with-drawer" : "app"}>
+      <a className="skip-link" href="#main">
+        Skip to main content
+      </a>
       <header className="masthead full-width">
         <div className="running-head">
           <span>
             Debates, written answers and divisions{meta ? ` · ${meta.archive_start.slice(0, 4)} to date` : ""}
           </span>
           <span className="masthead-actions">
-            <nav className="page-nav" aria-label="About this site">
+            <nav className="page-nav" aria-label="Site">
               <a href="/methodology">Methodology</a>
               <a href="/status">Status</a>
             </nav>
@@ -278,12 +281,12 @@ export default function App() {
         <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />
       )}
       {meta && !meta.answers_enabled && (
-        <p className="banner">
+        <aside className="banner" aria-label="Service notice">
           Briefings need an Anthropic API key on the server. Until one is set you will see the balanced evidence set only.
-        </p>
+        </aside>
       )}
 
-      <main className="thread" aria-live="polite">
+      <main className="thread" id="main" tabIndex={-1}>
         {turns.length === 0 && (
           <section className="empty">
             <h2>Research the record of Parliament</h2>
@@ -337,10 +340,15 @@ export default function App() {
                   !!t.plan.filters.age_bands?.length)
               }
             />
-            {t.status === "planning" && <p className="status">Interpreting the question…</p>}
-            {t.status === "searching" && <p className="status">Searching the Official Report…</p>}
+            {t.status === "planning" && <p className="status" role="status">Interpreting the question…</p>}
+            {t.status === "done" && (
+              <p className="visually-hidden" role="status">
+                {t.answer ? "Briefing ready." : "Sources ready."}
+              </p>
+            )}
+            {t.status === "searching" && <p className="status" role="status">Searching the Official Report…</p>}
             {t.status === "answering" && !t.streamText && t.sources.length > 0 && (
-              <p className="status">Preparing a sourced briefing from {t.sources.length} contributions…</p>
+              <p className="status" role="status">Preparing a sourced briefing from {t.sources.length} contributions…</p>
             )}
             {(t.streamText || t.answer) && (
               <AnswerView
@@ -390,6 +398,7 @@ export default function App() {
           <a href="/status">Status</a>
           <a href="/corrections">Corrections</a>
           <a href="/corrections#report">Report a problem</a>
+          <a href="/accessibility">Accessibility</a>
         </nav>
         {(meta?.attribution ?? ATTRIBUTION).map((a) => (
           <a key={a.url} href={a.url} target="_blank" rel="noreferrer">

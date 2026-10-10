@@ -104,6 +104,18 @@ export function SourceDrawer({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const isOpen = source !== null;
+  // remember what opened the drawer, and return focus there when it closes (keyboard and screen reader users)
+  useEffect(() => {
+    if (!isOpen) return;
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && !ref.current?.contains(active) ? active : null;
+    return () => {
+      if (opener.current?.isConnected) opener.current.focus();
+      opener.current = null;
+    };
+  }, [isOpen]);
   useEffect(() => {
     if (!source) return;
     ref.current?.focus();
