@@ -239,3 +239,27 @@ def test_public_status(public):
     record_usage(state, None, "answer", "claude-opus-5-5", {"input_tokens": 3_000_000}, {})
     st = client.get("/api/status").json()
     assert st["briefings"] == "paused" and "budget" in st["briefings_note"]
+
+
+def test_static_pages_are_served_at_clean_addresses(indexed_settings, tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("app")
+    (dist / "methodology.html").write_text("method")
+    (dist / "robots.txt").write_text("robots")
+    s = dataclasses.replace(indexed_settings, raw={**indexed_settings.raw,
+                                                   "paths": {**indexed_settings.raw.get("paths", {}), "web_dist": str(dist)}})
+    app, _, _ = make_app(s, tmp_path, auth=False)
+    client = TestClient(app)
+    assert client.get("/methodology").text == "method"
+    assert client.get("/robots.txt").text == "robots"
+    assert client.get("/some/briefing/route").text == "app"  # anything else is the app
+    assert client.get("/api/nope").status_code == 404
+
+
+def test_public_endpoints_show_only_when_and_whether_updates_ran(public):
+    client, state, _ = public
+    run = state.start_run("sync")
+    state.finish_run(run, {"reference": {"parlparse_sha": "abc123"}})
+    for body in (client.get("/api/status").json()["last_update"], client.get("/api/meta").json()["last_sync"]):
+        assert set(body) == {"finished_at", "status"} and body["status"] == "ok"

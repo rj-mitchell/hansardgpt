@@ -99,6 +99,11 @@ class AskBody(BaseModel):
     history: list[dict[str, str]] = Field(default_factory=list, max_length=10)
 
 
+def _public_run(run: dict[str, Any]) -> dict[str, Any]:
+    """What visitors may see of an update run: when it finished and whether it worked (no internal details)."""
+    return {"finished_at": run.get("finished_at"), "status": run.get("status")}
+
+
 def create_app(settings: Settings | None = None, pipeline: Pipeline | None = None,
                state: StateDB | None = None) -> FastAPI:
     settings = settings or load_settings()
@@ -185,7 +190,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             "model": settings.answer.get("model"),
             "archive_start": settings.archive_start.isoformat(),
             "index": idx,
-            "last_sync": runs[0] if runs else None,
+            "last_sync": _public_run(runs[0]) if runs else None,
             "defaults": {"recency": settings.ranking.get("default_recency", 0.5),
                          "role_weight": settings.ranking.get("default_role_weight", 1.5)},
             "attribution": ATTRIBUTION,
@@ -300,7 +305,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return {
             "archive_start": settings.archive_start.isoformat(),
             "latest_record": state.latest_record_date(),
-            "last_update": runs[0] if runs else None,
+            "last_update": _public_run(runs[0]) if runs else None,
             "briefings": "unavailable" if not model_on else ("paused" if paused else "available"),
             "briefings_note": paused,
             "passages": idx.get("passages", 0),

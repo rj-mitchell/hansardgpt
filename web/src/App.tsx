@@ -137,6 +137,10 @@ export default function App() {
             Debates, written answers and divisions{meta ? ` · ${meta.archive_start.slice(0, 4)} to date` : ""}
           </span>
           <span className="masthead-actions">
+            <nav className="page-nav" aria-label="About this site">
+              <a href="/methodology">Methodology</a>
+              <a href="/status">Status</a>
+            </nav>
             <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
               Settings
             </button>
@@ -262,6 +266,11 @@ export default function App() {
 
       <footer className="footer full-width">
         <p className="independence">{BRAND.independence}</p>
+        <nav className="footer-nav" aria-label="About this site">
+          <a href="/methodology">Methodology</a>
+          <a href="/changelog">Changelog</a>
+          <a href="/status">Status</a>
+        </nav>
         {(meta?.attribution ?? ATTRIBUTION).map((a) => (
           <a key={a.url} href={a.url} target="_blank" rel="noreferrer">
             {a.text}

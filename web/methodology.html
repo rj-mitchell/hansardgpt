@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <!--#include head-->
+    <title>Methodology — Where They Stand</title>
+    <meta name="description" content="How Where They Stand answers questions about the UK Parliament: what it searches, how sources are chosen and checked, how speakers are described, and how it stays neutral." />
+    <link rel="canonical" href="https://wheretheystand.uk/methodology" />
+  </head>
+  <body>
+    <div class="app page">
+      <!--#include header-->
+      <main class="prose">
+        <h1>Methodology</h1>
+        <p class="lede">
+          How Where They Stand answers a question, where its information comes from, how it checks itself, and how
+          it stays neutral.
+        </p>
+
+        <nav class="toc" aria-label="On this page">
+          <ol>
+            <li><a href="#what">What it does, and what it does not</a></li>
+            <li><a href="#coverage">What is covered</a></li>
+            <li><a href="#how">How a question is answered</a></li>
+            <li><a href="#people">Who said it, as they were at the time</a></li>
+            <li><a href="#seats">City, town and rural seats</a></li>
+            <li><a href="#neutrality">Neutrality</a></li>
+            <li><a href="#warnings">What the warnings mean</a></li>
+            <li><a href="#limits">Limitations</a></li>
+            <li><a href="#sources">Data sources and licences</a></li>
+          </ol>
+        </nav>
+
+        <h2 id="what">What it does, and what it does not</h2>
+        <p>
+          Hansard is the official, word-for-word record of Parliament.
+          <a href="https://hansard.parliament.uk/search">Parliament's own Hansard search</a> is the right tool for
+          finding something you know is there: a phrase, a debate, or everything one member said on a day. It is
+          fast, complete and authoritative, and every source shown here links back to the official record.
+        </p>
+        <p>
+          Where They Stand answers questions instead. Ask, in plain English, what has been said on a subject and by
+          whom, and it writes a short briefing on the positions taken, grouped by who holds them, with every point
+          linked to the speech it came from.
+        </p>
+
+        <h2 id="coverage">What is covered</h2>
+        <ul>
+          <li>House of Commons and House of Lords debates, and Westminster Hall debates.</li>
+          <li>Written questions and answers, and written ministerial statements, from both Houses.</li>
+          <li>Public Bill Committee debates.</li>
+          <li>Every division (vote) in both Houses, with how each member voted.</li>
+        </ul>
+        <p>
+          The record runs from the general election of 6 May 2010 to the present, and is updated twice a day. The
+          <a href="/status">status page</a> shows the most recent record and the last update.
+        </p>
+
+        <h2 id="how">How a question is answered</h2>
+        <ol>
+          <li>
+            <strong>The question becomes filters you can see and change.</strong> A language model turns the
+            question into search terms and filters: dates, House, regions, parties, named members, roles (such as
+            government ministers) and the policy areas involved. "Northern MPs" means MPs for seats in the North
+            East, North West, and Yorkshire and the Humber. The filters are shown with every briefing and can be
+            edited and re-run.
+          </li>
+          <li>
+            <strong>The record is searched by words and by meaning.</strong> Keyword search finds the exact terms;
+            meaning-based search finds speeches that make the same point in different words. Results are ranked by
+            relevance, by how recent they are, and by whether the speaker held a relevant office at the time, such
+            as the minister for the department concerned. The weight given to recency and to office can be changed
+            in Settings. The same filters and settings always return the same sources.
+          </li>
+          <li>
+            <strong>Evidence is chosen for balance, not just for matches.</strong> The sources passed on are
+            spread across speaker groups, such as government, opposition and backbenches, with no more than two
+            contributions from any one speaker. A summary computed from the data, not written by the model, shows
+            how many contributions came from which groups, parties and kinds of seat.
+          </li>
+          <li>
+            <strong>The briefing is written only from those sources.</strong> The briefing is written by an AI model
+            (Claude, made by Anthropic). It receives only the sources found, is instructed to use no other knowledge,
+            and must attach a citation to every statement about what anyone said.
+          </li>
+          <li>
+            <strong>The briefing is then checked automatically.</strong> Every quotation behind a citation is checked
+            against the original text, and any citation that does not match is removed. Statements without a source
+            are highlighted. Judgemental words used in the briefing's own voice are underlined. Spelling is set to
+            British English, never inside quotations.
+          </li>
+          <li>
+            <strong>When the record has nothing, it says so.</strong> If no sufficiently relevant records are found,
+            the answer is "No records found", and no briefing is written.
+          </li>
+        </ol>
+
+        <h2 id="people">Who said it, as they were at the time</h2>
+        <p>
+          Every contribution is matched to a person by a unique identifier, never by name, so a member is
+          recognised across changes of name and title (for example, an MP who later sits in the Lords). Each speaker
+          is described as they were on the day they spoke: their party, their constituency and its region or nation,
+          and any government, opposition or select committee chair role they held on that date. A minister is
+          labelled a minister only for what they said while in office.
+        </p>
+
+        <h2 id="seats">City, town and rural seats</h2>
+        <p>
+          Seat types are defined by the size of the built-up area that people live in, not by whether a place has
+          official city status. Some small places are cities, and some large ones are towns, so official status says
+          little about what a constituency is like.
+        </p>
+        <ul>
+          <li>
+            <strong>City seat:</strong> most of the constituency's residents live in one urban area of about 200,000
+            people or more. Reading and Bolton can count; small cathedral cities do not.
+          </li>
+          <li><strong>Rural seat:</strong> fewer than half of its residents live in urban areas of 10,000 or more.</li>
+          <li><strong>Town seat:</strong> everything in between.</li>
+        </ul>
+        <p>
+          The calculation uses official data from each nation: the Office for National Statistics' built-up areas
+          and Census 2011 populations for England and Wales, National Records of Scotland settlements and Census
+          2022 for Scotland, and the Northern Ireland Statistics and Research Agency's settlement classification and
+          Census 2021 for Northern Ireland. A large conurbation is not allowed to swallow neighbouring counties, so
+          commuter towns around London, such as Watford and St Albans, count as towns.
+        </p>
+
+        <h2 id="neutrality">Neutrality</h2>
+        <p>
+          Where They Stand takes no position on any issue, party or person. Briefings report what was said and by
+          whom; they do not judge whether it was right.
+        </p>
+        <ul>
+          <li>
+            Briefings use plain reporting words, such as said, argued, criticised, supported and opposed. Loaded
+            words such as "lied", "misled" or "U-turn" may appear only inside a quotation from the member who used
+            them, and the briefing never says that an individual contradicted themselves: it gives what they said on
+            each date.
+          </li>
+          <li>Evidence is chosen to cover the different groups of speakers, and the balance is shown with each briefing.</li>
+          <li>
+            The filters and ranking are visible and editable, and the same question with the same settings always
+            draws on the same sources.
+          </li>
+          <li>The example questions on the home page rotate across parties, both Houses and all four nations.</li>
+          <li>
+            The site is independent. It is not affiliated with or endorsed by the UK Parliament, any party or any
+            campaign.
+          </li>
+        </ul>
+
+        <h2 id="warnings">What the warnings mean</h2>
+        <dl class="defs">
+          <dt><span class="unsupported">Highlighted text</span></dt>
+          <dd>A statement in the briefing that no cited source directly supports. Treat it with caution.</dd>
+          <dt><span class="loaded">Underlined word</span></dt>
+          <dd>A judgemental word in the briefing's own voice rather than in a quotation. Check the sources.</dd>
+          <dt>"No records found"</dt>
+          <dd>The record, with the filters shown, contains nothing sufficiently relevant. No briefing was written.</dd>
+        </dl>
+
+        <h2 id="limits">Limitations</h2>
+        <ul>
+          <li>Briefings are written by AI. The checks catch many errors but not all: always check the sources.</li>
+          <li>
+            The official record's data does not include a link to each individual speech in debates. The official
+            link opens the day's record, and the column number and the TheyWorkForYou link pinpoint the speech.
+            Written questions and statements link to the exact record.
+          </li>
+          <li>Region filters apply to MPs only, because members of the House of Lords do not have constituencies.</li>
+          <li>
+            Party, role and constituency details come from public member data maintained by mySociety; any gaps
+            there are reflected here.
+          </li>
+          <li>The record begins in May 2010.</li>
+          <li>
+            Meaning-based search is built gradually, newest records first. Until it is complete, older records are
+            found by keyword search; the <a href="/status">status page</a> shows its coverage.
+          </li>
+        </ul>
+
+        <h2 id="sources">Data sources and licences</h2>
+        <ul>
+          <li>
+            Hansard, from the UK Parliament, via <a href="https://www.theyworkforyou.com/">TheyWorkForYou</a> and
+            ParlParse, run by the <a href="https://www.mysociety.org/">mySociety</a> charity. Contains Parliamentary
+            information licensed under the
+            <a href="https://www.parliament.uk/site-information/copyright-parliament/open-parliament-licence/">Open Parliament Licence v3.0</a>.
+          </li>
+          <li>Member, party, constituency and office-holder data from mySociety's ParlParse.</li>
+          <li>
+            Boundaries, urban areas and census populations from the Office for National Statistics, National Records
+            of Scotland and the Northern Ireland Statistics and Research Agency, under the
+            <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/">Open Government Licence v3.0</a>.
+          </li>
+          <li>Briefings are written by Claude, an AI model made by Anthropic.</li>
+        </ul>
+      </main>
+      <!--#include footer-->
+    </div>
+    <script type="module" src="/src/pages.ts"></script>
+  </body>
+</html>
