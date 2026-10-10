@@ -1,7 +1,7 @@
 /** The site's name and the words that go with it, in one place. */
 export const BRAND = {
-  name: "Hansard Guru",
+  name: "Where They Stand",
   tagline: "Sourced briefings on the record of Parliament",
   independence:
-    "Hansard Guru is an independent project. It is not affiliated with or endorsed by the UK Parliament.",
+    "Where They Stand is an independent project. It is not affiliated with or endorsed by the UK Parliament.",
 };
