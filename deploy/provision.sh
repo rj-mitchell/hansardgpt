@@ -5,7 +5,8 @@
 #   (or copy this file to the server and run: sudo bash provision.sh)
 #
 # What it does:
-#   1. installs Docker and git, turns on automatic security updates and a firewall
+#   1. installs Docker and git, turns on automatic security updates, a firewall, and
+#      fail2ban (blocks addresses that keep failing to log in, while password logins are on)
 #   2. clones the repository to /opt/hansardgpt
 #   3. asks for your domain and Anthropic API key and writes deploy/.env
 #   4. builds and starts the app behind Caddy (automatic HTTPS)
@@ -39,8 +40,9 @@ if ! command -v docker >/dev/null; then
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 fi
 
-echo "==> Turning on automatic security updates and the firewall (SSH, HTTP and HTTPS only)"
-apt-get install -y unattended-upgrades ufw
+echo "==> Turning on automatic security updates, the firewall (SSH, HTTP and HTTPS only) and fail2ban"
+apt-get install -y unattended-upgrades ufw fail2ban
+systemctl enable --now fail2ban
 dpkg-reconfigure -f noninteractive unattended-upgrades
 SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}')"
 ufw allow "${SSH_PORT:-22}/tcp"

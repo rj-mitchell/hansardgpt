@@ -1,51 +1,29 @@
 # Putting Where They Stand online (Hostkey, London)
 
-This guide takes you from nothing to a live site at **wheretheystand.uk**, step by step. It is written for a
-Hostkey virtual server in London, but works the same on any provider's Ubuntu 24.04 server. Allow about an hour,
-most of it waiting for the Hansard data to load.
+This guide takes you from a newly provisioned server to a live site at **wheretheystand.uk**, step by step. It is
+written for your Hostkey virtual server in London, running Ubuntu 24.04, which you log in to with the root password
+Hostkey gave you. Allow about an hour, most of it waiting for the Hansard data to load.
 
 You will need:
-- the three domains registered: wheretheystand.uk, wheretheystand.co.uk and wheretheystand.org.uk;
+- the server's **IP address** and **root password**: they are in the email Hostkey sent when the server was
+  ready, and in your Hostkey control panel;
+- the three domains: wheretheystand.uk, wheretheystand.co.uk and wheretheystand.org.uk;
 - your Anthropic API key;
-- the code merged into the `main` branch on GitHub, and the repository public. (If you want to keep it private,
-  ask for the private-repository steps instead of step 5.)
+- the code on GitHub's `main` branch (step 1).
 
 ---
 
-## 1. Make an SSH key (once, on your own computer)
+## 1. Put the latest code on `main` (on GitHub, two clicks)
 
-An SSH key lets you log in to the server securely without a password.
+The server installs whatever is on the `main` branch. Open the pull request at
+<https://github.com/rj-mitchell/hansardgpt/pull/1>, scroll to the bottom, press **Merge pull request**, then
+**Confirm merge**. Do this again whenever you want the server to get a newer version.
 
-**Windows:** open *Terminal* (or PowerShell) and run:
-
-```
-ssh-keygen -t ed25519
-```
-
-Press Return at each question (a passphrase is optional but recommended). Then show the public half of the key:
-
-```
-type $env:USERPROFILE\.ssh\id_ed25519.pub
-```
-
-**Mac:** the same `ssh-keygen` command in *Terminal*, then `cat ~/.ssh/id_ed25519.pub`.
-
-Copy the whole line it prints (it starts `ssh-ed25519`). This public half is safe to share; never share the file
-without `.pub`.
-
-## 2. Order the server
-
-On Hostkey, choose the **v3-medium** virtual server (8 vCPU, 16 GB RAM, 160 GB NVMe), with:
-- **Location:** London (United Kingdom);
-- **Operating system:** Ubuntu 24.04 LTS, the plain image: no control panel, no Portainer or ISPmanager;
-- **SSH key:** paste the line from step 1.
-
-When it is ready, Hostkey shows the server's **IP address** (four numbers, such as 203.0.113.25). Note it down.
-
-## 3. Point the domains at the server
+## 2. Point the domains at the server
 
 At the company where you registered the domains, open each domain's **DNS settings** and add these records,
-using your server's IP address. Remove any existing "parking" A records first.
+using your server's IP address. Remove any existing "parking" **A** records first, but leave any **MX** or **TXT**
+records alone: those deliver your email to admin@wheretheystand.uk.
 
 | Domain | Type | Name / host | Value |
 |---|---|---|---|
@@ -56,27 +34,47 @@ using your server's IP address. Remove any existing "parking" A records first.
 | wheretheystand.org.uk | A | `@` | your server's IP |
 | wheretheystand.org.uk | A | `www` | your server's IP |
 
-Changes usually take effect within an hour. To check, run `nslookup wheretheystand.uk` on your computer: it
-should print your server's IP address. Wait until it does before step 5, so that the HTTPS certificates can be
-issued.
+Changes usually take effect within an hour. To check, run `nslookup wheretheystand.uk` on your computer (in
+Terminal or PowerShell): it should print your server's IP address. Wait until it does before step 4, so that the
+HTTPS certificates can be issued.
 
-## 4. Log in to the server
+## 3. Log in to the server with its password
 
-On your computer:
+On Windows, open **Terminal** (or PowerShell); on a Mac, open **Terminal**. Type, using your server's IP address:
 
 ```
 ssh root@YOUR.SERVER.IP
 ```
 
-Type `yes` the first time it asks whether to trust the server. You are now typing commands on the server.
+- The first time, it asks whether to trust the server: type `yes` and press Return.
+- It then asks for the password. Paste the root password from Hostkey (in Windows Terminal, right-click pastes;
+  on a Mac, Cmd+V) and press Return. **Nothing appears while you type or paste a password; that is normal.**
 
-## 5. Run the setup script
+You are now typing commands on the server. Check it is running Ubuntu 24.04:
 
-Still on the server, run:
+```
+grep PRETTY /etc/os-release
+```
+
+It should say `Ubuntu 24.04`. If it says anything else, stop here and reinstall the server with Ubuntu 24.04 from
+the Hostkey control panel.
+
+Then choose a new root password of your own, because the one Hostkey emailed has been sent in plain text:
+
+```
+passwd
+```
+
+Type the new password twice (again, nothing appears). Keep it in your password manager. To leave the server at
+any point, type `exit`.
+
+## 4. Run the setup script
+
+On the server, run:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/rj-mitchell/hansardgpt/main/deploy/provision.sh -o provision.sh
-sudo bash provision.sh
+bash provision.sh
 ```
 
 It asks three questions:
@@ -86,7 +84,8 @@ It asks three questions:
 3. **Anthropic API key:** paste it. Nothing appears as you paste; that is deliberate. Press Return.
 
 The script then:
-- installs Docker, turns on automatic security updates, and sets up a firewall that allows only SSH and the web;
+- installs Docker, turns on automatic security updates, sets up a firewall that allows only SSH and the web, and
+  installs fail2ban, which blocks anyone who keeps guessing the password;
 - builds and starts the site, with HTTPS certificates obtained automatically;
 - starts loading Hansard since 2010 in the background (30–60 minutes);
 - sets up the twice-daily update.
@@ -94,7 +93,56 @@ The script then:
 At the end it prints a command for checking usage and spend. Keep it somewhere safe; it contains your admin
 token.
 
+## 5. Recommended: switch to a key instead of a password
+
+Logging in with a password works, but a **key** (a pair of files on your computer) is much safer, because there
+is nothing to guess. Once it is set up, you can turn password logins off. Do this from your **own computer**, not
+the server: if you are still logged in to the server, type `exit` first.
+
+**a. Make the key (once).** In Terminal or PowerShell:
+
+```
+ssh-keygen -t ed25519
+```
+
+Press Return at each question. (A passphrase is optional; if you set one, you type it instead of the server
+password.)
+
+**b. Copy it to the server.** You will be asked for the root password one last time.
+
+Windows (PowerShell or Terminal):
+
+```
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@YOUR.SERVER.IP "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+```
+
+Mac:
+
+```
+ssh-copy-id root@YOUR.SERVER.IP
+```
+
+**c. Check the key works.** Run `ssh root@YOUR.SERVER.IP` again. It should log you straight in without asking for
+the server password. **Do not go on to step d unless it does.**
+
+**d. Turn off password logins.** Stay logged in, open a *second* Terminal window as a safety net, and log in there
+too. Then, in one of them, run:
+
+```
+printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' > /etc/ssh/sshd_config.d/00-keys-only.conf
+systemctl reload ssh
+```
+
+In a third window, check `ssh root@YOUR.SERVER.IP` still logs you in. If it does, you are done. If it does not,
+use one of the windows still logged in to undo it with `rm /etc/ssh/sshd_config.d/00-keys-only.conf && systemctl
+reload ssh`, and ask for help.
+
+If you are ever locked out (a lost laptop, say), the Hostkey control panel has a web console and can reset the
+root password.
+
 ## 6. Watch the first data load
+
+On the server (log in again with `ssh root@YOUR.SERVER.IP` if you are not already):
 
 ```
 tail -f /var/log/hansard-bootstrap.log
@@ -118,7 +166,7 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 |---|---|
 | See usage, spend, visits and feedback | the admin page, or the `curl` command printed at the end of setup |
 | See the update history | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/sync` |
-| Install a new version of the site | `cd /opt/hansardgpt && git pull && cd deploy && docker compose up -d --build` |
+| Install a new version of the site | merge the latest changes into `main` on GitHub (step 1), then on the server: `cd /opt/hansardgpt && git pull && cd deploy && docker compose up -d --build` |
 | Restart the site | `cd /opt/hansardgpt/deploy && docker compose restart` |
 | Change the API key | edit `/opt/hansardgpt/deploy/.env`, then `docker compose up -d` in the same folder |
 | Change the "Support this site" link (it points to https://ko-fi.com/wheretheystand) | add `HANSARD_DONATE_URL=https://…` to `/opt/hansardgpt/deploy/.env`, then `docker compose up -d` in the same folder |
