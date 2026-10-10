@@ -40,6 +40,21 @@ export function roleTitles(sp: Speaker | null | undefined): string[] {
   return (sp?.offices ?? []).filter((o) => ["gov", "shadow", "chair"].includes(o.kind)).map((o) => o.title);
 }
 
+export const GENDER_LABEL: Record<string, string> = { F: "Women", M: "Men", unknown: "Not known" };
+export const AGE_BAND_LABEL: Record<string, string> = {
+  "under-40": "Under 40",
+  "40-54": "40 to 54",
+  "55-69": "55 to 69",
+  "70-plus": "70 and over",
+  unknown: "Not known",
+};
+
+/** Age on the date of the record: "54", or "about 54" when only the year of birth is known. */
+export function ageLabel(sp: Speaker | null | undefined): string | null {
+  if (sp?.age == null) return null;
+  return sp.age_approximate ? `about ${sp.age}` : String(sp.age);
+}
+
 export function people(n: number): string {
   return n >= 1_000_000 ? `${(n / 1e6).toFixed(1)}m` : (Math.round(n / 1000) * 1000).toLocaleString("en-GB");
 }

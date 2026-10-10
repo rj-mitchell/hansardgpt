@@ -69,8 +69,16 @@ def speaker_group(profile: Any) -> str:
     return "other"
 
 
+def demographic_group(profile: Any, group_by: str) -> str:
+    """'F'/'M'/'unknown' for gender; an age band (age on the date) or 'unknown' for age."""
+    p = profile.to_dict() if hasattr(profile, "to_dict") else (profile or {})
+    if group_by == "gender":
+        return p.get("gender") or "unknown"
+    return p.get("age_band") or "unknown"
+
+
 def select_evidence(scored: list[Scored], profiles: dict[str, Any], k: int, *, max_per_speaker: int = 2,
-                    min_relevance_ratio: float = 0.25) -> list[Scored]:
+                    min_relevance_ratio: float = 0.25, group_by: str = "role") -> list[Scored]:
     if not scored:
         return []
     best_rel = max(s.relevance for s in scored)
@@ -78,7 +86,8 @@ def select_evidence(scored: list[Scored], profiles: dict[str, Any], k: int, *, m
     per_speaker: Counter[str] = Counter()
     groups: dict[str, list[Scored]] = defaultdict(list)
     for s in pool:  # already in score order
-        groups[speaker_group(profiles.get(s.candidate.record_id))].append(s)
+        prof = profiles.get(s.candidate.record_id)
+        groups[speaker_group(prof) if group_by == "role" else demographic_group(prof, group_by)].append(s)
     order = sorted(groups, key=lambda g: -groups[g][0].score)
     chosen: list[Scored] = []
     taken: set[str] = set()
@@ -119,6 +128,8 @@ def evidence_summary(records: list[dict[str, Any]], divisions: list[dict[str, An
     groups: Counter[str] = Counter()
     parties: Counter[str] = Counter()
     settlements: Counter[str] = Counter()
+    genders: Counter[str] = Counter()
+    ages: Counter[str] = Counter()
     speakers: set[str] = set()
     dates = []
     for r in records:
@@ -128,6 +139,9 @@ def evidence_summary(records: list[dict[str, Any]], divisions: list[dict[str, An
             parties[sp["party"]] += 1
         if sp.get("settlement"):
             settlements[sp["settlement"]] += 1
+        if sp.get("person_id"):
+            genders[sp.get("gender") or "unknown"] += 1
+            ages[sp.get("age_band") or "unknown"] += 1
         speakers.add(sp.get("person_id") or r.get("speaker_name_raw") or r["record_id"])
         dates.append(r["date"])
     return {
@@ -139,4 +153,6 @@ def evidence_summary(records: list[dict[str, Any]], divisions: list[dict[str, An
         "groups": dict(groups.most_common()),
         "parties": dict(parties.most_common()),
         "seat_types": dict(settlements.most_common()),
+        "genders": dict(genders.most_common()),       # contributions by speakers' gender (F, M, unknown)
+        "age_bands": dict(ages.most_common()),        # contributions by speakers' age on the day
     }

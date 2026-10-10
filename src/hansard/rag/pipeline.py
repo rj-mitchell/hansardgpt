@@ -25,6 +25,7 @@ from hansard.rag.prompts import NO_RECORDS
 from hansard.rag.query_parse import QueryPlan, parse_offline, parse_with_model, resolve_speakers
 from hansard.rag.sources import build_sources
 from hansard.rag.verify import verify
+from hansard.sources.demographics import AGE_BAND_LABEL, GENDER_LABEL
 from hansard.votes import VoteFinder
 
 log = logging.getLogger(__name__)
@@ -56,6 +57,10 @@ def plan_note(plan: QueryPlan, scope: Scope) -> str:
         bits.append("speakers: " + ", ".join(s["name"] for s in plan.speakers))
     if f.offices:
         bits.append("speaker roles: " + ", ".join(f.offices))
+    if f.genders:
+        bits.append("speakers: " + " and ".join(GENDER_LABEL[g] for g in f.genders))
+    if f.age_bands:
+        bits.append("speakers aged " + ", ".join(AGE_BAND_LABEL[b] for b in f.age_bands) + " on the day")
     if not scope.written:
         bits.append("written answers/statements excluded")
     if not scope.pbc:
@@ -125,11 +130,12 @@ class Pipeline:
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))
         result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
-                                    req.recency, req.role_weight, limit, diversify=True)
+                                    req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by)
         divisions = []
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
-        sources = build_sources(result.records, divisions)
+        demographics = plan.group_by != "role" or bool(plan.filters.genders or plan.filters.age_bands)
+        sources = build_sources(result.records, divisions, demographics, plan.group_by)
         from hansard.rank.evidence import evidence_summary
 
         yield {"type": "sources", "sources": [s.card() for s in sources], "candidates": result.candidates,
@@ -150,7 +156,8 @@ class Pipeline:
 
         final = None
         for ev in Answerer(self.settings, self.client).stream(
-                req.question, sources, req.mode, plan_note(plan, req.scope), req.history, self.today):
+                req.question, sources, req.mode, plan_note(plan, req.scope), req.history, self.today,
+                group_by=plan.group_by):
             if ev["type"] == "final":
                 final = ev
             else:

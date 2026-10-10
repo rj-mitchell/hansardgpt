@@ -75,21 +75,44 @@ def pending_people(state: StateDB) -> set[str]:
     return set(json.loads(state.get(PENDING_PEOPLE) or "[]"))
 
 
+def demographics_path(settings: Settings) -> Path:
+    return settings.data_dir / "raw" / "demographics.json"
+
+
+def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Gender and date-of-birth data (refreshed weekly when ``fetch``), and what happened."""
+    from hansard.sources.demographics import load_demographics, refresh_demographics
+
+    status: dict[str, Any] = {"status": "not fetched"}
+    if fetch and settings.section("demographics").get("enabled", True):
+        try:
+            status = refresh_demographics(demographics_path(settings))
+        except Exception as exc:  # never let this stop a sync
+            log.warning("gender and date-of-birth refresh failed: %s", exc)
+            status = {"status": "failed", "error": repr(exc)}
+    return load_demographics(demographics_path(settings)), status
+
+
 def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | None) -> dict[str, Any]:
     from hansard.sources import parlparse
 
     sha = None
+    fetch = members_dir is None
+    demographics, demo_status = refresh_demographics_data(settings, fetch=fetch)
     if members_dir is None:
         sha = parlparse.ensure_checkout(settings.sources["parlparse_repo"], settings.parlparse_dir,
                                         settings.sources.get("parlparse_branch", "master"))
         members_dir = parlparse.members_dir(settings.parlparse_dir)
-        if sha == state.get("parlparse_sha") and (settings.reference_dir / "persons.parquet").exists():
-            return {"parlparse_sha": sha, "reference_changed": False, "people_changed": []}
+        if (sha == state.get("parlparse_sha") and (settings.reference_dir / "persons.parquet").exists()
+                and demo_status.get("status") not in ("updated", "partial")):
+            return {"parlparse_sha": sha, "reference_changed": False, "people_changed": [],
+                    "demographics": demo_status}
     ref = build_reference(members_dir, STATIC_DIR / "geo" / "constituencies.csv",
-                          Path(settings.config_path).parent / "overrides" / "constituency_names.csv")
+                          Path(settings.config_path).parent / "overrides" / "constituency_names.csv",
+                          demographics)
     people = install_reference(settings, state, ref, sha)
     return {"parlparse_sha": sha, "reference_changed": True, "people_changed": sorted(people),
-            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", [])}
+            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", []), "demographics": demo_status}
 
 
 def install_reference(settings: Settings, state: StateDB, ref: ReferenceData, sha: str | None) -> set[str]:

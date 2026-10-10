@@ -8,11 +8,13 @@ import pytest
 from hansard.config import STATIC_DIR, load_settings
 from hansard.reference.build import build_reference, write_reference
 from hansard.reference.profiles import ProfileResolver
+from hansard.sources.demographics import load_demographics
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MEMBERS = FIXTURES / "members"
 XML = FIXTURES / "xml"
 GEO_CSV = STATIC_DIR / "geo" / "constituencies.csv"
+DEMOGRAPHICS = FIXTURES / "demographics.json"   # real values for the fixture members, same format as the cache
 
 CAMERON = "uk.org.publicwhip/person/10777"
 BENN = "uk.org.publicwhip/person/10669"
@@ -21,7 +23,7 @@ GREENING = "uk.org.publicwhip/person/11771"
 
 @pytest.fixture(scope="session")
 def reference(tmp_path_factory):
-    ref = build_reference(MEMBERS, GEO_CSV)
+    ref = build_reference(MEMBERS, GEO_CSV, demographics=load_demographics(DEMOGRAPHICS))
     out = tmp_path_factory.mktemp("reference")
     write_reference(ref, out)
     return ref, out
@@ -60,7 +62,8 @@ def indexed_settings(tmp_path_factory):
     base = load_settings(**{"embedding.backend": "hashing", "embedding.dim": 64})
     s = dataclasses.replace(base, data_dir=root / "data")
     shutil.copytree(XML, s.raw_xml_dir)
-    write_reference(build_reference(MEMBERS, GEO_CSV), s.reference_dir)
+    write_reference(build_reference(MEMBERS, GEO_CSV, demographics=load_demographics(DEMOGRAPHICS)),
+                    s.reference_dir)
     state = StateDB(s.state_db)
     ingest(s, workers=1, since=date(2010, 1, 1), state=state)
     idx = SearchIndex(s.index_dir, 64)

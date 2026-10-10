@@ -20,6 +20,10 @@ export interface Speaker {
   party: string | null;
   offices: Office[];
   other_names: string[];
+  gender?: "F" | "M" | null;          // as recorded by Parliament
+  age?: number | null;                // on the date of the record, not today
+  age_approximate?: boolean | null;   // only the year of birth is known
+  age_band?: string | null;
 }
 
 export interface Ranking {
@@ -83,6 +87,8 @@ export interface Filters {
   person_ids: string[];
   offices: string[];
   record_types: string[];
+  genders?: string[];
+  age_bands?: string[];
 }
 
 export interface Plan {
@@ -95,6 +101,7 @@ export interface Plan {
   unresolved_speakers: string[];
   interpretation: string;
   parser: string;
+  group_by?: "role" | "gender" | "age";
 }
 
 export interface Segment {
@@ -138,6 +145,8 @@ export interface Evidence {
   groups: Record<string, number>;
   parties: Record<string, number>;
   seat_types: Record<string, number>;
+  genders?: Record<string, number>;
+  age_bands?: Record<string, number>;
 }
 
 export type TurnStatus = "planning" | "searching" | "answering" | "verifying" | "done" | "error";

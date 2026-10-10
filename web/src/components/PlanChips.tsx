@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AGE_BAND_LABEL, GENDER_LABEL } from "../people";
 import type { Meta, Plan } from "../types";
 
 interface Props {
@@ -15,13 +16,20 @@ const OFFICE_LABEL: Record<string, string> = {
   backbench: "Backbenchers",
 };
 
+const AGE_BANDS = ["under-40", "40-54", "55-69", "70-plus"];
+const GROUP_LABEL: Record<string, string> = {
+  role: "Role and seat type",
+  gender: "Gender",
+  age: "Age on the day",
+};
+
 type ChipDef = { key: string; label: string; remove: (p: Plan) => Plan };
 
 export function chipsFor(plan: Plan, meta: Meta | null): ChipDef[] {
   const f = plan.filters;
   const without = (field: keyof Plan["filters"], value: string) => (p: Plan) => ({
     ...p,
-    filters: { ...p.filters, [field]: (p.filters[field] as string[]).filter((v) => v !== value) },
+    filters: { ...p.filters, [field]: ((p.filters[field] as string[] | undefined) ?? []).filter((v) => v !== value) },
   });
   const chips: ChipDef[] = [];
   if (f.date_from) chips.push({ key: "from", label: `From ${f.date_from}`, remove: (p) => ({ ...p, filters: { ...p.filters, date_from: null } }) });
@@ -32,6 +40,12 @@ export function chipsFor(plan: Plan, meta: Meta | null): ChipDef[] {
     chips.push({ key: `p-${x}`, label: meta?.parties.find((p) => p.id === x)?.name ?? x, remove: without("parties", x) }),
   );
   f.offices.forEach((o) => chips.push({ key: `o-${o}`, label: OFFICE_LABEL[o] ?? o, remove: without("offices", o) }));
+  (f.genders ?? []).forEach((g) => chips.push({ key: `g-${g}`, label: GENDER_LABEL[g] ?? g, remove: without("genders", g) }));
+  (f.age_bands ?? []).forEach((b) =>
+    chips.push({ key: `a-${b}`, label: `Aged ${(AGE_BAND_LABEL[b] ?? b).toLowerCase()} on the day`, remove: without("age_bands", b) }),
+  );
+  if (plan.group_by && plan.group_by !== "role")
+    chips.push({ key: "group", label: `Grouped by ${GROUP_LABEL[plan.group_by].toLowerCase()}`, remove: (p) => ({ ...p, group_by: "role" }) });
   plan.speakers.forEach((s) =>
     chips.push({
       key: `s-${s.person_id}`,
@@ -96,8 +110,10 @@ export function PlanChips({ plan, meta, onRerun, busy }: Props) {
 function PlanEditor({ draft, meta, onChange }: { draft: Plan; meta: Meta | null; onChange: (p: Plan) => void }) {
   const f = draft.filters;
   const setF = (patch: Partial<Plan["filters"]>) => onChange({ ...draft, filters: { ...f, ...patch } });
-  const toggle = (field: "houses" | "offices" | "regions", value: string) =>
-    setF({ [field]: f[field].includes(value) ? f[field].filter((v) => v !== value) : [...f[field], value] });
+  const toggle = (field: "houses" | "offices" | "regions" | "genders" | "age_bands", value: string) => {
+    const current = f[field] ?? [];
+    setF({ [field]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value] });
+  };
   return (
     <div className="plan-editor">
       <label>
@@ -128,6 +144,38 @@ function PlanEditor({ draft, meta, onChange }: { draft: Plan; meta: Meta | null;
         {Object.entries(OFFICE_LABEL).map(([k, v]) => (
           <label key={k}>
             <input type="checkbox" checked={f.offices.includes(k)} onChange={() => toggle("offices", k)} />
+            {v}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset>
+        <legend>Gender (as recorded by Parliament)</legend>
+        {["F", "M"].map((g) => (
+          <label key={g}>
+            <input type="checkbox" checked={(f.genders ?? []).includes(g)} onChange={() => toggle("genders", g)} />
+            {GENDER_LABEL[g]}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset>
+        <legend>Age on the day they spoke</legend>
+        {AGE_BANDS.map((b) => (
+          <label key={b}>
+            <input type="checkbox" checked={(f.age_bands ?? []).includes(b)} onChange={() => toggle("age_bands", b)} />
+            {AGE_BAND_LABEL[b]}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset>
+        <legend>Group speakers by</legend>
+        {Object.entries(GROUP_LABEL).map(([k, v]) => (
+          <label key={k}>
+            <input
+              type="radio"
+              name="group_by"
+              checked={(draft.group_by ?? "role") === k}
+              onChange={() => onChange({ ...draft, group_by: k as Plan["group_by"] })}
+            />
             {v}
           </label>
         ))}

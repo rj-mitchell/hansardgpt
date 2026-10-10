@@ -2,7 +2,8 @@
 
 Outputs (Parquet, in ``settings.reference_dir``):
 
-* ``persons``         one row per canonical person (redirects resolved)
+* ``persons``         one row per canonical person (redirects resolved), with gender and date of
+                      birth where known (matched by UK Parliament ID; see ``sources.demographics``)
 * ``person_ids``      every id that can appear in Hansard XML -> canonical person:
                       person ids (incl. redirected ones), Commons member ids and
                       Lords ids (incl. redirected memberships)
@@ -152,7 +153,10 @@ def build_reference(
     members_dir: Path,
     geo_csv: Path,
     overrides_csv: Path | None = None,
+    demographics: dict[str, dict[str, Any]] | None = None,
 ) -> ReferenceData:
+    genders = (demographics or {}).get("genders", {})
+    births = (demographics or {}).get("births", {})
     people = json.loads((members_dir / "people.json").read_text(encoding="utf-8"))
     ref = ReferenceData()
     ref.constituencies = load_constituencies(geo_csv)
@@ -175,11 +179,16 @@ def build_reference(
             })
         mains.sort(key=lambda r: r["start"])
         ref.names.extend(mains)
+        mnis = idents.get("datadotparl_id")
+        birth = births.get(mnis) if mnis else None
         ref.persons.append({
             "person_id": p["id"],
             "latest_name": mains[-1]["name"] if mains else p["id"],
-            "datadotparl_id": idents.get("datadotparl_id"),
+            "datadotparl_id": mnis,
             "wikidata": idents.get("wikidata"),
+            "gender": genders.get(mnis) if mnis else None,
+            "birth_date": date.fromisoformat(birth["date"]) if birth else None,
+            "birth_precision": birth["precision"] if birth else None,
         })
     known = {p["person_id"] for p in ref.persons}
 
@@ -281,8 +290,13 @@ def build_reference(
     # ---- offices
     ref.offices, office_stats = load_offices(members_dir, person_redirect, known)
 
+    recent = {m["person_id"] for m in ref.memberships if m["end"] >= date(2010, 5, 6)}
+    recent_persons = [p for p in ref.persons if p["person_id"] in recent]
     ref.stats = {
         "persons": len(ref.persons),
+        "members_since_2010": len(recent_persons),
+        "with_gender_since_2010": sum(1 for p in recent_persons if p["gender"]),
+        "with_birth_date_since_2010": sum(1 for p in recent_persons if p["birth_date"]),
         "memberships": len(ref.memberships),
         "names": len(ref.names),
         "unmatched_seats_since_2010": sorted(unmatched_seats),
@@ -379,7 +393,8 @@ def office_display(office: dict[str, Any], on: date | None = None) -> str:
 
 _SCHEMAS = {
     "persons": pa.schema([("person_id", pa.string()), ("latest_name", pa.string()),
-                          ("datadotparl_id", pa.string()), ("wikidata", pa.string())]),
+                          ("datadotparl_id", pa.string()), ("wikidata", pa.string()),
+                          ("gender", pa.string()), ("birth_date", pa.date32()), ("birth_precision", pa.string())]),
     "person_ids": pa.schema([("xml_id", pa.string()), ("person_id", pa.string())]),
     "names": pa.schema([("person_id", pa.string()), ("name", pa.string()),
                         ("start", pa.date32()), ("end", pa.date32())]),

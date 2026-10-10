@@ -298,7 +298,15 @@ export default function App() {
               </p>
             )}
             {t.plan && <PlanChips key={JSON.stringify(t.plan)} plan={t.plan} meta={meta} busy={busy} onRerun={(p) => void run(t.question, p, t.id)} />}
-            <EvidenceBar evidence={t.evidence} />
+            <EvidenceBar
+              evidence={t.evidence}
+              demographics={
+                !!t.plan &&
+                ((t.plan.group_by ?? "role") !== "role" ||
+                  !!t.plan.filters.genders?.length ||
+                  !!t.plan.filters.age_bands?.length)
+              }
+            />
             {t.status === "planning" && <p className="status">Interpreting the question…</p>}
             {t.status === "searching" && <p className="status">Searching the Official Report…</p>}
             {t.status === "answering" && !t.streamText && t.sources.length > 0 && (

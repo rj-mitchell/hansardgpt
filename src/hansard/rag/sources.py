@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from hansard.rank.evidence import GROUPS, seat_type_label, speaker_group
+from hansard.rank.evidence import GROUPS, demographic_group, seat_type_label, speaker_group
+from hansard.sources.demographics import AGE_BAND_LABEL
 from hansard.votes import division_text
 
 
@@ -37,12 +38,25 @@ def _fmt_date(iso: str) -> str:
     return f"{d.day} {d.strftime('%B %Y')}"
 
 
-def speaker_label(r: dict[str, Any]) -> str:
+def age_label(sp: dict[str, Any]) -> str | None:
+    """'aged 54' or 'aged about 54' (only the year of birth is known), on the date of the record."""
+    if sp.get("age") is None:
+        return None
+    return f"aged {'about ' if sp.get('age_approximate') else ''}{sp['age']}"
+
+
+def speaker_label(r: dict[str, Any], demographics: bool = False) -> str:
     """e.g. 'Hilary Benn (Labour; MP for Leeds Central, city seat (West Yorkshire urban area, 1.9m people),
-    Yorkshire and The Humber; role on this date: Chair, Exiting the European Union Committee)'."""
+    Yorkshire and The Humber; role on this date: Chair, Exiting the European Union Committee)'.
+
+    With ``demographics`` (only when the question is about gender or age), gender and age on the date are added.
+    """
     sp = r.get("speaker") or {}
     name = sp.get("name") or r.get("speaker_name_raw") or "Unattributed"
     bits = []
+    if demographics and sp.get("person_id"):
+        bits.append({"F": "woman", "M": "man"}.get(sp.get("gender") or "", "gender not known"))
+        bits.append(age_label(sp) or "age not known")
     if sp.get("party"):
         bits.append(sp["party"])
     if sp.get("constituency"):
@@ -60,12 +74,22 @@ def speaker_label(r: dict[str, Any]) -> str:
     return f"{name} ({'; '.join(bits)})" if bits else name
 
 
-def record_source(n: int, r: dict[str, Any]) -> Source:
+def group_label(speaker: dict[str, Any] | None, group_by: str = "role") -> str:
+    """The heading a source is listed under: the speaker's role group, or their gender or age on the day."""
+    if group_by == "gender":
+        return {"F": "Women", "M": "Men"}.get(demographic_group(speaker, "gender"), "Gender not known")
+    if group_by == "age":
+        band = demographic_group(speaker, "age")
+        return f"Aged {AGE_BAND_LABEL[band]} on the day" if band in AGE_BAND_LABEL else "Age not known"
+    return GROUPS[speaker_group(speaker)]
+
+
+def record_source(n: int, r: dict[str, Any], demographics: bool = False, group_by: str = "role") -> Source:
     ref = f"col. {r['colnum']}" if r.get("colnum") else (f"UIN {r['uin']}" if r.get("uin") else "")
     heading = r.get("heading") or r.get("minor_heading") or r.get("major_heading") or ""
     kind_label = {"question": "Written question", "answer": "Written answer", "statement": "Written statement"}.get(
         r["record_type"], r["chamber"])
-    title = " — ".join(x for x in (speaker_label(r), f"{kind_label}, {r['chamber']}" if kind_label != r["chamber"]
+    title = " — ".join(x for x in (speaker_label(r, demographics), f"{kind_label}, {r['chamber']}" if kind_label != r["chamber"]
                                    else r["chamber"], _fmt_date(r["date"]), ref, heading) if x)
     blocks = [p for p in r["text"].split("\n\n") if p.strip()]
     if r.get("context"):
@@ -85,7 +109,7 @@ def record_source(n: int, r: dict[str, Any]) -> Source:
         "twfy_url": r["twfy_url"],
         "speaker": r.get("speaker"),
         "speaker_name_raw": r.get("speaker_name_raw"),
-        "group": GROUPS[speaker_group(r.get("speaker"))],
+        "group": group_label(r.get("speaker"), group_by),
         "text": r["text"],
         "context": r.get("context"),
         "ranking": r.get("ranking"),
@@ -103,7 +127,8 @@ def division_source(n: int, d: dict[str, Any]) -> Source:
     return Source(n, "division", title, url, blocks, meta)
 
 
-def build_sources(records: list[dict[str, Any]], divisions: list[dict[str, Any]]) -> list[Source]:
-    out = [record_source(i, r) for i, r in enumerate(records, 1)]
+def build_sources(records: list[dict[str, Any]], divisions: list[dict[str, Any]],
+                  demographics: bool = False, group_by: str = "role") -> list[Source]:
+    out = [record_source(i, r, demographics, group_by) for i, r in enumerate(records, 1)]
     out += [division_source(len(out) + i, d) for i, d in enumerate(divisions, 1)]
     return out

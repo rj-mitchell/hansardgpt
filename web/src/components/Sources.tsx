@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { aboutRecord } from "../procedure";
-import { attribution, houseOf, reference, roleTitles, seatTypeLabel } from "../people";
+import { ageLabel, attribution, houseOf, reference, roleTitles, seatTypeLabel } from "../people";
 import { fmtDate, highlightParts } from "../render";
 import type { Highlight, SourceCard, Speaker } from "../types";
 
@@ -169,6 +169,20 @@ export function SourceDrawer({
               )}
               <dt>Role on {fmtDate(source.date)}</dt>
               <dd>{roleTitles(sp).length ? roleTitles(sp).join("; ") : "Backbencher (no ministerial or committee-chair post)"}</dd>
+              {sp?.person_id && (
+                <>
+                  <dt>Age on that date</dt>
+                  <dd>
+                    {ageLabel(sp) ?? "Not known"}
+                    {sp.age_approximate && <span className="muted small"> (only the year of birth is known)</span>}
+                  </dd>
+                  <dt>Gender</dt>
+                  <dd>
+                    {sp.gender === "F" ? "Female" : sp.gender === "M" ? "Male" : "Not known"}
+                    {sp.gender && <span className="muted small"> (as recorded by Parliament)</span>}
+                  </dd>
+                </>
+              )}
             </>
           )}
           <dt>Record</dt>

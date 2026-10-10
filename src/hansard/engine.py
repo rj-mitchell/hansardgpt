@@ -21,6 +21,7 @@ from hansard.index.lance import SearchIndex, date_lit, sql_list, sql_str
 from hansard.rank.composite import Candidate, RankParams, Scored, rank
 from hansard.rank.evidence import evidence_summary, select_evidence
 from hansard.reference.profiles import ProfileResolver
+from hansard.sources.demographics import AGE_BANDS, age_band, age_on, assumed_birth, band_dates
 from hansard.store.parquet import read_partition_rows
 
 log = logging.getLogger(__name__)
@@ -28,6 +29,8 @@ log = logging.getLogger(__name__)
 WRITTEN_SOURCES = {"wrans", "lordswrans", "wms", "lordswms"}
 PBC_SOURCES = {"standing"}
 ORAL_SOURCES = {"debates", "westminhall", "lordspages"}
+GROUP_BY = ("role", "gender", "age")
+ARCHIVE_START = date(2010, 5, 6)
 
 
 @dataclass
@@ -40,6 +43,8 @@ class Filters:
     person_ids: list[str] = field(default_factory=list)
     offices: list[str] = field(default_factory=list)         # "gov", "shadow", "chair", "backbench"
     record_types: list[str] = field(default_factory=list)    # speech/question/answer/statement
+    genders: list[str] = field(default_factory=list)         # "F", "M" (as recorded by Parliament)
+    age_bands: list[str] = field(default_factory=list)       # see sources.demographics.AGE_BANDS; age on the day
 
     def as_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -138,13 +143,64 @@ class Engine:
             [parties, parties]).fetchall()
         return sorted({r[0] for r in rows} | set(parties))
 
+    def demographic_people(self, filters: Filters) -> tuple[list[str] | None, dict[str, date]]:
+        """People who can match the gender and age filters, and their birth dates (for the exact check by date).
+
+        Age is a property of a person on a date, so the index cannot hold it. Instead the search is limited to
+        people who were in an age band at some point in the date range, and each record is then checked against
+        the speaker's age on the day it was spoken.
+        """
+        if not filters.genders and not filters.age_bands:
+            return None, {}
+        clauses, params = ["m.\"end\" >= ?"], [filters.date_from or ARCHIVE_START]
+        if filters.date_to:
+            clauses.append("m.start <= ?")
+            params.append(filters.date_to)
+        if filters.genders:
+            clauses.append("list_contains(?, p.gender)")
+            params.append(filters.genders)
+        if filters.age_bands:
+            clauses.append("p.birth_date IS NOT NULL")
+        rows = self.resolver.con.execute(
+            f"""SELECT DISTINCT p.person_id, p.birth_date, p.birth_precision FROM ref_persons p
+                JOIN ref_memberships m ON m.person_id = p.person_id WHERE {' AND '.join(clauses)}""",
+            params).fetchall()
+        lo, hi = filters.date_from or ARCHIVE_START, filters.date_to or (self.today or date.today())
+        bands = [b for b in filters.age_bands if b in {k for k, *_ in AGE_BANDS}]
+        people: list[str] = []
+        births: dict[str, date] = {}
+        for pid, born, precision in rows:
+            birth = assumed_birth(born, precision)
+            if bands:
+                spans = [band_dates(birth, b) for b in bands]
+                if not any(a <= hi and b >= lo for a, b in spans):
+                    continue
+                births[pid] = birth
+            people.append(pid)
+        if filters.person_ids:
+            people = [p for p in people if p in set(filters.person_ids)]
+        return sorted(people), births
+
     def search(self, query: str, filters: Filters | None = None, scope: Scope | None = None,
                portfolios: list[str] | None = None, recency: float | None = None,
-               role_weight: float | None = None, limit: int = 12, diversify: bool = False) -> SearchResult:
+               role_weight: float | None = None, limit: int = 12, diversify: bool = False,
+               group_by: str = "role") -> SearchResult:
         filters, scope = filters or Filters(), scope or Scope()
         r = self.settings.ranking
         if filters.parties:
             filters = Filters(**{**filters.__dict__, "parties": self.expand_parties(filters.parties)})
+        people, births = self.demographic_people(filters)
+        if people is not None:
+            # an impossible id keeps the search empty when nobody matches
+            filters = Filters(**{**filters.__dict__, "person_ids": people or ["-none-"]})
+        bands = set(filters.age_bands)
+
+        def age_ok(hit: dict[str, Any]) -> bool:
+            if not bands:
+                return True
+            birth = births.get(hit.get("person_id"))
+            return birth is not None and age_band(age_on(birth, hit["date"])) in bands
+
         where = build_where(filters, scope)
         bm = self.index.bm25(query, where, int(r.get("candidates_bm25", 300)))
         vec_hits: list[dict[str, Any]] = []
@@ -171,6 +227,8 @@ class Engine:
                 cands[hit["record_id"]] = c
             return c
 
+        bm = [h for h in bm if age_ok(h)]
+        vec_hits = [h for h in vec_hits if age_ok(h)]
         for h in bm:
             c = cand_for(h)
             c.data["passages"][h["passage_id"]] = {"text": h["text"], "heading": h["heading"]}
@@ -198,7 +256,7 @@ class Engine:
             pool = scored[:max(limit * 8, 150)]
             profiles = self.resolver.profiles([(s.candidate.record_id, s.candidate.data.get("person_id"),
                                                 s.candidate.date) for s in pool])
-            top = select_evidence(pool, profiles, limit,
+            top = select_evidence(pool, profiles, limit, group_by=group_by if group_by in GROUP_BY else "role",
                                   max_per_speaker=int(r.get("max_per_speaker", 2)),
                                   min_relevance_ratio=float(r.get("min_relevance_ratio", 0.25)))
         else:

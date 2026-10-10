@@ -51,6 +51,8 @@ Grounding rules (these override everything else)
    slammed, dodged, evaded, refused to answer, gaffe, scandal or extreme. If a speaker used such a word, it may
    appear only inside an exact, cited quotation attributed to that speaker. Never say an individual contradicted
    themselves or changed their mind: give what they said on each date and leave the comparison to the reader.
+10. Mention a speaker's gender or age only when the question asks about it. Never generalise about women, men or
+   any age group beyond the cited examples, and never suggest why views might differ by gender or age.
 
 Language: British English throughout, as used in Hansard and by UK newspapers of record: British spelling
 (organise, recognise, analyse, labour, behaviour, programme, defence, centre, travelled, per cent), British
@@ -82,7 +84,21 @@ def system_prompt(today: date) -> str:
     return ANSWER_SYSTEM.format(no_records=NO_RECORDS, today=today.isoformat())
 
 
-def user_instruction(question: str, mode: str, plan_note: str, history_note: str) -> str:
+GROUP_BY_INSTRUCTIONS = {
+    "gender": (
+        "The question asks how women and men differ. Group the speakers by the gender given in each result title "
+        "(women, men) rather than by role, and say plainly where the two groups said similar things. Gender is as "
+        "recorded by Parliament."
+    ),
+    "age": (
+        "The question asks how views differ by age. Group the speakers by their age on the date they spoke, as given "
+        "in each result title, using these bands: under 40, 40 to 54, 55 to 69, 70 and over. Leave out bands with no "
+        "supplied records, and say plainly where the groups said similar things."
+    ),
+}
+
+
+def user_instruction(question: str, mode: str, plan_note: str, history_note: str, group_by: str = "role") -> str:
     parts = []
     if history_note:
         parts.append(history_note)
@@ -90,4 +106,6 @@ def user_instruction(question: str, mode: str, plan_note: str, history_note: str
     if plan_note:
         parts.append(f"Search scope applied: {plan_note}")
     parts.append(MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["summary"]))
+    if group_by in GROUP_BY_INSTRUCTIONS:
+        parts.append(GROUP_BY_INSTRUCTIONS[group_by])
     return "\n\n".join(parts)

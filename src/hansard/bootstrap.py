@@ -68,6 +68,7 @@ def run_bootstrap(settings: Settings, *, sample: bool = False, since: date | Non
             '[embedding]\nbackend = "hashing"\ndim = 64\n\n[auth]\nrequired = false\n')
         settings = load_settings()  # pick up the local overrides
         shutil.copytree(fixtures / "xml", settings.raw_xml_dir, dirs_exist_ok=True)
+        shutil.copy(fixtures / "demographics.json", settings.data_dir / "raw" / "demographics.json")
         stats["reference"] = build_reference_data(settings, members_dir=fixtures / "members")
         since = date(2010, 1, 1)
     else:

@@ -1,3 +1,4 @@
+import { AGE_BAND_LABEL, GENDER_LABEL } from "../people";
 import { fmtDate } from "../render";
 import type { Evidence } from "../types";
 
@@ -22,7 +23,14 @@ function EvidenceRow({ label, counts }: { label: string; counts: Record<string, 
 }
 
 /** Deterministic summary of the evidence behind a briefing (computed from the data, not by the model). */
-export function EvidenceBar({ evidence }: { evidence?: Evidence }) {
+function relabel(counts: Record<string, number> | undefined, labels: Record<string, string>, order?: string[]) {
+  const entries = Object.entries(counts ?? {});
+  if (order) entries.sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
+  return Object.fromEntries(entries.map(([k, n]) => [labels[k] ?? k, n]));
+}
+
+/** Gender and age rows appear only when the question is about them, so they never distract from the rest. */
+export function EvidenceBar({ evidence, demographics = false }: { evidence?: Evidence; demographics?: boolean }) {
   if (!evidence || evidence.records === 0) return null;
   const years =
     evidence.date_from && evidence.date_to
@@ -44,6 +52,15 @@ export function EvidenceBar({ evidence }: { evidence?: Evidence }) {
         label="MPs' seats"
         counts={Object.fromEntries(Object.entries(evidence.seat_types).map(([k, n]) => [SEAT_LABEL[k] ?? k, n]))}
       />
+      {demographics && (
+        <>
+          <EvidenceRow label="Gender" counts={relabel(evidence.genders, GENDER_LABEL, ["F", "M", "unknown"])} />
+          <EvidenceRow
+            label="Age on the day"
+            counts={relabel(evidence.age_bands, AGE_BAND_LABEL, Object.keys(AGE_BAND_LABEL))}
+          />
+        </>
+      )}
     </section>
   );
 }

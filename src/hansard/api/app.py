@@ -66,7 +66,8 @@ log = logging.getLogger(__name__)
 
 # a cached briefing is only reused while the instructions that wrote it are unchanged
 INSTRUCTIONS_VERSION = __import__("hashlib").sha256(
-    (prompts.ANSWER_SYSTEM + json.dumps(prompts.MODE_INSTRUCTIONS, sort_keys=True)).encode()).hexdigest()[:12]
+    (prompts.ANSWER_SYSTEM + json.dumps([prompts.MODE_INSTRUCTIONS, prompts.GROUP_BY_INSTRUCTIONS],
+                                        sort_keys=True)).encode()).hexdigest()[:12]
 
 ATTRIBUTION = [
     {"text": "Contains Parliamentary information licensed under the Open Parliament Licence v3.0.",

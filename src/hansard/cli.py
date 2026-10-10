@@ -43,10 +43,11 @@ def build_reference_data(settings: Settings, pull: bool = True, members_dir: Pat
     from hansard.reference.build import build_reference
     from hansard.sources import parlparse
     from hansard.store.state import StateDB
-    from hansard.sync import install_reference
+    from hansard.sync import install_reference, refresh_demographics_data
 
     state = StateDB(settings.state_db)
     sha = None
+    demographics, demo_status = refresh_demographics_data(settings, fetch=members_dir is None)
     if members_dir is None:
         if pull:
             sha = parlparse.ensure_checkout(settings.sources["parlparse_repo"], settings.parlparse_dir,
@@ -55,10 +56,11 @@ def build_reference_data(settings: Settings, pull: bool = True, members_dir: Pat
             sha = parlparse.head_sha(settings.parlparse_dir)
         members_dir = parlparse.members_dir(settings.parlparse_dir)
     ref = build_reference(members_dir, STATIC_DIR / "geo" / "constituencies.csv",
-                          Path(settings.config_path).parent / "overrides" / "constituency_names.csv")
+                          Path(settings.config_path).parent / "overrides" / "constituency_names.csv",
+                          demographics)
     people = install_reference(settings, state, ref, sha)
     # the index's speaker columns for these people are refreshed by the next `hansard sync`
-    return {**ref.stats, "parlparse_sha": sha, "people_changed": len(people)}
+    return {**ref.stats, "parlparse_sha": sha, "people_changed": len(people), "demographics": demo_status}
 
 
 @app.command()
