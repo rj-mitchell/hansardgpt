@@ -306,7 +306,7 @@ function AboutRecord({ source }: { source: SourceCard }) {
   const note = aboutRecord(source);
   return (
     <details className="about-record">
-      <summary>About this record: {note.title.toLowerCase()}</summary>
+      <summary>About this record: {note.title}</summary>
       <p>{note.text}</p>
     </details>
   );
