@@ -14,7 +14,7 @@ import typer
 
 from hansard.config import STATIC_DIR, Settings, load_settings
 
-app = typer.Typer(add_completion=False, no_args_is_help=True, help="Hansard Guru: sourced briefings on what the UK Parliament has said.")
+app = typer.Typer(add_completion=False, no_args_is_help=True, help="Where They Stand: sourced briefings on the record of the UK Parliament.")
 user_app = typer.Typer(no_args_is_help=True, help="Manage invite-only user accounts.")
 app.add_typer(user_app, name="user")
 

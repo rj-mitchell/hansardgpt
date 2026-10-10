@@ -1,6 +1,6 @@
 # Data sources and attribution
 
-Hansard Guru is built entirely on open data. The application shows these
+Where They Stand is built entirely on open data. The application shows these
 attributions in its footer and on its About page.
 
 ## Parliamentary proceedings (Hansard)

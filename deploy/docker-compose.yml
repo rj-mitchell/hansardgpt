@@ -1,4 +1,4 @@
-# Hansard Guru on a single server: the app plus Caddy for automatic HTTPS.
+# Where They Stand on a single server: the app plus Caddy for automatic HTTPS.
 # Usage (from this directory): cp .env.example .env && edit, then
 #   docker compose up -d --build
 services:
@@ -24,6 +24,7 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      REDIRECT_DOMAINS: ${REDIRECT_DOMAINS:?set REDIRECT_DOMAINS in .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

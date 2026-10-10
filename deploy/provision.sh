@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision Hansard Guru on a fresh Ubuntu 24.04 server (run as root).
+# Provision Where They Stand on a fresh Ubuntu 24.04 server (run as root).
 #
 #   curl -fsSL https://raw.githubusercontent.com/rj-mitchell/hansardgpt/main/deploy/provision.sh | bash
 #   (or copy this file to the server and run: sudo bash provision.sh)
@@ -39,7 +39,7 @@ if ! command -v docker >/dev/null; then
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 fi
 
-echo "==> Fetching Hansard Guru into $DIR"
+echo "==> Fetching Where They Stand into $DIR"
 if [[ -d $DIR/.git ]]; then
   git -C "$DIR" pull --ff-only
 else
@@ -48,11 +48,15 @@ fi
 cd "$DIR/deploy"
 
 if [[ ! -f .env ]]; then
-  read -rp "Domain name pointing at this server (e.g. hansard.guru): " DOMAIN
+  read -rp "Main domain name pointing at this server (e.g. wheretheystand.uk): " DOMAIN
+  read -rp "Other domain names that should redirect to it, space-separated (e.g. wheretheystand.co.uk wheretheystand.org.uk), or blank: " OTHERS
+  REDIRECTS="www.$DOMAIN"
+  for d in $OTHERS; do REDIRECTS="$REDIRECTS, $d, www.$d"; done
   read -rsp "Anthropic API key (leave blank for sources-only mode): " KEY
   echo
   umask 077
-  printf 'DOMAIN=%s\nANTHROPIC_API_KEY=%s\nHANSARD_ADMIN_TOKEN=%s\n' "$DOMAIN" "$KEY" "$(openssl rand -hex 24)" > .env
+  printf 'DOMAIN=%s\nREDIRECT_DOMAINS="%s"\nHANSARD_ANTHROPIC_API_KEY=%s\nHANSARD_ADMIN_TOKEN=%s\n' \
+    "$DOMAIN" "$REDIRECTS" "$KEY" "$(openssl rand -hex 24)" > .env
 fi
 
 echo "==> Building and starting"
@@ -68,7 +72,7 @@ systemctl enable --now hansard-sync.timer
 
 cat <<MSG
 
-Hansard Guru is starting at https://$(grep ^DOMAIN= .env | cut -d= -f2)/
+Where They Stand is starting at https://$(grep ^DOMAIN= .env | cut -d= -f2)/
 The first data load takes roughly 30-60 minutes (follow /var/log/hansard-bootstrap.log).
 Semantic search improves as embeddings complete over the next syncs.
 

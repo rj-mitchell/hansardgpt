@@ -1,8 +1,8 @@
-# Hansard Guru
+# Where They Stand
 
 **Sourced briefings on what the UK Parliament has said, and who stands where.**
 
-Hansard Guru ([hansard.guru](https://hansard.guru)) is an open-source research tool for anyone: journalists, researchers, policy analysts and the public.
+Where They Stand ([wheretheystand.uk](https://wheretheystand.uk)) is an open-source research tool for anyone: journalists, researchers, policy analysts and the public.
 The site is open, with no sign-in. It is deliberately
 *not* another keyword search; [Hansard's own search](https://hansard.parliament.uk/search) is excellent at finding
 every speech that mentions a word. Instead, ask a question such as "What have northern Labour MPs said about
@@ -23,7 +23,7 @@ The evidence behind each briefing is chosen for balance across speaker groups, n
 computed from the data, not written by the model, shows how many contributions, from how many speakers, and from
 which groups. If the archive has nothing relevant, the tool says **"No records found."** instead of guessing.
 
-> Hansard Guru is an independent project. It is not affiliated with or endorsed by the UK Parliament, and it
+> Where They Stand is an independent project. It is not affiliated with or endorsed by the UK Parliament, and it
 > does not use Parliament's logo or the crowned portcullis.
 
 > Status: v1, covering May 2010 (the 2010 general election) to today. Commons, Lords, Westminster Hall, written
@@ -203,7 +203,8 @@ sudo bash deploy/provision.sh
 ```
 
 The script:
-* asks for the domain name and the Anthropic API key (the key is not shown as you paste it);
+* asks for the main domain name, any other names that should redirect to it (www is added automatically),
+  and the Anthropic API key (the key is not shown as you paste it);
 * installs Docker;
 * starts the app behind Caddy, which provides automatic HTTPS;
 * runs the first data load in the background (30–60 minutes);
