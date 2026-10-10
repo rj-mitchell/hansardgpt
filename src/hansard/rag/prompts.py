@@ -64,12 +64,14 @@ MODE_INSTRUCTIONS = {
     "summary": (
         "Write a briefing: open with a two- or three-sentence headline answer that names the main positions. Then "
         "one short section per group of speakers - a bold label giving the group and its stance (for example "
-        "'**Ministers - supportive**'), one sentence characterising it, and one to three cited examples as bullets. "
-        "Keep it to roughly 300-450 words."
+        "'**Ministers - supportive**'), one sentence characterising it that also gives its clearest example as a short "
+        "quotation, so the sentence carries its own citation (for example: 'Rural MPs were sceptical, as when Jane "
+        "Smith said \"...\"'), then up to two further cited examples as bullets. Any sentence comparing groups must "
+        "also quote and cite an example. Keep it to roughly 300-450 words."
     ),
     "comprehensive": (
-        "Write a detailed briefing: a headline answer; then positions by group, each with a characterisation and "
-        "two to four cited examples; then a short section on how positions changed over time, in date order; then "
+        "Write a detailed briefing: a headline answer; then positions by group, each with a characterisation that "
+        "itself quotes and cites the group's clearest example, and one to three further cited examples; then a short section on how positions changed over time, in date order; then "
         "the main points of agreement and contention; and finally 'Evidence and gaps': what the supplied records "
         "do not cover. Roughly 700-1300 words, depending on the material."
     ),

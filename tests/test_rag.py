@@ -71,7 +71,8 @@ def test_verify_separates_lead_ins_and_evidence_notes_from_uncited_claims():
         {"text": "the line to Manchester would be delivered", "citations": [cite]},
         {"text": ".\n\nNo division records were supplied, so votes cannot be reported.\n"
                  "- The retrieved records contain no revised opening date.\n"
-                 "- Two results on prison building were not relevant and have been excluded.", "citations": []},
+                 "- Two results on prison building were not relevant and have been excluded.\n"
+                 "- The records are dominated by compensation. Little was found on the system itself.", "citations": []},
     ]
     v = verify(blocks, sources)
     by_status = {}
@@ -81,7 +82,7 @@ def test_verify_separates_lead_ins_and_evidence_notes_from_uncited_claims():
     assert "attacked the decision" in unsupported
     assert "Louise Haigh" not in unsupported and "Labour MPs" not in unsupported
     assert "No division records" not in unsupported
-    assert "opening date" not in unsupported and "prison" not in unsupported
+    assert "opening date" not in unsupported and "prison" not in unsupported and "dominated" not in unsupported
     assert v.to_dict()["unsupported_segments"] == 1
 
 
