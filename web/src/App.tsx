@@ -72,6 +72,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
+  const questionRef = useRef<HTMLTextAreaElement>(null);
   const [drawer, setDrawer] = useState<{ turn: string; h: Highlight } | null>(null);
   const [showControls, setShowControls] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -214,6 +215,31 @@ export default function App() {
   const drawerTurn = drawer ? turns.find((t) => t.id === drawer.turn) : undefined;
   const drawerSource = drawerTurn?.sources.find((s) => s.n === drawer?.h.source) ?? null;
 
+  const composer = (className: string) => (
+    <form className={className} onSubmit={submit}>
+      <label htmlFor="q" className="visually-hidden">
+        Your question
+      </label>
+      <textarea
+        id="q"
+        value={question}
+        placeholder="Ask a question about the proceedings of Parliament…"
+        rows={2}
+        ref={questionRef}
+        onChange={(e) => setQuestion(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+      />
+      <button type="submit" className="primary" disabled={busy || question.trim().length < 3}>
+        Ask
+      </button>
+    </form>
+  );
+
   return (
     <div className={drawerSource ? "app with-drawer" : "app"}>
       <header className="masthead full-width">
@@ -274,11 +300,15 @@ export default function App() {
               </a>{" "}
               does that best.
             </p>
+            {composer("composer composer-inline")}
             <h3 className="examples-head">Example questions</h3>
             <ol className="examples">
               {examplesFor(new Date()).map((ex) => (
                 <li key={ex}>
-                  <button type="button" className="example" onClick={() => setQuestion(ex)}>
+                  <button type="button" className="example" onClick={() => {
+                      setQuestion(ex);
+                      questionRef.current?.focus();
+                    }}>
                     {ex}
                   </button>
                 </li>
@@ -344,27 +374,7 @@ export default function App() {
         ))}
       </main>
 
-      <form className="composer" onSubmit={submit}>
-        <label htmlFor="q" className="visually-hidden">
-          Your question
-        </label>
-        <textarea
-          id="q"
-          value={question}
-          placeholder="Ask a question about the proceedings of Parliament…"
-          rows={2}
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-        />
-        <button type="submit" className="primary" disabled={busy || question.trim().length < 3}>
-          Ask
-        </button>
-      </form>
+      {turns.length > 0 && composer("composer")}
 
       <SourceDrawer source={drawerSource} quotes={drawer?.h.quotes ?? []} onClose={() => setDrawer(null)} />
 

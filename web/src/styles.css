@@ -1383,6 +1383,13 @@ legend,
   background: linear-gradient(to bottom, transparent, var(--paper) 30%);
 }
 
+/* On the empty home page the question box sits under the introduction, above the examples. */
+.composer-inline {
+  position: static;
+  padding-block: var(--space-xs) var(--space-s);
+  background: none;
+}
+
 .composer textarea {
   flex: 1;
   field-sizing: content;
