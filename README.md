@@ -165,7 +165,7 @@ Then open <http://localhost:8000>.
   roughly an hour; keyword search covers everything straight away.
 * **Better semantic matching:** `docker compose run --rm app hansard embed --max-minutes 60` continues it, newest
   first, and can be repeated.
-* **Bring in the latest debates:** `docker compose run --rm app hansard sync`.
+* **Bring in the latest debates:** `docker compose run --rm app hansard sync`. It keeps to the start date you chose.
 * **Stop:** `docker compose down`. Your data is kept for next time; `docker compose up -d` starts it again.
 * **Remove everything**, including the downloaded data: `docker compose down -v`.
 
@@ -184,7 +184,15 @@ uv run hansard serve                  # open http://127.0.0.1:8000
 
 ## Running it on a server
 
+**Step-by-step guide:** [docs/HOSTING.md](docs/HOSTING.md) covers ordering a server (written for a Hostkey VPS in
+London), pointing the domains at it, and running the setup.
+
 Recommended: 4–8 vCPU, 16 GB RAM and 60 GB of disk.
+
+**A smaller server** (for example 2–4 vCPU and 8 GB) works with either or both of:
+* recent years only: `hansard bootstrap --from 2019-01-01`. The start date is remembered, so later updates keep to it;
+* keyword search only: `hansard bootstrap --keyword-only`. This skips meaning-based search (about 8 GB of vectors
+  and a long one-off build). Questions that use different words from the speeches are matched less well.
 
 | Data | Size |
 |---|---|
