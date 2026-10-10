@@ -4,8 +4,8 @@
  * The look borrows from the printed Official Report: ivory paper and black serif
  * type, small-capital headings between rules, column numbers in the margin, and
  * the bound volumes' cloth — green for the Commons, red for the Lords — with gilt
- * lettering. The tone is that of a reference work: a monogram seal like a spine
- * label, the name in spaced capitals, square corners, ruled lists and no decoration
+ * lettering. The tone is that of a reference work: the bound record, open, with a ribbon
+ * marking the place as the mark, the name in spaced capitals, square corners, ruled lists and no decoration
  * that does not carry meaning.
  * Techniques follow good-css (github.com/vojtaholik/good-css): logical
  * properties, OKLCH tokens that hold both light and dark values, one fluid type
@@ -94,8 +94,6 @@ button,
   --gilt: light-dark(oklch(62% 0.1 80), oklch(80% 0.11 85));
   --gilt-on-cloth: oklch(83% 0.105 86);
   --on-cloth: oklch(96% 0.02 88);
-  /* the seal lightens a little at night so it still reads on the dark page */
-  --seal: light-dark(var(--cloth-commons), oklch(40% 0.07 162));
 
   --accent: var(--commons);
   --accent-strong: color-mix(in oklch, var(--accent), var(--ink) 25%);
@@ -452,28 +450,6 @@ legend,
   block-size: calc(2.2 * var(--step-1));
   inline-size: auto;
   margin-block-end: var(--space-xs);
-}
-
-.mark-cloth {
-  fill: var(--seal);
-}
-
-.mark-rule {
-  fill: none;
-  stroke: var(--gilt-on-cloth);
-  stroke-width: 1.4;
-}
-
-.mark-rule.thin {
-  stroke-width: 0.6;
-}
-
-.mark-letters {
-  fill: var(--gilt-on-cloth);
-  font-family: var(--serif);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
 }
 
 /* the name in spaced capitals, as on the title page of a bound volume */
@@ -1656,9 +1632,6 @@ html:has(.login) body {
   margin-block-end: var(--space-s);
 }
 
-.cover-mark .mark-cloth {
-  fill: none;
-}
 
 .cover-kicker,
 .cover-years {

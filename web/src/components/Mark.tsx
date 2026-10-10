@@ -1,13 +1,19 @@
-/** The Where They Stand seal: a monogram in gilt on Commons-green cloth, as on a volume's spine label. */
+/** The Where They Stand mark: the bound record, open, with a ribbon marking the place (same as /icon.svg). */
 export function Mark({ className = "mark" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-      <rect className="mark-cloth" width="48" height="48" rx="2" />
-      <rect className="mark-rule" x="3.5" y="3.5" width="41" height="41" rx="1" />
-      <rect className="mark-rule thin" x="6" y="6" width="36" height="36" />
-      <text className="mark-letters" x="24" y="30.5" textAnchor="middle">
-        WS
-      </text>
+    <svg className={className} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <rect width="64" height="64" rx="7" fill="#1d4535" />
+      <rect x="4.5" y="4.5" width="55" height="55" rx="4" fill="none" stroke="#d9b866" strokeWidth="1.4" />
+      <path d="M11.5 18.5c7.2-3.2 14.3-2.4 19.5 1.8v28.4c-5.2-4.1-12.3-4.9-19.5-1.8z" fill="#f3ead6" />
+      <path d="M52.5 18.5c-7.2-3.2-14.3-2.4-19.5 1.8v28.4c5.2-4.1 12.3-4.9 19.5-1.8z" fill="#f3ead6" />
+      <path
+        d="M15.5 24.5h11M15.5 29.5h11M15.5 34.5h11M15.5 39.5h7.5M37.5 24.5h6M37.5 29.5h6M37.5 34.5h11M37.5 39.5h11"
+        stroke="#1d4535"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.85"
+      />
+      <path d="M44.5 14.5h5.5v21l-2.75-2.6-2.75 2.6z" fill="#a8302f" />
     </svg>
   );
 }
