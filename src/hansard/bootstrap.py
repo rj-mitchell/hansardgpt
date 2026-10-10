@@ -17,7 +17,7 @@ import time
 from datetime import date
 from typing import Any
 
-from hansard.config import REPO_ROOT, Settings, load_settings
+from hansard.config import REPO_ROOT, Settings, load_settings, save_local_settings
 from hansard.store.parquet import compact
 
 log = logging.getLogger(__name__)
@@ -53,7 +53,8 @@ def smoke_test(settings: Settings) -> list[dict[str, Any]]:
 
 
 def run_bootstrap(settings: Settings, *, sample: bool = False, since: date | None = None,
-                  embed_minutes: float | None = None, workers: int = 3) -> dict[str, Any]:
+                  embed_minutes: float | None = None, workers: int = 3,
+                  keyword_only: bool = False) -> dict[str, Any]:
     from hansard.cli import build_reference_data, embed_pending_cmd, fetch_xml, index_pending
     from hansard.ingest import ingest
 
@@ -70,12 +71,25 @@ def run_bootstrap(settings: Settings, *, sample: bool = False, since: date | Non
         stats["reference"] = build_reference_data(settings, members_dir=fixtures / "members")
         since = date(2010, 1, 1)
     else:
+        # Remember the choices, so the daily sync keeps to them (it would otherwise fetch from 2010
+        # and build meaning-based search for everything).
+        local: dict[str, dict[str, Any]] = {}
+        if since and since > settings.archive_start:
+            local["archive"] = {"start_date": since.isoformat()}
+        if keyword_only:
+            local["embedding"] = {"enabled": False}
+        if local:
+            save_local_settings(settings.data_dir, local)
+            settings = load_settings()
         stats["reference"] = build_reference_data(settings, pull=True)
         stats["fetch"] = fetch_xml(settings, since)
     stats["reference"].pop("unmatched_seats_since_2010", None)
     stats["ingest"] = ingest(dataclasses.replace(settings), workers=workers, since=since).as_dict()
     stats["index"] = index_pending(settings, rebuild_fts=True)
-    stats["embed"] = embed_pending_cmd(settings, max_minutes=embed_minutes)
+    if settings.embedding.get("enabled", True):
+        stats["embed"] = embed_pending_cmd(settings, max_minutes=embed_minutes)
+    else:
+        stats["embed"] = "skipped: keyword search only ([embedding] enabled = false)"
     cutoff = date.fromordinal(date.today().toordinal() - 90).isoformat()
     stats["compact"] = compact(settings.parquet_dir, cutoff)
     stats["smoke_test"] = smoke_test(settings)

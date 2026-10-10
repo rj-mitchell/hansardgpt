@@ -150,7 +150,7 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
         stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
 
-        if embed_minutes is None or embed_minutes > 0:
+        if settings.embedding.get("enabled", True) and (embed_minutes is None or embed_minutes > 0):
             from hansard.embed.base import get_embedder
 
             t = time.time()

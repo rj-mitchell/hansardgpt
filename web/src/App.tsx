@@ -12,12 +12,41 @@ import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
 import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
-const EXAMPLES = [
-  "How have ministers justified delays to HS2?",
-  "What have northern Labour MPs said about HS2?",
-  "Where do rural and city MPs differ on onshore wind farms?",
-  "What have peers said about assisted dying?",
+/**
+ * Example questions, one set a day. Each set spans parties, both Houses, the nations and kinds of seat, and
+ * party-specific examples use topics that party itself campaigns on, not other parties' attack lines.
+ * Every question was checked to have plenty of balanced evidence in the record.
+ */
+export const EXAMPLE_SETS: string[][] = [
+  [
+    "How have ministers justified delays to HS2?",
+    "What have peers said about assisted dying?",
+    "How have Welsh MPs discussed steel jobs at Port Talbot?",
+    "What have Liberal Democrat MPs said about sewage in rivers?",
+  ],
+  [
+    "How have ministers explained NHS waiting lists?",
+    "Where do rural and city MPs differ on onshore wind farms?",
+    "What have Northern Ireland MPs said about the Windsor Framework?",
+    "What have Conservative MPs said about defence spending?",
+  ],
+  [
+    "What have MPs said about the Post Office Horizon IT system?",
+    "What have select committee chairs said about water companies?",
+    "What have SNP MPs said about the cost of living in Scotland?",
+    "What have Reform UK MPs said about net zero?",
+  ],
+  [
+    "What have Labour MPs said about workers' rights?",
+    "What have peers said about the Rwanda asylum plan?",
+    "What have Plaid Cymru MPs said about rural Wales?",
+    "What have MPs for town seats said about high street closures?",
+  ],
 ];
+
+export function examplesFor(day: Date): string[] {
+  return EXAMPLE_SETS[Math.floor(day.getTime() / 86_400_000) % EXAMPLE_SETS.length];
+}
 
 function loadSettings(defaults?: Meta["defaults"]): Settings {
   try {
@@ -191,7 +220,7 @@ export default function App() {
             </p>
             <h3 className="examples-head">Example questions</h3>
             <ol className="examples">
-              {EXAMPLES.map((ex) => (
+              {examplesFor(new Date()).map((ex) => (
                 <li key={ex}>
                   <button type="button" className="example" onClick={() => setQuestion(ex)}>
                     {ex}
@@ -266,6 +295,10 @@ export default function App() {
 
       <footer className="footer full-width">
         <p className="independence">{BRAND.independence}</p>
+        <p className="print-only">
+          From {BRAND.name}, wheretheystand.uk. Briefings are written by AI from the cited Hansard records; check the
+          sources.
+        </p>
         <nav className="footer-nav" aria-label="About this site">
           <a href="/methodology">Methodology</a>
           <a href="/changelog">Changelog</a>

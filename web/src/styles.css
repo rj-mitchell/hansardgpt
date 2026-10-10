@@ -1560,6 +1560,23 @@ legend,
   font-size: var(--step-0);
 }
 
+.about-record {
+  font-family: var(--sans);
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+  border-inline-start: 3px solid var(--rule);
+  padding-inline-start: var(--space-s);
+}
+
+.about-record summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.about-record p {
+  margin-block-start: var(--space-2xs);
+}
+
 /* ---- footer: the imprint ---------------------------------------------------------------------- */
 
 .footer {
@@ -1903,6 +1920,100 @@ html:has(.login) body {
 
   .facts dd + dt {
     margin-block-start: var(--space-xs);
+  }
+}
+
+/* ---- print: a briefing as a document ------------------------------------------------------------------ */
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  :root {
+    color-scheme: light;
+  }
+
+  @page {
+    margin: 18mm 16mm;
+  }
+
+  html,
+  body {
+    background: #fff;
+  }
+
+  .running-head,
+  .controls,
+  .composer,
+  .drawer,
+  .answer-actions,
+  .plan-head > button,
+  .chip button,
+  .empty .examples,
+  .examples-head,
+  .footer-nav,
+  .banner,
+  .status::before {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block;
+  }
+
+  .app {
+    display: block;
+  }
+
+  .masthead {
+    padding-block: 0 var(--space-s);
+  }
+
+  .answer {
+    box-shadow: none;
+    border-color: #999;
+    break-inside: auto;
+  }
+
+  .answer-body :is(h2, h3, h4) {
+    break-after: avoid;
+  }
+
+  .turn + .turn {
+    break-before: page;
+  }
+
+  .cite {
+    border: 0;
+    background: none;
+    padding: 0;
+    vertical-align: super;
+    font-size: 0.65em;
+  }
+
+  .cite::before {
+    content: "[";
+  }
+
+  .cite::after {
+    content: "]";
+  }
+
+  .source-card {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+
+  .source-card .print-only {
+    grid-column: 2 / -1;
+    font-size: var(--step--2);
+    color: #444;
+    overflow-wrap: anywhere;
+  }
+
+  .footer {
+    border-block-start: 1px solid #999;
   }
 }
 

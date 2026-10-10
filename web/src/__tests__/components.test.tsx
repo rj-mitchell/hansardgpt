@@ -152,3 +152,16 @@ describe("source drawer", () => {
     expect(screen.getByText(/Open Parliament Licence/)).toBeInTheDocument();
   });
 });
+
+describe("example questions", () => {
+  it("rotate daily through balanced sets", async () => {
+    const { EXAMPLE_SETS, examplesFor } = await import("../App");
+    const days = [0, 1, 2, 3].map((d) => examplesFor(new Date(Date.UTC(2026, 9, 10 + d))));
+    expect(new Set(days.map((d) => d.join("|"))).size).toBe(EXAMPLE_SETS.length);
+    for (const set of EXAMPLE_SETS) expect(set).toHaveLength(4);
+    const all = EXAMPLE_SETS.flat().join(" ");
+    for (const name of ["Labour", "Conservative", "Liberal Democrat", "SNP", "Reform UK", "Plaid Cymru", "peers", "Welsh", "Northern Ireland"]) {
+      expect(all).toContain(name);
+    }
+  });
+});

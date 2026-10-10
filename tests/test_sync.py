@@ -234,3 +234,26 @@ def test_display_only_member_fields_do_not_trigger_reindexing(reference_dir):
     for m in fresh.memberships:
         m["settlement"], m["urban_area"] = "city", "Somewhere new"
     assert changed_people(reference_dir, fresh) == set()
+
+
+def test_keyword_only_installations_skip_meaning_search(settings, xml_mirror, tmp_path):
+    import dataclasses
+
+    members = tmp_path / "members"
+    shutil.copytree(MEMBERS, members)
+    s = dataclasses.replace(settings, raw={**settings.raw, "embedding": {**settings.embedding, "enabled": False}})
+    stats = run_sync(s, fetch=False, members_dir=members, embedder=HashingEmbedder(64), embed_minutes=None,
+                     workers=1, today=date(2026, 10, 1))
+    assert "embed" not in stats
+    assert SearchIndex(s.index_dir, 64).stats()["vectors"] == 0
+
+
+def test_bootstrap_choices_are_remembered_for_later_syncs(tmp_path, monkeypatch):
+    from hansard.config import load_settings, save_local_settings
+
+    monkeypatch.setenv("HANSARD_DATA_DIR", str(tmp_path))
+    save_local_settings(tmp_path, {"archive": {"start_date": "2025-01-01"}})
+    save_local_settings(tmp_path, {"embedding": {"enabled": False}})  # merged, not replaced
+    s = load_settings()
+    assert s.archive_start == date(2025, 1, 1)
+    assert s.embedding["enabled"] is False and s.embedding["dim"]  # other embedding settings kept

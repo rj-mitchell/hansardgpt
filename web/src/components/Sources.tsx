@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { aboutRecord } from "../procedure";
 import { attribution, houseOf, reference, roleTitles, seatTypeLabel } from "../people";
 import { fmtDate, highlightParts } from "../render";
 import type { Highlight, SourceCard, Speaker } from "../types";
@@ -88,6 +89,7 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
         </span>
       </span>
       {ref && <span className="colref">{ref}</span>}
+      <span className="print-only">{s.official_url ?? s.url}</span>
     </button>
   );
 }
@@ -189,6 +191,8 @@ export function SourceDrawer({
             </a>
           </dd>
         </dl>
+
+        <AboutRecord source={source} />
 
         {source.kind === "division" ? (
           <DivisionDetail source={source} />
@@ -295,5 +299,15 @@ function DivisionDetail({ source }: { source: SourceCard }) {
         <p className="muted">Nobody in scope.</p>
       )}
     </section>
+  );
+}
+
+function AboutRecord({ source }: { source: SourceCard }) {
+  const note = aboutRecord(source);
+  return (
+    <details className="about-record">
+      <summary>About this record: {note.title.toLowerCase()}</summary>
+      <p>{note.text}</p>
+    </details>
   );
 }

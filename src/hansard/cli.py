@@ -245,13 +245,14 @@ def sync(embed_minutes: float = typer.Option(60.0, help="time budget for embeddi
 def bootstrap(sample: bool = typer.Option(False, help="offline demo using bundled fixtures"),
               since: str = typer.Option(None, "--from", help="first date to load (default: archive start)"),
               embed_minutes: float = typer.Option(None, help="limit initial embedding time (resumable later)"),
+              keyword_only: bool = typer.Option(False, help="skip meaning-based search (smaller server; remembered)"),
               workers: int = typer.Option(3)):
     """One-command setup: reference data, Hansard download, ingest, index, embeddings, smoke test."""
     _setup_logging()
     from hansard.bootstrap import run_bootstrap
 
     stats = run_bootstrap(_settings(), sample=sample, since=_date(since), embed_minutes=embed_minutes,
-                          workers=workers)
+                          workers=workers, keyword_only=keyword_only)
     typer.echo(json.dumps(stats, indent=2, default=str))
 
 

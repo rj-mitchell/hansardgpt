@@ -111,6 +111,31 @@ def load_settings(config_path: str | Path | None = None, **overrides: Any) -> Se
     return Settings(raw=raw, data_dir=data_dir, config_path=path, overrides=overrides)
 
 
+def save_local_settings(data_dir: Path, updates: dict[str, dict[str, Any]]) -> Path:
+    """Merge simple values into <data_dir>/settings.local.toml, so later commands (sync, serve) use them too."""
+    path = data_dir / "settings.local.toml"
+    current: dict[str, dict[str, Any]] = {}
+    if path.exists():
+        with open(path, "rb") as fh:
+            current = tomllib.load(fh)
+    for section, values in updates.items():
+        current.setdefault(section, {}).update(values)
+
+    def lit(v: Any) -> str:
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, (int, float)):
+            return repr(v)
+        return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+    lines = ["# Per-installation settings written by `hansard bootstrap`; they override config/settings.toml."]
+    for section, values in current.items():
+        lines += ["", f"[{section}]", *(f"{k} = {lit(v)}" for k, v in values.items())]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return load_settings()
