@@ -199,6 +199,7 @@ export interface Meta {
   last_sync: { finished_at: string | null; status: string } | null;
   defaults: { recency: number; role_weight: number };
   attribution: { text: string; url: string }[];
+  donate_url?: string | null;
 }
 
 export interface Highlight {

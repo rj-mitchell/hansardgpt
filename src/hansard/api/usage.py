@@ -29,11 +29,20 @@ def cost_usd(usage: dict[str, int] | None, prices: dict[str, Any]) -> float:
     )
 
 
-def visitor_key(state: StateDB, address: str | None) -> str:
-    salt = state.get("visitor_salt")
+def visitor_key(state: StateDB, address: str | None, day: str | None = None) -> str:
+    """A code for a visitor's IP address, used for daily limits and visitor counts; the address itself is not kept.
+
+    The secret mixed into the code changes every day (UTC) and old ones are deleted, so codes cannot be linked
+    across days or turned back into an address.
+    """
+    name = f"visitor_salt:{day or datetime.now(UTC).strftime('%Y-%m-%d')}"
+    salt = state.get(name)
     if salt is None:
-        state.set("visitor_salt", secrets.token_hex(16))
-        salt = state.get("visitor_salt")
+        with state.connect() as con:
+            con.execute("INSERT OR IGNORE INTO kv (key, value) VALUES (?, ?)", (name, secrets.token_hex(16)))
+            con.execute("DELETE FROM kv WHERE key = 'visitor_salt' OR (key LIKE 'visitor_salt:%' AND key != ?)",
+                        (name,))
+        salt = state.get(name)
     return hashlib.sha256(f"{salt}|{address or '-'}".encode()).hexdigest()[:24]
 
 

@@ -58,3 +58,10 @@ No fonts are loaded from third-party servers.
 Preview cards are drawn with Source Serif 4 and Source Sans 3 by Adobe, licensed under the SIL Open Font
 License 1.1 (`data_static/fonts/LICENSE-*.md`). The web app uses Source Serif 4 via Fontsource under the same
 licence.
+
+## Briefings written by the site
+
+The text of briefings written by Where They Stand is licensed under
+[Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+Credit "Where They Stand" with a link to the briefing. Quotations from Hansard within a briefing remain under the
+Open Parliament Licence v3.0. The name and mark are not covered by the licence.

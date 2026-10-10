@@ -327,6 +327,9 @@ The authority multiplier `m` depends on the speaker's role on the date of the re
   Licence v3.0. The vendored lookup in `data_static/geo/` is rebuilt by `scripts/build_geo_lookups.py`.
 
 The app shows these attributions on every page; see [ATTRIBUTION.md](ATTRIBUTION.md). Code is MIT-licensed.
+The text of briefings the site writes is licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); quotations from Hansard remain under the Open
+Parliament Licence. The site's [terms](web/terms.html) and [privacy notice](web/privacy.html) give the details.
 Hugging Face is used only for a one-off download of the embedding model's weights, which are pinned by
 SHA-256. No data comes from there.
 

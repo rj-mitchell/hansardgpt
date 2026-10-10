@@ -60,8 +60,8 @@ export function briefingWithSources(
     ...cited.map(sourceLine),
     "",
     `${BRAND.name} (${link ?? "wheretheystand.uk"}), ${fmtDate(today.toISOString().slice(0, 10))}. Written by AI from the cited ` +
-      "Hansard records; check the sources. Contains Parliamentary information licensed under the Open Parliament " +
-      "Licence v3.0.",
+      "Hansard records; check the sources. Briefing text licensed CC BY 4.0. Contains Parliamentary information " +
+      "licensed under the Open Parliament Licence v3.0.",
   ].join("\n");
 }
 

@@ -7,6 +7,24 @@ import { fmtDate } from "./render";
 
 void api.hit(window.location.pathname, document.referrer);
 
+// "Support this site" links stay hidden until a donations page is configured on the server
+async function showDonate() {
+  const links = document.querySelectorAll<HTMLAnchorElement>("a[data-donate]");
+  if (!links.length) return;
+  try {
+    const { donate_url } = (await (await fetch("/api/site")).json()) as { donate_url: string | null };
+    if (!donate_url) return;
+    for (const a of links) {
+      a.href = donate_url;
+      a.hidden = false;
+    }
+    for (const el of document.querySelectorAll<HTMLElement>("[data-donate-text]")) el.hidden = false;
+  } catch {
+    /* no link: nothing to show */
+  }
+}
+void showDonate();
+
 for (const a of document.querySelectorAll<HTMLAnchorElement>(".page-nav a")) {
   if (a.pathname === window.location.pathname.replace(/\.html$/, "")) a.setAttribute("aria-current", "page");
 }

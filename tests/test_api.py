@@ -376,3 +376,31 @@ def test_reports_are_limited_per_visitor(indexed_settings, tmp_path):
     body = {"kind": "general", "message": "A perfectly reasonable message."}
     codes = [client.post("/api/report", json=body).status_code for _ in range(11)]
     assert codes[:10] == [200] * 10 and codes[10] == 429
+
+
+def test_donate_link_is_hidden_until_set(indexed_settings, tmp_path, monkeypatch):
+    app, _, _ = make_app(indexed_settings, tmp_path, auth=False)
+    client = TestClient(app)
+    monkeypatch.delenv("HANSARD_DONATE_URL", raising=False)
+    assert client.get("/api/site").json() == {"donate_url": None}
+    monkeypatch.setenv("HANSARD_DONATE_URL", "https://ko-fi.com/example")
+    assert client.get("/api/site").json() == {"donate_url": "https://ko-fi.com/example"}
+    assert client.get("/api/meta").json()["donate_url"] == "https://ko-fi.com/example"
+    for bad in ("http://ko-fi.com/x", "javascript:alert(1)", 'https://x.example/"><script>'):
+        monkeypatch.setenv("HANSARD_DONATE_URL", bad)
+        assert client.get("/api/site").json() == {"donate_url": None}
+
+
+def test_visitor_codes_change_daily_and_old_secrets_are_deleted(tmp_path):
+    from hansard.api.usage import visitor_key
+
+    state = StateDB(tmp_path / "state.sqlite")
+    state.set("visitor_salt", "an-old-permanent-salt")
+    monday = visitor_key(state, "203.0.113.5", day="2026-10-12")
+    assert visitor_key(state, "203.0.113.5", day="2026-10-12") == monday
+    assert visitor_key(state, "198.51.100.7", day="2026-10-12") != monday
+    tuesday = visitor_key(state, "203.0.113.5", day="2026-10-13")
+    assert tuesday != monday
+    with state.connect() as con:
+        keys = [r[0] for r in con.execute("SELECT key FROM kv WHERE key LIKE 'visitor_salt%'")]
+    assert keys == ["visitor_salt:2026-10-13"]

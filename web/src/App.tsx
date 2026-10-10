@@ -252,6 +252,7 @@ export default function App() {
           </span>
           <span className="masthead-actions">
             <nav className="page-nav" aria-label="Site">
+              <a href="/about">About</a>
               <a href="/methodology">Methodology</a>
               <a href="/status">Status</a>
             </nav>
@@ -393,13 +394,21 @@ export default function App() {
           sources.
         </p>
         <nav className="footer-nav" aria-label="About this site">
+          <a href="/about">About</a>
           <a href="/methodology">Methodology</a>
           <a href="/changelog">Changelog</a>
           <a href="/status">Status</a>
           <a href="/corrections">Corrections</a>
           <a href="/corrections#report">Report a problem</a>
           <a href="/accessibility">Accessibility</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          {meta?.donate_url && <a href={meta.donate_url}>Support this site</a>}
         </nav>
+        <p className="licence">
+          Briefings are licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>; see the{" "}
+          <a href="/terms">terms</a> for reuse.
+        </p>
         {(meta?.attribution ?? ATTRIBUTION).map((a) => (
           <a key={a.url} href={a.url} target="_blank" rel="noreferrer">
             {a.text}

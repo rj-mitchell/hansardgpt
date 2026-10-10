@@ -296,13 +296,16 @@ def set_key(key: str = typer.Option(..., prompt="Paste your Anthropic API key (i
 
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False,
-          behind_proxy: bool = typer.Option(False, help="trust X-Forwarded-* headers (e.g. behind Caddy)")):
+          behind_proxy: bool = typer.Option(False, help="trust X-Forwarded-* headers (e.g. behind Caddy)"),
+          access_log: bool = typer.Option(False, help="log every request, with visitors' IP addresses (off by "
+                                                      "default: the site keeps its own cookie-free counts)")):
     """Run the web application."""
     import uvicorn
 
     _setup_logging()
     uvicorn.run("hansard.api.app:create_app", host=host, port=port, factory=True, reload=reload,
-                proxy_headers=behind_proxy, forwarded_allow_ips="*" if behind_proxy else None)
+                proxy_headers=behind_proxy, forwarded_allow_ips="*" if behind_proxy else None,
+                access_log=access_log)
 
 
 @user_app.command("add")

@@ -1141,6 +1141,11 @@ legend,
   white-space: pre-wrap;
 }
 
+.licence {
+  margin-block: var(--space-2xs);
+  line-height: 2;
+}
+
 .corrections-list {
   padding: 0;
   list-style: none;
@@ -1720,6 +1725,7 @@ legend,
 .footer > a,
 .login .footer > a {
   display: block;
+  padding-block: 0.2em; /* at least 24px tall, so each line is easy to tap */
   color: inherit;
 }
 

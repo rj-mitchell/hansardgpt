@@ -139,6 +139,12 @@ class AskBody(BaseModel):
     history: list[dict[str, str]] = Field(default_factory=list, max_length=10)
 
 
+def donate_url(settings: Settings) -> str | None:
+    """The 'Support this site' link, if one is set and is a plain https address."""
+    url = (os.environ.get("HANSARD_DONATE_URL") or settings.section("site").get("donate_url") or "").strip()
+    return url if url.startswith("https://") and len(url) < 300 and not any(c in url for c in "\"'<> ") else None
+
+
 def _public_run(run: dict[str, Any]) -> dict[str, Any]:
     """What visitors may see of an update run: when it finished and whether it worked (no internal details)."""
     return {"finished_at": run.get("finished_at"), "status": run.get("status")}
@@ -235,7 +241,13 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             "defaults": {"recency": settings.ranking.get("default_recency", 0.5),
                          "role_weight": settings.ranking.get("default_role_weight", 1.5)},
             "attribution": ATTRIBUTION,
+            "donate_url": donate_url(settings),
         }
+
+    @app.get("/api/site")
+    def site():
+        """Small, public settings for the static pages."""
+        return {"donate_url": donate_url(settings)}
 
     @app.get("/api/health")
     def health():

@@ -1,11 +1,20 @@
 # Where They Stand on a single server: the app plus Caddy for automatic HTTPS.
 # Usage (from this directory): cp .env.example .env && edit, then
 #   docker compose up -d --build
+
+# Logs are capped (three files of 10 MB per container) so they never fill the disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   app:
     build:
       context: ..
     env_file: .env
+    logging: *logging
     volumes:
       - hansard-data:/data
     restart: unless-stopped
@@ -19,6 +28,7 @@ services:
 
   caddy:
     image: caddy:2.8.4
+    logging: *logging
     ports:
       - "80:80"
       - "443:443"
