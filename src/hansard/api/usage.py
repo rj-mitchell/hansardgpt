@@ -121,6 +121,56 @@ def store_events(state: StateDB, key: str, events: list[dict[str, Any]], hours: 
                     (key, utcnow(), json.dumps(events, default=str)))
 
 
+# ---- feedback and cookie-free visit counts ----------------------------------------------
+
+def record_feedback(state: StateDB, briefing_key: str | None, question: str, useful: bool,
+                    visitor: str | None) -> None:
+    with state.connect() as con:
+        con.execute("INSERT INTO feedback (at, briefing_key, question, useful, visitor) VALUES (?, ?, ?, ?, ?)",
+                    (utcnow(), briefing_key, question[:500], int(useful), visitor))
+
+
+def record_visit(state: StateDB, path: str, referrer_host: str | None, visitor: str | None) -> None:
+    """Count a page view. Only daily totals are kept; today's visitor hashes are rolled up and deleted."""
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
+    with state.connect() as con:
+        con.execute("INSERT INTO page_views (day, path, views) VALUES (?, ?, 1) "
+                    "ON CONFLICT(day, path) DO UPDATE SET views = views + 1", (day, path[:100]))
+        if referrer_host:
+            con.execute("INSERT INTO referrers (day, host, views) VALUES (?, ?, 1) "
+                        "ON CONFLICT(day, host) DO UPDATE SET views = views + 1", (day, referrer_host[:100]))
+        if visitor:
+            con.execute("INSERT OR IGNORE INTO day_visitors (day, visitor) VALUES (?, ?)", (day, visitor))
+        con.execute("INSERT OR REPLACE INTO day_totals (day, visitors) "
+                    "SELECT day, count(*) FROM day_visitors WHERE day < ? GROUP BY day", (day,))
+        con.execute("DELETE FROM day_visitors WHERE day < ?", (day,))
+
+
+def visit_summary(state: StateDB, days: int = 30) -> dict[str, Any]:
+    since = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    with state.connect() as con:
+        views = con.execute("SELECT day, sum(views) FROM page_views WHERE day >= ? GROUP BY day ORDER BY day",
+                            (since,)).fetchall()
+        visitors = dict(con.execute("SELECT day, visitors FROM day_totals WHERE day >= ?", (since,)).fetchall())
+        visitors[today] = con.execute("SELECT count(*) FROM day_visitors WHERE day = ?", (today,)).fetchone()[0]
+        pages = con.execute("SELECT path, sum(views) v FROM page_views WHERE day >= ? GROUP BY path "
+                            "ORDER BY v DESC LIMIT 20", (since,)).fetchall()
+        refs = con.execute("SELECT host, sum(views) v FROM referrers WHERE day >= ? GROUP BY host "
+                           "ORDER BY v DESC LIMIT 20", (since,)).fetchall()
+        fb = con.execute("SELECT sum(useful), count(*) FROM feedback WHERE at >= ?", (since,)).fetchone()
+        unhelpful = con.execute("SELECT at, question FROM feedback WHERE useful = 0 AND at >= ? "
+                                "ORDER BY at DESC LIMIT 20", (since,)).fetchall()
+    return {
+        "days": days,
+        "by_day": [{"day": d, "views": v, "visitors": visitors.get(d, 0)} for d, v in views],
+        "top_pages": [{"path": p, "views": v} for p, v in pages],
+        "top_referrers": [{"host": h, "views": v} for h, v in refs],
+        "feedback": {"useful": fb[0] or 0, "total": fb[1] or 0,
+                     "recent_not_useful": [{"at": a, "question": q} for a, q in unhelpful]},
+    }
+
+
 def summary(state: StateDB) -> dict[str, Any]:
     month = datetime.now(UTC).strftime("%Y-%m")
     with state.connect() as con:

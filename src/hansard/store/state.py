@@ -73,6 +73,38 @@ CREATE TABLE IF NOT EXISTS answer_cache (
     created_at TEXT NOT NULL,
     events     TEXT NOT NULL
 );
+-- "Was this briefing useful?" answers
+CREATE TABLE IF NOT EXISTS feedback (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    at           TEXT NOT NULL,
+    briefing_key TEXT,
+    question     TEXT NOT NULL,
+    useful       INTEGER NOT NULL,
+    visitor      TEXT
+);
+-- cookie-free visit counts: totals per day only. Visitor hashes are kept for the current day
+-- (to count unique visitors) and rolled up into day_totals, then deleted.
+CREATE TABLE IF NOT EXISTS page_views (
+    day   TEXT NOT NULL,
+    path  TEXT NOT NULL,
+    views INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, path)
+);
+CREATE TABLE IF NOT EXISTS referrers (
+    day   TEXT NOT NULL,
+    host  TEXT NOT NULL,
+    views INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, host)
+);
+CREATE TABLE IF NOT EXISTS day_visitors (
+    day     TEXT NOT NULL,
+    visitor TEXT NOT NULL,
+    PRIMARY KEY (day, visitor)
+);
+CREATE TABLE IF NOT EXISTS day_totals (
+    day      TEXT PRIMARY KEY,
+    visitors INTEGER NOT NULL
+);
 """
 
 # Columns added after the first release; created on open if missing.
@@ -116,6 +148,13 @@ class StateDB:
         except Exception:
             con.rollback()
             raise
+
+    def latest_record_date(self) -> str | None:
+        """Most recent sitting or answer date in the ingested files (keys end in YYYY-MM-DD)."""
+        with self.connect() as con:
+            row = con.execute("SELECT max(substr(key, -10)) FROM manifest "
+                              "WHERE key GLOB '*[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'").fetchone()
+        return row[0] if row else None
 
     # ---- manifest ------------------------------------------------------------
     def manifest(self) -> dict[tuple[str, str], sqlite3.Row]:

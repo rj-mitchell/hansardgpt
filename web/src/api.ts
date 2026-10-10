@@ -39,6 +39,11 @@ export const api = {
   login: (email: string, password: string) => post("/api/auth/login", { email, password }).then(json),
   logout: () => post("/api/auth/logout", {}).then(json),
   meta: () => fetch("/api/meta", { credentials: "same-origin" }).then((r) => json<Meta>(r)),
+  feedback: (question: string, useful: boolean, briefingKey?: string) =>
+    post("/api/feedback", { question, useful, briefing_key: briefingKey ?? null }).then(json),
+  /** Cookie-free page count: the path and the referring site only. */
+  hit: (path: string, referrer: string) =>
+    post("/api/hit", { path, referrer: referrer || null }).catch(() => undefined),
   search: (question: string, settings: Settings, plan?: Plan) =>
     post("/api/search", askBody(question, settings, plan)).then((r) =>
       json<{ plan: Plan; sources: SourceCard[] }>(r),

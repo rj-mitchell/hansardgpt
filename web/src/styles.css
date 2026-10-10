@@ -886,6 +886,29 @@ legend,
   color: var(--accent);
 }
 
+/* a labelled row: "Parties  Labour 7  Conservative 4" (the label column lines up across rows) */
+.evidence-row {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.evidence-label {
+  font-size: var(--step--2);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+@media (width < 40rem) {
+  .evidence-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2xs);
+  }
+}
+
 /* ---- the briefing: a printed page ------------------------------------------------------ */
 
 .answer {
@@ -900,7 +923,7 @@ legend,
 }
 
 .answer::before {
-  content: "Briefing" / "";
+  content: "Briefing · written by AI" / "";
   position: absolute;
   inset-block-start: var(--space-xs);
   inset-inline-start: var(--space-m);
@@ -983,6 +1006,41 @@ legend,
 
 .cite:active {
   transform: scale(0.95);
+}
+
+/* a judgemental word in the briefing's own voice: flagged for the reader, never silently changed */
+.loaded {
+  text-decoration: underline wavy var(--danger);
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.22em;
+  text-decoration-skip-ink: none;
+}
+
+.ai-note {
+  margin-block-start: var(--space-xs);
+  font-family: var(--sans);
+  font-size: var(--step--2);
+  color: var(--ink-faint);
+}
+
+.answer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-s);
+  margin-block-start: var(--space-s);
+  padding-block-start: var(--space-s);
+  border-block-start: 1px solid var(--rule);
+}
+
+.feedback {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+  font-family: var(--sans);
+  font-size: var(--step--1);
+  color: var(--ink-soft);
 }
 
 .unsupported {

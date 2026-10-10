@@ -7,18 +7,30 @@ marked.setOptions({ gfm: true, breaks: false });
 const CITE = (nums: number[]) => `⁣⟦S:${nums.join(",")}⟧⁣`;
 const U_OPEN = "⁣⟦U⟧⁣";
 const U_CLOSE = "⁣⟦/U⟧⁣";
+const L_OPEN = "⁣⟦L⟧⁣";
+const L_CLOSE = "⁣⟦/L⟧⁣";
+
+/** Mark judgemental words the server flagged in the briefing's own voice (offsets into the segment text). */
+function markLoaded(s: Segment): string {
+  let text = s.text;
+  for (const f of [...(s.loaded ?? [])].sort((a, b) => b.start - a.start)) {
+    text = text.slice(0, f.start) + L_OPEN + text.slice(f.start, f.end) + L_CLOSE + text.slice(f.end);
+  }
+  return text;
+}
 
 /** Markdown for a verified answer, with placeholders for citations and unsupported spans. */
 export function segmentsToMarkdown(segments: Segment[]): string {
   return segments
     .map((s) => {
-      if (s.status === "cited") return s.text + CITE(s.sources);
+      const text = markLoaded(s);
+      if (s.status === "cited") return text + CITE(s.sources);
       if (s.status === "unsupported" || s.status === "invalid") {
         // keep leading/trailing whitespace outside the marker so markdown structure survives
-        const m = s.text.match(/^(\s*)([\s\S]*?)(\s*)$/);
-        return m && m[2] ? `${m[1]}${U_OPEN}${m[2]}${U_CLOSE}${m[3]}` : s.text;
+        const m = text.match(/^(\s*)([\s\S]*?)(\s*)$/);
+        return m && m[2] ? `${m[1]}${U_OPEN}${m[2]}${U_CLOSE}${m[3]}` : text;
       }
-      return s.text;
+      return text;
     })
     .join("");
 }
@@ -34,7 +46,9 @@ export function renderAnswer(md: string): string {
   );
   html = html
     .replace(/⁣⟦U⟧⁣/g, '<span class="unsupported" title="Not directly supported by a cited source">')
-    .replace(/⁣⟦\/U⟧⁣/g, "</span>");
+    .replace(/⁣⟦\/U⟧⁣/g, "</span>")
+    .replace(/⁣⟦L⟧⁣/g, '<span class="loaded" title="A judgemental word in the briefing\'s own voice, not a quotation">')
+    .replace(/⁣⟦\/L⟧⁣/g, "</span>");
   return DOMPurify.sanitize(html, { ADD_ATTR: ["data-source", "aria-label"] });
 }
 

@@ -201,3 +201,41 @@ def test_admin_endpoints_need_the_admin_token(indexed_settings, tmp_path, monkey
     assert client.get("/api/admin/usage").status_code == 403
     assert client.get("/api/admin/usage", headers={"Authorization": "Bearer wrong"}).status_code == 403
     assert client.get("/api/admin/sync", headers={"Authorization": "Bearer s3cret-token"}).status_code == 200
+
+
+def test_feedback_refers_to_the_briefing_and_shows_in_admin_usage(indexed_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("HANSARD_ADMIN_TOKEN", "s3cret-token")
+    app, state, _ = make_app(indexed_settings, tmp_path, auth=False)
+    client = TestClient(app)
+    final = events(client.post("/api/ask", json={"question": "trial by jury"}))[-1]
+    key = final["briefing_key"]
+    assert key and client.post("/api/ask", json={"question": "trial by jury"}).text.count(key) == 1  # replay too
+    assert client.post("/api/feedback", json={"question": "trial by jury", "useful": False,
+                                              "briefing_key": key}).json() == {"ok": True}
+    usage = client.get("/api/admin/usage", headers={"Authorization": "Bearer s3cret-token"}).json()
+    assert usage["visits"]["feedback"]["total"] == 1
+    assert usage["visits"]["feedback"]["recent_not_useful"][0]["question"] == "trial by jury"
+
+
+def test_visit_counts_keep_daily_totals_only(public):
+    client, state, _ = public
+    for path in ("/", "/", "/methodology"):
+        assert client.post("/api/hit", json={"path": path, "referrer": "https://news.example.org/story"}).status_code == 200
+    with state.connect() as con:
+        assert con.execute("SELECT sum(views) FROM page_views").fetchone()[0] == 3
+        assert tuple(con.execute("SELECT host, views FROM referrers").fetchone()) == ("news.example.org", 3)
+        assert con.execute("SELECT count(*) FROM day_visitors").fetchone()[0] == 1  # one visitor, hashed
+        con.execute("UPDATE day_visitors SET day = '2026-01-01'")  # yesterday's hashes...
+    client.post("/api/hit", json={"path": "/"})
+    with state.connect() as con:  # ...are rolled up into a count and deleted
+        assert con.execute("SELECT visitors FROM day_totals WHERE day = '2026-01-01'").fetchone()[0] == 1
+        assert con.execute("SELECT count(*) FROM day_visitors WHERE day = '2026-01-01'").fetchone()[0] == 0
+
+
+def test_public_status(public):
+    client, state, _ = public
+    st = client.get("/api/status").json()
+    assert st["briefings"] == "available" and st["archive_start"]
+    record_usage(state, None, "answer", "claude-opus-5-5", {"input_tokens": 3_000_000}, {})
+    st = client.get("/api/status").json()
+    assert st["briefings"] == "paused" and "budget" in st["briefings_note"]

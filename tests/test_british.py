@@ -46,3 +46,16 @@ def test_capitals_are_kept_at_the_start_of_sentences_lines_and_labels():
 def test_british_text_is_unchanged():
     text = "Ministers recognised the programme's behaviour and travelled to the centre; 4 per cent of councils."
     assert to_british(text) == text
+
+
+def test_loaded_words_are_flagged_only_outside_quotations():
+    from hansard.rag.neutral import flag_loaded
+
+    segs = [Segment("The minister admitted the delay and ", status="connective"),
+            Segment('said "this was a scandal', status="cited"),
+            Segment('" before benefit claims rose; MPs attacked it.', status="connective")]
+    assert flag_loaded(segs) == 2
+    words = [(i, f["word"]) for i, s in enumerate(segs) for f in s.loaded]
+    assert words == [(0, "admitted"), (2, "attacked")]
+    f = segs[0].loaded[0]
+    assert segs[0].text[f["start"]:f["end"]] == "admitted"

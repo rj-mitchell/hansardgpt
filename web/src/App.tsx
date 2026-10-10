@@ -60,6 +60,7 @@ export default function App() {
 
   useEffect(() => {
     void refresh();
+    void api.hit(window.location.pathname, document.referrer); // cookie-free page count
   }, [refresh]);
 
   useEffect(() => {
@@ -101,6 +102,7 @@ export default function App() {
         else if (ev.type === "final")
           update(id, {
             answer: (ev.answer as Answer | null) ?? null,
+            briefingKey: (ev.briefing_key as string | undefined) ?? undefined,
             note: ev.cached
               ? "This briefing was written earlier for the same question and settings, from the same data."
               : (ev.note as string | undefined),
@@ -206,7 +208,14 @@ export default function App() {
               <p className="status">Preparing a sourced briefing from {t.sources.length} contributions…</p>
             )}
             {(t.streamText || t.answer) && (
-              <AnswerView answer={t.answer} streamText={t.streamText} onCite={(h) => setDrawer({ turn: t.id, h })} />
+              <AnswerView
+                question={t.question}
+                answer={t.answer}
+                streamText={t.streamText}
+                sources={t.sources}
+                briefingKey={t.briefingKey}
+                onCite={(h) => setDrawer({ turn: t.id, h })}
+              />
             )}
             {t.note && <p className="muted small">{t.note}</p>}
             {t.status === "error" && (
@@ -217,7 +226,8 @@ export default function App() {
             <SourceList
               sources={t.sources}
               onOpen={(h) => setDrawer({ turn: t.id, h })}
-              open={!t.answer && t.status === "done"}
+              open={t.status === "answering" || (!t.answer && t.status === "done")}
+              writing={t.status === "answering"}
             />
             {t.status === "done" && t.semantic === false && (
               <p className="muted small">Meaning-based search is still being built; these results used keyword search.</p>

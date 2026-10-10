@@ -86,10 +86,31 @@ const answer: Answer = {
 describe("answer view", () => {
   it("opens the cited source with its quotes", () => {
     const onCite = vi.fn();
-    render(<AnswerView answer={answer} streamText="" onCite={onCite} />);
+    render(<AnswerView question="q" answer={answer} streamText="" sources={[]} onCite={onCite} />);
     fireEvent.click(screen.getByRole("button", { name: "Open source 1" }));
     expect(onCite).toHaveBeenCalledWith({ source: 1, quotes: ["inflation in costs"] });
     expect(screen.getByText(/Every substantive statement is cited/)).toBeInTheDocument();
+    expect(screen.getByText(/Written by AI \(Claude\) from the cited Hansard records only/)).toBeInTheDocument();
+  });
+
+  it("flags judgemental words in the briefing's own voice", () => {
+    const flagged: Answer = {
+      ...answer,
+      segments: [{ ...answer.segments[0], text: "The minister admitted inflation", loaded: [{ start: 13, end: 21, word: "admitted" }] }],
+      loaded_words: 1,
+    };
+    const { container } = render(<AnswerView question="q" answer={flagged} streamText="" sources={[]} onCite={vi.fn()} />);
+    expect(container.querySelector(".loaded")?.textContent).toBe("admitted");
+    expect(screen.getByText(/1 judgemental word in the briefing's own voice/)).toBeInTheDocument();
+  });
+
+  it("asks whether the briefing was useful and sends the answer once", () => {
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    render(<AnswerView question="q" answer={answer} streamText="" sources={[]} briefingKey="k1" onCite={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    expect(screen.getByText("Thank you for the feedback.")).toBeInTheDocument();
+    expect(JSON.parse(spy.mock.calls[0][1]!.body as string)).toEqual({ question: "q", useful: false, briefing_key: "k1" });
+    spy.mockRestore();
   });
 });
 

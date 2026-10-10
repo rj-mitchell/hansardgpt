@@ -1,7 +1,25 @@
 import { fmtDate } from "../render";
 import type { Evidence } from "../types";
 
-const SEAT_LABEL: Record<string, string> = { city: "city seats", town: "town seats", rural: "rural seats" };
+const SEAT_LABEL: Record<string, string> = { city: "City", town: "Town", rural: "Rural" };
+
+/** One labelled row of counts, e.g. Parties: Labour 7 · Conservative 4. Shown so readers can judge balance. */
+function EvidenceRow({ label, counts }: { label: string; counts: Record<string, number> }) {
+  const entries = Object.entries(counts);
+  if (!entries.length) return null;
+  return (
+    <div className="evidence-row">
+      <span className="evidence-label">{label}</span>
+      <ul className="evidence-groups">
+        {entries.map(([g, n]) => (
+          <li key={g}>
+            {g} <span className="count">{n}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /** Deterministic summary of the evidence behind a briefing (computed from the data, not by the model). */
 export function EvidenceBar({ evidence }: { evidence?: Evidence }) {
@@ -20,25 +38,12 @@ export function EvidenceBar({ evidence }: { evidence?: Evidence }) {
         {years ? `, ${years}` : ""}
         {evidence.divisions ? `, plus ${evidence.divisions} division${evidence.divisions === 1 ? "" : "s"}` : ""}
       </p>
-      <ul className="evidence-groups">
-        {Object.entries(evidence.groups).map(([g, n]) => (
-          <li key={g}>
-            {g} <span className="count">{n}</span>
-          </li>
-        ))}
-      </ul>
-      {Object.keys(evidence.seat_types).length > 0 && (
-        <p className="muted small">
-          MPs' seats:{" "}
-          {Object.entries(evidence.seat_types)
-            .map(([k, n]) => `${n} ${SEAT_LABEL[k] ?? k}`)
-            .join(" · ")}
-          {Object.keys(evidence.parties).length > 0 &&
-            ` · Parties: ${Object.entries(evidence.parties)
-              .map(([p, n]) => `${p} ${n}`)
-              .join(", ")}`}
-        </p>
-      )}
+      <EvidenceRow label="Speakers" counts={evidence.groups} />
+      <EvidenceRow label="Parties" counts={evidence.parties} />
+      <EvidenceRow
+        label="MPs' seats"
+        counts={Object.fromEntries(Object.entries(evidence.seat_types).map(([k, n]) => [SEAT_LABEL[k] ?? k, n]))}
+      />
     </section>
   );
 }

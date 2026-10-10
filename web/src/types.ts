@@ -102,6 +102,7 @@ export interface Segment {
   sources: number[];
   cited: { source: number; cited_text: string }[];
   status: "cited" | "connective" | "unsupported" | "invalid";
+  loaded?: { start: number; end: number; word: string }[];
 }
 
 export interface Answer {
@@ -112,6 +113,7 @@ export interface Answer {
   citations_invalid: number;
   grounded_ratio: number;
   unsupported_segments: number;
+  loaded_words?: number;
 }
 
 export interface Scope {
@@ -154,6 +156,7 @@ export interface Turn {
   status: TurnStatus;
   error?: string;
   note?: string;
+  briefingKey?: string;
 }
 
 export interface Meta {

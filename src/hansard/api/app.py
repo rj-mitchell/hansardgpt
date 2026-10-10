@@ -14,6 +14,7 @@ import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -33,9 +34,12 @@ from hansard.api.usage import (
     cache_key,
     cached_events,
     check_caps,
+    record_feedback,
     record_usage,
+    record_visit,
     store_events,
     summary,
+    visit_summary,
     visitor_key,
 )
 from hansard.config import REPO_ROOT, Settings, load_settings
@@ -72,6 +76,17 @@ class ScopeBody(BaseModel):
     written: bool = True
     pbc: bool = True
     votes: bool = True
+
+
+class FeedbackBody(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    useful: bool
+    briefing_key: str | None = Field(default=None, max_length=128)
+
+
+class HitBody(BaseModel):
+    path: str = Field(min_length=1, max_length=200)
+    referrer: str | None = Field(default=None, max_length=500)
 
 
 class AskBody(BaseModel):
@@ -219,6 +234,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                                      visitor)
                     if ev["type"] == "final" and ev.get("usage"):
                         record_usage(state, uid, "answer", ev.get("model"), ev["usage"], settings.usage, visitor)
+                    if ev["type"] == "final" and key:
+                        ev = {**ev, "briefing_key": key}  # lets the reader's feedback refer to this briefing
                     if ev["type"] == "text":
                         text.append(ev["text"])
                     else:
@@ -257,9 +274,42 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [])],
                 "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
 
+    # ---- feedback, visit counts and public status ---------------------------------------
+    @app.post("/api/feedback")
+    def feedback(body: FeedbackBody, request: Request, user=Depends(current_user)):
+        visitor, _ = requester(request, user)
+        record_feedback(state, body.briefing_key, body.question, body.useful, visitor)
+        return {"ok": True}
+
+    @app.post("/api/hit")
+    def hit(body: HitBody, request: Request, user=Depends(current_user)):
+        """Cookie-free page counting: no identifiers are sent or stored beyond today's salted hash."""
+        visitor, _ = requester(request, user)
+        host = urlparse(body.referrer).hostname if body.referrer else None
+        own = request.url.hostname
+        record_visit(state, body.path.split("?")[0], host if host and host != own else None, visitor)
+        return {"ok": True}
+
+    @app.get("/api/status")
+    def status():
+        p = get_pipeline()
+        runs = state.runs(1)
+        idx = p.engine.index.stats()
+        model_on = p.has_model()
+        paused = check_caps(state, None, settings.usage, None) if model_on else None
+        return {
+            "archive_start": settings.archive_start.isoformat(),
+            "latest_record": state.latest_record_date(),
+            "last_update": runs[0] if runs else None,
+            "briefings": "unavailable" if not model_on else ("paused" if paused else "available"),
+            "briefings_note": paused,
+            "passages": idx.get("passages", 0),
+            "meaning_search_coverage": round(idx["vectors"] / idx["passages"], 3) if idx.get("passages") else 0,
+        }
+
     @app.get("/api/admin/usage")
     def usage(user=Depends(admin_user)):
-        return summary(state)
+        return {**summary(state), "visits": visit_summary(state)}
 
     @app.get("/api/admin/sync")
     def sync_log(user=Depends(admin_user)):
@@ -275,6 +325,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             if path.startswith("api/"):
                 return JSONResponse({"detail": "Not found"}, status_code=404)
             f = dist / path
-            return FileResponse(f if path and f.is_file() else dist / "index.html")
+            if path and f.is_file():
+                return FileResponse(f)
+            page = dist / f"{path.strip('/')}.html"  # static pages: /methodology -> methodology.html
+            if path and "/" not in path.strip("/") and page.is_file():
+                return FileResponse(page)
+            return FileResponse(dist / "index.html")
 
     return app

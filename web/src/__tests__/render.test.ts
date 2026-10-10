@@ -77,3 +77,18 @@ describe("people", () => {
     expect(houseOf({ chamber: "Westminster Hall", speaker: null })).toBe("commons");
   });
 });
+
+describe("references", () => {
+  const base = {
+    n: 3, kind: "record" as const, title: "t", url: "u", date: "2023-03-09", text: "", twfy_url: "tw",
+  };
+  it("formats Hansard-style references", async () => {
+    const { formalReference } = await import("../export");
+    expect(formalReference({ ...base, chamber: "House of Commons", colnum: "412" })).toBe("HC Deb 9 March 2023, col 412");
+    expect(formalReference({ ...base, chamber: "House of Lords", colnum: "1050" })).toBe("HL Deb 9 March 2023, col 1050");
+    expect(formalReference({ ...base, chamber: "Westminster Hall", colnum: "120WH" })).toBe(
+      "HC Deb 9 March 2023, col 120WH (Westminster Hall)");
+    expect(formalReference({ ...base, chamber: "Written answers", record_type: "answer", uin: "12345" })).toBe(
+      "Written question 12345, answered 9 March 2023");
+  });
+});

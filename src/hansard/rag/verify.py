@@ -31,9 +31,11 @@ class Segment:
     sources: list[int] = field(default_factory=list)       # 1-based source numbers
     cited: list[dict[str, Any]] = field(default_factory=list)
     status: str = "cited"                                   # cited | connective | unsupported | invalid
+    loaded: list[dict[str, Any]] = field(default_factory=list)  # judgemental words outside quotes (neutral.py)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"text": self.text, "sources": self.sources, "cited": self.cited, "status": self.status}
+        return {"text": self.text, "sources": self.sources, "cited": self.cited, "status": self.status,
+                "loaded": self.loaded}
 
 
 @dataclass
@@ -68,6 +70,7 @@ class Verification:
             "citations_invalid": self.citations_invalid,
             "grounded_ratio": round(self.grounded_ratio, 3),
             "unsupported_segments": sum(1 for s in self.segments if s.status == "unsupported"),
+            "loaded_words": sum(len(s.loaded) for s in self.segments),
         }
 
 

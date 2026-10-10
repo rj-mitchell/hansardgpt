@@ -130,6 +130,31 @@ class _QuoteState:
         return "".join(out)
 
 
+def outside_quotes(segments: list[Any]) -> list[tuple[int, int, str]]:
+    """(segment index, offset, text) for every stretch of the model's own words, outside quotation marks."""
+    out: list[tuple[int, int, str]] = []
+    inside = False
+    for i, seg in enumerate(segments):
+        start = None
+        for j, ch in enumerate(seg.text):
+            opening = ch == "“" or (ch == '"' and not inside)
+            closing = ch == "”" or (ch == '"' and inside)
+            if inside:
+                if closing:
+                    inside = False
+                continue
+            if opening:
+                if start is not None:
+                    out.append((i, start, seg.text[start:j]))
+                    start = None
+                inside = True
+            elif start is None:
+                start = j
+        if start is not None:
+            out.append((i, start, seg.text[start:]))
+    return out
+
+
 def to_british(text: str) -> str:
     """British spelling for one piece of model-written text (quotations untouched)."""
     return _QuoteState().convert(text) if text else text

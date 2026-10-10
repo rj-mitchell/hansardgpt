@@ -25,10 +25,12 @@ export function SourceList({
   sources,
   onOpen,
   open,
+  writing = false,
 }: {
   sources: SourceCard[];
   onOpen: (h: Highlight) => void;
   open: boolean;
+  writing?: boolean;
 }) {
   if (!sources.length) return null;
   const groups: [string, SourceCard[]][] = [];
@@ -41,7 +43,9 @@ export function SourceList({
   return (
     <details className="sources" open={open}>
       <summary>
-        {open ? "" : "Show "}all {sources.length} source{sources.length === 1 ? "" : "s"}, by speaker group
+        {writing
+          ? `The ${sources.length} source${sources.length === 1 ? "" : "s"} the briefing is being written from, by speaker group`
+          : `${open ? "All" : "Show all"} ${sources.length} source${sources.length === 1 ? "" : "s"}, by speaker group`}
       </summary>
       <div className="sources-body">
         {groups.map(([g, items]) => (
