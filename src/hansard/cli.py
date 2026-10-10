@@ -308,6 +308,28 @@ def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False,
                 access_log=access_log)
 
 
+@app.command()
+def backup(to: Path = typer.Option(None, help="folder for backups (default: <data>/backups)"),
+           keep: int = typer.Option(14, help="how many daily backups to keep")):
+    """Back up what cannot be rebuilt: saved briefings, reports, feedback, usage and visit counts."""
+    from hansard.backup import make_backup
+
+    _setup_logging()
+    typer.echo(f"Backed up to {make_backup(_settings(), to, keep)}")
+
+
+@app.command()
+def restore(archive: Path = typer.Argument(..., exists=True, dir_okay=False),
+            yes: bool = typer.Option(False, "--yes", help="do not ask for confirmation")):
+    """Put a backup back (stop the site first). Replaces the current saved briefings, reports and usage."""
+    from hansard.backup import restore_backup
+
+    if not yes:
+        typer.confirm("This replaces the current saved briefings, reports and usage records. Continue?", abort=True)
+    restore_backup(_settings(), archive)
+    typer.echo("Restored. Start the site again.")
+
+
 @user_app.command("add")
 def user_add(email: str, admin: bool = typer.Option(False),
              password: str = typer.Option(..., prompt=True, hide_input=True, confirmation_prompt=True)):

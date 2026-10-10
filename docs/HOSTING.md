@@ -88,7 +88,7 @@ The script then:
   installs fail2ban, which blocks anyone who keeps guessing the password;
 - builds and starts the site, with HTTPS certificates obtained automatically;
 - starts loading Hansard since 2010 in the background (30–60 minutes);
-- sets up the twice-daily update.
+- sets up the twice-daily update and a nightly backup.
 
 At the end it prints a command for checking usage and spend. Keep it somewhere safe; it contains your admin
 token.
@@ -177,9 +177,32 @@ Your admin token is in `/opt/hansardgpt/deploy/.env` (`HANSARD_ADMIN_TOKEN=`).
 
 ## Backups
 
-Everything can be rebuilt from public sources except one file: the saved briefings, usage records, feedback and
-visit counts. Turn on Hostkey's snapshot backups if offered, or ask for the nightly off-site copy to
-be set up.
+Everything can be rebuilt from public sources except the saved briefings, reports from readers, feedback, usage and
+visit counts. The setup script backs these up **every night at 3.30am**, keeping the last 14 days, in
+`/opt/hansardgpt/deploy/backups` on the server.
+
+Those copies protect against mistakes, but not against losing the whole server, so now and then (monthly, say)
+copy them to your own computer. In Terminal or PowerShell on your computer, not the server:
+
+```
+scp "root@YOUR.SERVER.IP:/opt/hansardgpt/deploy/backups/*.tar.gz" .
+```
+
+This puts the files in the folder you are in. If Hostkey offers snapshot backups of the whole server, turning them
+on as well is worthwhile.
+
+To make a backup straight away: `cd /opt/hansardgpt/deploy && docker compose run --rm -T app hansard backup --to /backups`.
+
+To put a backup back (replacing what is there now), on the server:
+
+```
+cd /opt/hansardgpt/deploy
+docker compose stop app
+docker compose run --rm -T app hansard restore /backups/where-they-stand-2026-10-11.tar.gz --yes
+docker compose start app
+```
+
+(Use the date of the backup you want; `ls backups` lists them.)
 
 ## Spending limits
 

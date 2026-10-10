@@ -12,7 +12,7 @@
 #   4. builds and starts the app behind Caddy (automatic HTTPS)
 #   5. starts the one-off bootstrap in the background (downloads ~5 GB of Hansard
 #      since 2010, ingests, indexes; embeddings continue in later syncs)
-#   6. installs the twice-daily sync timer
+#   6. installs the twice-daily sync timer and the nightly backup timer
 # The site is public. An admin token (for /api/admin/usage and /api/admin/sync) is
 # generated into deploy/.env. For an invite-only site instead, see the README.
 set -euo pipefail
@@ -76,10 +76,11 @@ docker compose up -d --build
 echo "==> Starting the initial data load in the background (log: /var/log/hansard-bootstrap.log)"
 nohup docker compose run --rm -T app hansard bootstrap --embed-minutes 120 > /var/log/hansard-bootstrap.log 2>&1 &
 
-echo "==> Installing the sync timer"
-cp hansard-sync.service hansard-sync.timer /etc/systemd/system/
+echo "==> Installing the sync and backup timers"
+mkdir -p backups
+cp hansard-sync.service hansard-sync.timer hansard-backup.service hansard-backup.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now hansard-sync.timer
+systemctl enable --now hansard-sync.timer hansard-backup.timer
 
 cat <<MSG
 

@@ -258,7 +258,10 @@ marked `noindex`. A briefing can be withdrawn with `POST /api/admin/briefings/<i
 page, data and card then return 410 Gone. `GET /api/admin/briefings` lists recent ones.
 
 **Backups.** Everything can be rebuilt from public sources except `data/state.sqlite`, which holds the saved
-briefings, usage, the answer cache, feedback, visit counts, the sync log and any accounts. Back that file up.
+briefings, reports, usage, the answer cache, feedback, visit counts, the sync log and any accounts.
+`hansard backup` makes a checked copy (with `settings.local.toml`) as `data/backups/where-they-stand-DATE.tar.gz`,
+keeping the last 14; `hansard restore FILE` puts one back. On a server set up by `provision.sh`, a timer runs it
+nightly into `deploy/backups/` (see [docs/HOSTING.md](docs/HOSTING.md#backups)).
 
 ## Ranking: recency and role weighting
 

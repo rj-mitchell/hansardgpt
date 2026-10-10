@@ -257,3 +257,26 @@ def test_bootstrap_choices_are_remembered_for_later_syncs(tmp_path, monkeypatch)
     s = load_settings()
     assert s.archive_start == date(2025, 1, 1)
     assert s.embedding["enabled"] is False and s.embedding["dim"]  # other embedding settings kept
+
+
+def test_backup_is_a_checked_copy_and_restores(settings, tmp_path):
+    import tarfile
+
+    from hansard.backup import make_backup, restore_backup
+    from hansard.store.state import StateDB
+
+    state = StateDB(settings.state_db)
+    state.set("marker", "before")
+    (settings.data_dir / "settings.local.toml").write_text('[archive]\nstart_date = "2015-01-01"\n')
+    dest = tmp_path / "backups"
+    first = make_backup(settings, dest, keep=2, day="2026-10-01")
+    with tarfile.open(first) as tar:
+        assert sorted(tar.getnames()) == ["settings.local.toml", "state.sqlite"]
+    make_backup(settings, dest, keep=2, day="2026-10-02")
+    make_backup(settings, dest, keep=2, day="2026-10-03")
+    assert sorted(p.name for p in dest.iterdir()) == ["where-they-stand-2026-10-02.tar.gz",
+                                                       "where-they-stand-2026-10-03.tar.gz"]
+
+    state.set("marker", "after")
+    restore_backup(settings, dest / "where-they-stand-2026-10-03.tar.gz")
+    assert StateDB(settings.state_db).get("marker") == "before"

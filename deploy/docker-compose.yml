@@ -17,6 +17,8 @@ services:
     logging: *logging
     volumes:
       - hansard-data:/data
+      # daily backups land here on the server itself (/opt/hansardgpt/deploy/backups), easy to copy off
+      - ./backups:/backups
     restart: unless-stopped
     expose:
       - "8000"
