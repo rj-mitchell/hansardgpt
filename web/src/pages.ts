@@ -69,3 +69,89 @@ async function showStatus(el: HTMLElement) {
 
 const live = document.getElementById("status-live");
 if (live) void showStatus(live);
+
+// ---- corrections page --------------------------------------------------------------------------------
+
+interface Correction {
+  date: string;
+  kind: "withdrawn" | "correction" | "complaint" | "general";
+  briefing_id: string | null;
+  question: string | null;
+  note: string;
+}
+
+async function showCorrections(el: HTMLElement) {
+  try {
+    const resp = await fetch("/api/corrections");
+    if (!resp.ok) throw new Error(String(resp.status));
+    const { corrections } = (await resp.json()) as { corrections: Correction[] };
+    if (!corrections.length) {
+      const p = document.createElement("p");
+      p.textContent = "No corrections so far.";
+      el.replaceChildren(p);
+      return;
+    }
+    const ol = document.createElement("ol");
+    ol.className = "corrections-list";
+    for (const c of corrections) {
+      const li = document.createElement("li");
+      const when = document.createElement("time");
+      when.dateTime = c.date;
+      when.textContent = fmtDate(c.date);
+      const what = document.createElement("strong");
+      what.textContent = c.kind === "withdrawn" ? "Briefing withdrawn" : "Correction";
+      const body = document.createElement("p");
+      body.textContent = (c.question ? `“${c.question}”. ` : "") + c.note;
+      li.append(when, " ", what, body);
+      ol.append(li);
+    }
+    el.replaceChildren(ol);
+  } catch {
+    el.textContent = "The corrections log could not be loaded. Please try again later.";
+  }
+}
+
+const correctionsEl = document.getElementById("corrections-live");
+if (correctionsEl) void showCorrections(correctionsEl);
+
+const reportForm = document.getElementById("report-form") as HTMLFormElement | null;
+reportForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const data = new FormData(reportForm);
+  const errorEl = document.getElementById("report-error")!;
+  const message = String(data.get("message") ?? "").trim();
+  if (message.length < 10) {
+    errorEl.textContent = "Please describe the problem in a sentence or two.";
+    errorEl.hidden = false;
+    return;
+  }
+  const briefing = String(data.get("briefing") ?? "").match(/\/b\/([a-km-z2-9]{10})/)?.[1] ?? null;
+  const button = reportForm.querySelector("button[type=submit]") as HTMLButtonElement;
+  button.disabled = true;
+  try {
+    const resp = await fetch("/api/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: data.get("kind"),
+        message,
+        briefing_id: briefing,
+        contact: String(data.get("contact") ?? "").trim() || null,
+        website: String(data.get("website") ?? ""),
+      }),
+    });
+    if (!resp.ok) {
+      const detail = (await resp.json().catch(() => ({}))).detail;
+      throw new Error(typeof detail === "string" ? detail : "failed");
+    }
+    reportForm.hidden = true;
+    document.getElementById("report-sent")!.hidden = false;
+  } catch (err) {
+    errorEl.textContent =
+      err instanceof Error && err.message !== "failed"
+        ? err.message
+        : "The report could not be sent. Please try again, or email wheretheystanduk@gmail.com.";
+    errorEl.hidden = false;
+    button.disabled = false;
+  }
+});

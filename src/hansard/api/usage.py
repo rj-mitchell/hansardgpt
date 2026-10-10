@@ -179,6 +179,9 @@ def summary(state: StateDB) -> dict[str, Any]:
                       count(*), round(sum(cost_usd), 4), count(DISTINCT x.visitor)
                FROM usage x LEFT JOIN users u ON u.user_id = x.user_id
                WHERE x.at >= ? GROUP BY 1 ORDER BY 3 DESC""", (month,)).fetchall()
+        today = con.execute("SELECT coalesce(sum(cost_usd), 0), count(*) FROM usage WHERE at >= ?",
+                            (datetime.now(UTC).strftime("%Y-%m-%d"),)).fetchone()
     return {"month": month,
+            "today_usd": round(today[0], 4), "today_calls": today[1],
             "by_user": [{"email": r[0], "calls": r[1], "cost_usd": r[2], "visitors": r[3]} for r in rows],
             "total_usd": round(sum(r[2] or 0 for r in rows), 4)}

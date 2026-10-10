@@ -41,6 +41,15 @@ from hansard.api.briefings import (
     withdraw_briefing,
 )
 from hansard.api.cards import card_png
+from hansard.api.reports import (
+    CLOSED,
+    DAILY_LIMIT,
+    add_report,
+    close_report,
+    corrections,
+    list_reports,
+    recent_count,
+)
 from hansard.api.usage import (
     RateLimiter,
     cache_key,
@@ -95,6 +104,20 @@ class FeedbackBody(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     useful: bool
     briefing_key: str | None = Field(default=None, max_length=128)
+
+
+class ReportBody(BaseModel):
+    kind: Literal["correction", "complaint", "general"]
+    message: str = Field(min_length=10, max_length=4000)
+    briefing_id: str | None = Field(default=None, max_length=20)
+    contact: str | None = Field(default=None, max_length=200)
+    website: str | None = Field(default=None, max_length=200)  # left empty by people; filled in by spam bots
+
+
+class CloseReportBody(BaseModel):
+    status: Literal["resolved", "dismissed"]
+    resolution: str = Field(min_length=3, max_length=2000)       # private
+    public_note: str | None = Field(default=None, max_length=1000)  # shown on the corrections page
 
 
 class WithdrawBody(BaseModel):
@@ -372,6 +395,31 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     def feedback(body: FeedbackBody, request: Request, user=Depends(current_user)):
         visitor, _ = requester(request, user)
         record_feedback(state, body.briefing_key, body.question, body.useful, visitor)
+        return {"ok": True}
+
+    @app.post("/api/report")
+    def report(body: ReportBody, request: Request, user=Depends(current_user)):
+        visitor, _ = requester(request, user)
+        if body.website:  # a bot: say thanks, keep nothing
+            return {"ok": True}
+        if recent_count(state, visitor) >= DAILY_LIMIT:
+            raise HTTPException(429, "Thank you, we have your reports. Please email us if there is more to add.")
+        bid = body.briefing_id if body.briefing_id and ID_PATTERN.match(body.briefing_id) else None
+        add_report(state, body.kind, body.message.strip(), bid, (body.contact or "").strip() or None, visitor)
+        return {"ok": True}
+
+    @app.get("/api/corrections")
+    def corrections_log():
+        return {"corrections": corrections(state)}
+
+    @app.get("/api/admin/reports")
+    def reports_list(status: str | None = None, user=Depends(admin_user)):
+        return {"reports": list_reports(state, status if status in ("open", *CLOSED) else None)}
+
+    @app.post("/api/admin/reports/{report_id}/close")
+    def report_close(report_id: int, body: CloseReportBody, user=Depends(admin_user)):
+        if not close_report(state, report_id, body.status, body.resolution, body.public_note):
+            raise HTTPException(404, "No such report.")
         return {"ok": True}
 
     @app.post("/api/hit")

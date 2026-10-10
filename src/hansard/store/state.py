@@ -87,6 +87,22 @@ CREATE TABLE IF NOT EXISTS briefings (
 );
 CREATE INDEX IF NOT EXISTS briefings_created ON briefings(created_at);
 -- "Was this briefing useful?" answers
+-- "Report a problem": corrections, complaints and general messages. Contact details are optional and are
+-- deleted when a report is closed; only the public note (if any) is ever shown on the site.
+CREATE TABLE IF NOT EXISTS reports (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    at           TEXT NOT NULL,
+    kind         TEXT NOT NULL,
+    briefing_id  TEXT,
+    message      TEXT NOT NULL,
+    contact      TEXT,
+    visitor      TEXT,
+    status       TEXT NOT NULL DEFAULT 'open',
+    closed_at    TEXT,
+    resolution   TEXT,
+    public_note  TEXT
+);
+CREATE INDEX IF NOT EXISTS reports_status ON reports(status, at);
 CREATE TABLE IF NOT EXISTS feedback (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     at           TEXT NOT NULL,

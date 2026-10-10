@@ -1027,6 +1027,131 @@ legend,
   color: var(--ink-soft);
 }
 
+/* ---- report a problem -------------------------------------------------------------------- */
+
+/* author styles such as display: grid must never override the hidden attribute */
+[hidden] {
+  display: none !important;
+}
+
+.report-open {
+  margin-block-start: var(--space-2xs);
+}
+
+.report-form {
+  position: relative;
+  display: grid;
+  gap: var(--space-xs);
+  max-inline-size: 38rem;
+  margin-block-start: var(--space-s);
+  padding: var(--space-s);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--sans);
+  font-size: var(--step--1);
+}
+
+.report-form h3,
+.report-form h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--step-0);
+}
+
+.report-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.report-form fieldset label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.report-form textarea,
+.report-form input:not([type="radio"]) {
+  inline-size: 100%;
+}
+
+/* A field people never see; spam bots fill it in. Kept out of view and out of the tab order. */
+.report-form .trap {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.form-actions {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-s);
+}
+
+.form-error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.admin section {
+  margin-block-start: var(--space-l);
+}
+
+.admin h3 {
+  margin-block: var(--space-s) var(--space-2xs);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-family: var(--sans);
+  font-size: var(--step--1);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: var(--space-2xs) var(--space-xs);
+  border-block-end: 1px solid var(--rule);
+  text-align: start;
+  vertical-align: top;
+}
+
+.report-message {
+  white-space: pre-wrap;
+}
+
+.corrections-list {
+  padding: 0;
+  list-style: none;
+}
+
+.corrections-list li {
+  padding-block: var(--space-xs);
+  border-block-end: 1px solid var(--rule);
+}
+
+.corrections-list time {
+  font-family: var(--sans);
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+.corrections-list p {
+  margin-block: var(--space-2xs) 0;
+}
+
+.report-sent {
+  margin-block-start: var(--space-xs);
+}
+
 .unsupported {
   background: var(--warn-subtle);
   text-decoration: underline dotted var(--warn);

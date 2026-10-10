@@ -109,9 +109,14 @@ each twice-daily update, newest records first; on 8 cores the whole archive take
 
 ## Day to day
 
+The easiest way to keep an eye on the site is the admin page, **https://wheretheystand.uk/admin**. Paste your
+admin token (below) to see spending, reports from readers, feedback, visits, recent briefings and update
+history. You can close reports there (adding a public note for the [corrections page](https://wheretheystand.uk/corrections)
+if something was put right) and withdraw a briefing. A withdrawal reason is shown publicly.
+
 | To… | Run on the server |
 |---|---|
-| See usage, spend, visits and feedback | the `curl` command printed at the end of setup |
+| See usage, spend, visits and feedback | the admin page, or the `curl` command printed at the end of setup |
 | See the update history | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/sync` |
 | Install a new version of the site | `cd /opt/hansardgpt && git pull && cd deploy && docker compose up -d --build` |
 | Restart the site | `cd /opt/hansardgpt/deploy && docker compose restart` |

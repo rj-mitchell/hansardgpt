@@ -378,6 +378,8 @@ export default function App() {
           <a href="/methodology">Methodology</a>
           <a href="/changelog">Changelog</a>
           <a href="/status">Status</a>
+          <a href="/corrections">Corrections</a>
+          <a href="/corrections#report">Report a problem</a>
         </nav>
         {(meta?.attribution ?? ATTRIBUTION).map((a) => (
           <a key={a.url} href={a.url} target="_blank" rel="noreferrer">

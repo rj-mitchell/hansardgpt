@@ -42,6 +42,7 @@ export const api = {
   briefing: (id: string) => fetch(`/api/briefings/${id}`).then((r) => json<SavedBriefing>(r)),
   feedback: (question: string, useful: boolean, briefingKey?: string) =>
     post("/api/feedback", { question, useful, briefing_key: briefingKey ?? null }).then(json),
+  report: (body: ReportInput) => post("/api/report", body).then(json),
   /** Cookie-free page count: the path and the referring site only. */
   hit: (path: string, referrer: string) =>
     post("/api/hit", { path, referrer: referrer || null }).catch(() => undefined),
@@ -50,6 +51,14 @@ export const api = {
       json<{ plan: Plan; sources: SourceCard[] }>(r),
     ),
 };
+
+export interface ReportInput {
+  kind: "correction" | "complaint" | "general";
+  message: string;
+  briefing_id?: string | null;
+  contact?: string | null;
+  website?: string; // must stay empty: a trap for spam bots
+}
 
 export function askBody(
   question: string,

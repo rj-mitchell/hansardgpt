@@ -331,3 +331,48 @@ def test_preview_text_starts_with_the_summary():
     md = "# Onshore wind: city and rural MPs\n\n**Headline:** In the records retrieved, rural MPs objected [Source 3].\n\n**Ministers - supportive**"
     assert summary_text({"markdown": md}).startswith("In the records retrieved, rural MPs objected.")
     assert summary_text({"markdown": "Headline\n\n" + "word " * 100}, limit=40).endswith("…")
+
+
+def test_reports_are_private_until_closed_with_a_public_note(indexed_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("HANSARD_ADMIN_TOKEN", "s3cret-token")
+    app, state, _ = make_app(indexed_settings, tmp_path, auth=False)
+    client = TestClient(app)
+    admin = {"Authorization": "Bearer s3cret-token"}
+    final = events(client.post("/api/ask", json={"question": "What has been said about trial by jury?"}))[-1]
+    bid = final["briefing_id"]
+
+    ok = client.post("/api/report", json={"kind": "correction", "message": "The second point misquotes the minister.",
+                                           "briefing_id": bid, "contact": "reader@example.org"})
+    assert ok.status_code == 200
+    assert client.post("/api/report", json={"kind": "general", "message": "too short"}).status_code == 422
+    # a spam bot fills in the hidden field: thanked, but nothing is kept
+    assert client.post("/api/report", json={"kind": "general", "message": "Buy cheap watches now!!",
+                                            "website": "http://spam.example"}).status_code == 200
+
+    assert client.get("/api/admin/reports").status_code == 403
+    reports = client.get("/api/admin/reports?status=open", headers=admin).json()["reports"]
+    assert len(reports) == 1 and reports[0]["briefing_id"] == bid and reports[0]["contact"] == "reader@example.org"
+    assert client.get("/api/corrections").json()["corrections"] == []
+
+    rid = reports[0]["id"]
+    closed = client.post(f"/api/admin/reports/{rid}/close", headers=admin,
+                         json={"status": "resolved", "resolution": "Checked; quote was wrong.",
+                               "public_note": "A quotation in a briefing on jury trials was corrected."})
+    assert closed.status_code == 200
+    after = client.get("/api/admin/reports", headers=admin).json()["reports"][0]
+    assert after["status"] == "resolved" and after["contact"] is None  # contact details deleted on closing
+
+    client.post(f"/api/admin/briefings/{bid}/withdraw", headers=admin, json={"reason": "Misquoted a minister."})
+    log = client.get("/api/corrections").json()["corrections"]
+    assert {c["kind"] for c in log} == {"withdrawn", "correction"}
+    assert "Checked" not in json.dumps(log)  # the private resolution never appears publicly
+    withdrawn = next(c for c in log if c["kind"] == "withdrawn")
+    assert withdrawn["note"] == "Misquoted a minister." and withdrawn["briefing_id"] == bid
+
+
+def test_reports_are_limited_per_visitor(indexed_settings, tmp_path):
+    app, _, _ = make_app(indexed_settings, tmp_path, auth=False, requests_per_minute=100)
+    client = TestClient(app)
+    body = {"kind": "general", "message": "A perfectly reasonable message."}
+    codes = [client.post("/api/report", json=body).status_code for _ in range(11)]
+    assert codes[:10] == [200] * 10 and codes[10] == 429

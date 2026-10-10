@@ -3,6 +3,7 @@ import { api } from "../api";
 import { briefingWithSources, referencesOnly } from "../export";
 import { fmtDate, renderAnswer, renderPlain, segmentsToMarkdown } from "../render";
 import type { Answer, Highlight, SourceCard } from "../types";
+import { ReportProblem } from "./ReportProblem";
 
 interface Props {
   question: string;
@@ -59,6 +60,7 @@ export function AnswerView({
             <CopyButton label="Copy references" text={() => referencesOnly(answer, sources)} />
             <Feedback question={question} briefingKey={briefingKey} />
           </div>
+          <ReportProblem briefingId={briefingId} />
         </>
       )}
     </div>

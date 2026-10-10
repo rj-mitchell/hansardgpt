@@ -39,6 +39,8 @@ export default defineConfig({
         methodology: here("./methodology.html"),
         changelog: here("./changelog.html"),
         status: here("./status.html"),
+        corrections: here("./corrections.html"),
+        admin: here("./admin.html"),
       },
     },
   },
