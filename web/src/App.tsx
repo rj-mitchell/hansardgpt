@@ -13,10 +13,10 @@ import { fmtDate } from "./render";
 import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const EXAMPLES = [
-  { q: "What have northern Labour MPs said about HS2?", house: "commons" },
-  { q: "Where do rural and city MPs differ on onshore wind farms?", house: "gilt" },
-  { q: "What have peers said about assisted dying?", house: "lords" },
-  { q: "How have ministers justified delays to HS2?", house: "commons" },
+  "How have ministers justified delays to HS2?",
+  "What have northern Labour MPs said about HS2?",
+  "Where do rural and city MPs differ on onshore wind farms?",
+  "What have peers said about assisted dying?",
 ];
 
 function loadSettings(defaults?: Meta["defaults"]): Settings {
@@ -132,7 +132,7 @@ export default function App() {
       <header className="masthead full-width">
         <div className="running-head">
           <span>
-            Debates, written answers and votes{meta ? `, ${meta.archive_start.slice(0, 4)} to date` : ""}
+            Debates, written answers and divisions{meta ? ` · ${meta.archive_start.slice(0, 4)} to date` : ""}
           </span>
           <span className="masthead-actions">
             <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
@@ -145,17 +145,16 @@ export default function App() {
             )}
           </span>
         </div>
-        <h1 className="wordmark">
+        <div className="title-block">
           <Mark />
-          <span className="wordmark-text">
-            Hansard <em>Guru</em>
-          </span>
-        </h1>
-        <p className="tagline">
-          {BRAND.tagline}
-          {meta?.last_sync?.finished_at ? ` · updated ${fmtDate(meta.last_sync.finished_at.slice(0, 10))}` : ""}
-        </p>
-        <p className="stamp">Independent · every claim sourced</p>
+          <h1 className="wordmark">{BRAND.name}</h1>
+          <p className="tagline">{BRAND.tagline}</p>
+          <p className="imprint">
+            <span>Independent research service</span>
+            <span>Every statement cited</span>
+            {meta?.last_sync?.finished_at && <span>Updated {fmtDate(meta.last_sync.finished_at.slice(0, 10))}</span>}
+          </p>
+        </div>
       </header>
 
       {showControls && (
@@ -170,11 +169,12 @@ export default function App() {
       <main className="thread" aria-live="polite">
         {turns.length === 0 && (
           <section className="empty">
-            <h2>What has Parliament said about…?</h2>
+            <h2>Research the record of Parliament</h2>
             <p>
-              Ask a question and the Guru reads Hansard for you, then writes a short briefing on where ministers, the
-              opposition, city, town and rural MPs, and peers stand. It has no opinions of its own: every point links
-              to the speech it came from, with the speaker's role on that date and the official reference.
+              Put a question and receive a briefing on the positions taken by ministers, the opposition, city, town
+              and rural MPs, and peers, drawn only from the Official Report. The service expresses no view of its own.
+              Each statement is cited to the verbatim record, with the speaker's office and constituency on that date
+              and the column or question reference.
             </p>
             <p className="muted small">
               Looking for every mention of a word?{" "}
@@ -183,16 +183,16 @@ export default function App() {
               </a>{" "}
               does that best.
             </p>
-            <h3 className="examples-head">Try one of these</h3>
-            <ul className="examples">
+            <h3 className="examples-head">Example questions</h3>
+            <ol className="examples">
               {EXAMPLES.map((ex) => (
-                <li key={ex.q} data-house={ex.house}>
-                  <button type="button" className="example" onClick={() => setQuestion(ex.q)}>
-                    {ex.q}
+                <li key={ex}>
+                  <button type="button" className="example" onClick={() => setQuestion(ex)}>
+                    {ex}
                   </button>
                 </li>
               ))}
-            </ul>
+            </ol>
           </section>
         )}
         {turns.map((t) => (
@@ -200,10 +200,10 @@ export default function App() {
             <h2 className="question">{t.question}</h2>
             {t.plan && <PlanChips key={JSON.stringify(t.plan)} plan={t.plan} meta={meta} busy={busy} onRerun={(p) => void run(t.question, p, t.id)} />}
             <EvidenceBar evidence={t.evidence} />
-            {t.status === "planning" && <p className="status">Reading your question…</p>}
-            {t.status === "searching" && <p className="status">Leafing through Hansard…</p>}
+            {t.status === "planning" && <p className="status">Interpreting the question…</p>}
+            {t.status === "searching" && <p className="status">Searching the Official Report…</p>}
             {t.status === "answering" && !t.streamText && t.sources.length > 0 && (
-              <p className="status">Writing a sourced briefing from {t.sources.length} contributions…</p>
+              <p className="status">Preparing a sourced briefing from {t.sources.length} contributions…</p>
             )}
             {(t.streamText || t.answer) && (
               <AnswerView answer={t.answer} streamText={t.streamText} onCite={(h) => setDrawer({ turn: t.id, h })} />
@@ -233,7 +233,7 @@ export default function App() {
         <textarea
           id="q"
           value={question}
-          placeholder="Ask about anything debated in Parliament…"
+          placeholder="Ask a question about the proceedings of Parliament…"
           rows={2}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => {

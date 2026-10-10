@@ -114,12 +114,10 @@ The web app takes its look from the printed Official Report:
 - the bound volumes' cloth, green for the Commons and red for the Lords, with gilt lettering. Sources are edged
   in their House's colour, and the sign-in page (invite-only mode) is a volume cover.
 
-A lighter hand on top keeps it friendly:
-- a speech-bubble mark holding a gilt quotation mark, and "Guru" in Lords red with a gilt squiggle;
-- a small "independent · every claim sourced" stamp under the title;
-- example questions as cards with coloured spines, like volumes on a shelf;
-- a red ribbon marker on each briefing, as bound into each volume of the report;
-- rounder buttons and fields, and three "thinking" dots in Commons green, Lords red and gilt.
+The tone is that of a reference work:
+- a monogram seal like the label on a volume's spine, and the name in spaced capitals;
+- square corners, ruled lists, and example questions numbered as on the Order Paper;
+- plain, formal wording; colour only where it carries meaning (the House, a citation, a warning).
 
 Dark mode follows the system setting. The CSS follows [good-css](https://github.com/vojtaholik/good-css):
 - logical properties;
