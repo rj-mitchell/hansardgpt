@@ -287,13 +287,18 @@ The authority multiplier `m` depends on the speaker's role on the date of the re
    appear only inside an exact, cited quotation from the speaker who used them. It never says an individual
    contradicted themselves; it gives what they said on each date. Fair and accurate reports of Parliament have
    legal protection; editorialising would fall outside it.
-4. **Deterministic retrieval.** The same plan and sliders always give the same sources.
-5. **Sources only.** Claude (Opus 5.5) receives only those sources, as search-result blocks with citations
+4. **British English.** Briefings and the one-line interpretation of each question are written in British
+   English (spelling, vocabulary, and dates such as 9 October 2026). A final deterministic pass then converts
+   any American spelling left in the model's own words (organize, program, percent, defense and so on). It never
+   touches quotations, which stay exactly as Hansard records them, nor capitalised names such as the World
+   Health Organization.
+5. **Deterministic retrieval.** The same plan and sliders always give the same sources.
+6. **Sources only.** Claude (Opus 5.5) receives only those sources, as search-result blocks with citations
    enabled, under rules that forbid outside knowledge. When the sources don't answer the question, it must say
    "No records found."
-6. **Verification.** Every citation is re-checked against our copy of the source text. Any uncited
+7. **Verification.** Every citation is re-checked against our copy of the source text. Any uncited
    substantive sentence is flagged in the UI as unsupported, never passed off as sourced.
-7. **No guessing on empty results.** If retrieval finds nothing, the model is not called at all.
+8. **No guessing on empty results.** If retrieval finds nothing, the model is not called at all.
 
 ## Data sources and licensing
 

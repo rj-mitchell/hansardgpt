@@ -207,7 +207,8 @@ Rules:
 - portfolios: the policy areas the question is about (used to boost relevant ministers, not to filter):
 {ports}
 - wants_votes: true if the question is about how members voted, rebellions, dissent or divisions.
-- interpretation: one plain sentence describing the filters you chose."""
+- interpretation: one plain sentence describing the filters you chose, in British English (British spelling,
+  dates written as 9 October 2026)."""
 
 
 def parse_with_model(client, settings, question: str, history: list[dict[str, str]] | None,

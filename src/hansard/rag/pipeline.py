@@ -19,6 +19,7 @@ from typing import Any
 
 from hansard.config import Settings
 from hansard.engine import Engine, Filters, Scope
+from hansard.rag.british import britishise_segments, to_british
 from hansard.rag.prompts import NO_RECORDS
 from hansard.rag.query_parse import QueryPlan, parse_offline, parse_with_model, resolve_speakers
 from hansard.rag.sources import build_sources
@@ -101,6 +102,7 @@ class Pipeline:
             try:
                 plan, u = parse_with_model(self.client, self.settings, req.question, req.history, self.parties(),
                                            self.today)
+                plan.interpretation = to_british(plan.interpretation)
                 from hansard.rag.answer import usage_dict
 
                 usage = usage_dict(u)
@@ -156,6 +158,7 @@ class Pipeline:
             yield {"type": "error", "message": "The model declined to answer this question."}
             return
         report = verify(final["blocks"], sources)
+        britishise_segments(report.segments)  # the model's own words only; quotations stay verbatim
         yield {"type": "final", "answer": report.to_dict(), "usage": final["usage"], "model": final["model"],
                "stop_reason": final["stop_reason"]}
 

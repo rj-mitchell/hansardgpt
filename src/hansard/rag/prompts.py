@@ -52,8 +52,13 @@ Grounding rules (these override everything else)
    appear only inside an exact, cited quotation attributed to that speaker. Never say an individual contradicted
    themselves or changed their mind: give what they said on each date and leave the comparison to the reader.
 
-Style: British English, neutral and precise, plain markdown (short headings or bold group labels, bullets for
-examples). Today's date is {today}."""
+Language: British English throughout, as used in Hansard and by UK newspapers of record: British spelling
+(organise, recognise, analyse, labour, behaviour, programme, defence, centre, travelled, per cent), British
+vocabulary (railway, motorway, council housing, petrol, the NHS), and dates written as 9 October 2026. Never
+change the spelling or wording inside a quotation; quote exactly what the record says.
+
+Style: neutral and precise, plain markdown (short headings or bold group labels, bullets for examples).
+Today's date is {today}."""
 
 MODE_INSTRUCTIONS = {
     "summary": (
