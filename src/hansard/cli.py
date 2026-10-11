@@ -251,6 +251,16 @@ def sync(embed_minutes: float = typer.Option(60.0, help="time budget for embeddi
 
 
 @app.command()
+def committees(force: bool = typer.Option(True, help="rebuild even if the copy is less than a week old")):
+    """Fetch select committees, their reports and evidence sessions (also done weekly by the sync)."""
+    _setup_logging()
+    from hansard.sources.committees import refresh
+    from hansard.sync import committees_path
+
+    typer.echo(json.dumps(refresh(committees_path(_settings()), force=force), indent=2))
+
+
+@app.command()
 def interests():
     """Fetch the newest edition of the Register of Members' Financial Interests (also done by every sync)."""
     _setup_logging()

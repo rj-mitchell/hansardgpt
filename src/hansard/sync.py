@@ -93,6 +93,10 @@ def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[d
     return load_demographics(demographics_path(settings)), status
 
 
+def committees_path(settings: Settings) -> Path:
+    return settings.data_dir / "committees.sqlite"
+
+
 def regmem_path(settings: Settings) -> Path:
     return settings.data_dir / "regmem.json"
 
@@ -227,6 +231,17 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("register of interests not updated: %s", exc)
                 stats["interests"] = {"error": str(exc)[:200]}
+
+        t = time.time()
+        if fetch and settings.section("committees").get("enabled", True):
+            try:  # select committees, their reports and who gave evidence: rebuilt about once a week
+                from hansard.sources.committees import refresh as refresh_committees
+
+                stats["committees"] = {**refresh_committees(committees_path(settings)),
+                                       "seconds": round(time.time() - t, 1)}
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("committees not updated: %s", exc)
+                stats["committees"] = {"error": str(exc)[:200]}
 
         t = time.time()
         if fetch and settings.section("edms").get("enabled", True):

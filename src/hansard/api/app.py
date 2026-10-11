@@ -709,6 +709,74 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return week_page(start, request)
 
     # ---- early day motions -----------------------------------------------------------------------
+    def get_committees():
+        from hansard.sources.committees import Committees
+        from hansard.sync import committees_path
+
+        with lock:
+            if "committees" not in holder:
+                holder["committees"] = Committees(committees_path(settings))
+        c = holder["committees"]
+        if not c.available():
+            raise HTTPException(503, "Committee information is being collected and will appear after the next update.")
+        return c
+
+    @app.get("/api/committees")
+    def committees_index():
+        """Current select and other committees of both Houses. Free: no AI."""
+        c = get_committees()
+        return {"committees": c.index(), "totals": c.stats()}
+
+    @app.get("/api/committees/{cid}")
+    def committee_detail(cid: int):
+        d = get_committees().committee(cid)
+        if d is None:
+            raise HTTPException(404, "There is no committee with that number.")
+        return d
+
+    @app.get("/api/inquiries/{iid}")
+    def inquiry_detail(iid: int):
+        d = get_committees().inquiry(iid)
+        if d is None:
+            raise HTTPException(404, "There is no inquiry with that number.")
+        return d
+
+    @app.get("/api/witnesses")
+    def witness_search(q: str = ""):
+        """Organisations and people who gave oral evidence to committees, and how often."""
+        return get_committees().witnesses(q[:200])
+
+    def committee_meta_page(kind: str, ident: int, request: Request) -> Response:
+        index = dist / f"{kind}.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        try:
+            c = get_committees()
+            d = c.committee(ident) if kind == "committee" else c.inquiry(ident)
+        except HTTPException:
+            d = None
+        path = f"/committees/{ident}" if kind == "committee" else f"/inquiries/{ident}"
+        if d is None:
+            return Response(page_with_meta(page, title="Not found — Where They Stand", description="Nothing here.",
+                                           url=base + path, image=None), status_code=404, media_type="text/html")
+        if kind == "committee":
+            title, desc = d["name"], (d.get("purpose") or f"The {d['name']}: its inquiries, reports and the "
+                                      "organisations it has heard from.")
+        else:
+            title = d["title"]
+            desc = (f"{d['title']}: an inquiry by the " + " and ".join(x["name"] for x in d["committees"]) +
+                    ", with its reports, the government's responses and who gave evidence.")
+        return Response(page_with_meta(page, title=f"{title} — Where They Stand", description=desc[:300],
+                                       url=base + path, image=None, noindex=False), media_type="text/html")
+
+    @app.get("/committees/{cid}", include_in_schema=False)
+    def committee_page(cid: int, request: Request):
+        return committee_meta_page("committee", cid, request)
+
+    @app.get("/inquiries/{iid}", include_in_schema=False)
+    def inquiry_page(iid: int, request: Request):
+        return committee_meta_page("inquiry", iid, request)
+
     def get_register():
         from hansard.sources.regmem import Register
         from hansard.sync import regmem_path
@@ -860,8 +928,14 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 edms["recent"] = edm_rows(edms["recent"])
             except (ValueError, OSError):
                 edms = None
+        evidence = []
+        if page.get("parliament_id"):
+            try:
+                evidence = get_committees().for_member(int(page["parliament_id"]))
+            except (HTTPException, ValueError, OSError):
+                evidence = []
         return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
-                "interests": get_register().for_person(pid)}
+                "interests": get_register().for_person(pid), "committee_evidence": evidence}
 
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):

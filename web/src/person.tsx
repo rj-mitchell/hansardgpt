@@ -58,6 +58,7 @@ interface PersonData {
   } | null;
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
   interests?: Interests | null;
+  committee_evidence?: { id: number; date: string | null; role: string | null; committees: string | null; inquiry: string | null; url: string }[];
 }
 
 const BAND: Record<string, string> = { marginal: "marginal seat", middle: "majority 10% to 20%", safe: "safe seat" };
@@ -230,6 +231,25 @@ function Person({ number }: { number: string }) {
             </>
           )}
           <p className="muted small">{p.voting.method}</p>
+        </section>
+      )}
+
+      {p.committee_evidence && p.committee_evidence.length > 0 && (
+        <section aria-labelledby="h-evidence">
+          <h2 id="h-evidence">Evidence to committees</h2>
+          <p className="muted small">Sessions where {p.name} answered a committee's questions as a witness, most recent first.</p>
+          <ul className="edm-list">
+            {p.committee_evidence.map((s) => (
+              <li key={s.id}>
+                <a href={s.url} target="_blank" rel="noreferrer">
+                  {s.date ? fmtDate(s.date) : "Session"}
+                </a>
+                : {s.committees}
+                {s.inquiry ? ` · ${s.inquiry}` : ""}
+                {s.role && <span className="muted small"> ({s.role})</span>}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
