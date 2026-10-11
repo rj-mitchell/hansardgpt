@@ -3,6 +3,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./pages";
 import { Timeline } from "./components/Timeline";
+import { EdmList, type EdmRow } from "./components/EdmList";
 import { VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
 import type { VoteType } from "./types";
@@ -54,6 +55,7 @@ interface PersonData {
       vote_type?: VoteType;
     }[];
   } | null;
+  edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
 }
 
 const BAND: Record<string, string> = { marginal: "marginal seat", middle: "majority 10% to 20%", safe: "safe seat" };
@@ -226,6 +228,19 @@ function Person({ number }: { number: string }) {
             </>
           )}
           <p className="muted small">{p.voting.method}</p>
+        </section>
+      )}
+
+      {p.edms && p.edms.tabled + p.edms.signed > 0 && (
+        <section aria-labelledby="h-edms">
+          <h2 id="h-edms">Early day motions</h2>
+          <p>
+            Tabled {p.edms.tabled.toLocaleString("en-GB")} and signed {p.edms.signed.toLocaleString("en-GB")} early
+            day motion{p.edms.signed === 1 ? "" : "s"} since 2010.{" "}
+            <a href={`/edms?person=${p.number}`}>See them all</a>
+          </p>
+          <h3>Most recent</h3>
+          <EdmList items={p.edms.recent} />
         </section>
       )}
 

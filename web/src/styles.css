@@ -2816,8 +2816,8 @@ main:focus {
   margin-block: var(--space-s) var(--space-2xs);
 }
 
-.week-debates,
-.week-votes {
+.prose .week-debates,
+.prose .week-votes {
   padding-inline-start: 0;
   list-style: none;
 }
@@ -2837,4 +2837,38 @@ main:focus {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-soft);
+}
+
+/* ---- early day motions -------------------------------------------------------------------- */
+
+.prose .edm-list,
+.prose .edm-sponsors {
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.edm-sponsors .week-kind {
+  margin-inline: var(--space-xs) 0;
+}
+
+.edm-list li,
+.edm-sponsors li {
+  padding-block: var(--space-2xs);
+  border-block-end: 1px solid var(--rule);
+}
+
+.edm-sponsors {
+  columns: 2 16rem;
+  column-gap: var(--space-m);
+}
+
+.edm-sponsors li {
+  break-inside: avoid;
+}
+
+.edm-text {
+  margin-inline: 0;
+  padding: var(--space-s);
+  border-inline-start: 3px solid var(--accent);
+  background: color-mix(in oklch, var(--accent) 5%, transparent);
 }

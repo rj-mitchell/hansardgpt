@@ -704,6 +704,84 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     def a_week_page(start: str, request: Request):
         return week_page(start, request)
 
+    # ---- early day motions -----------------------------------------------------------------------
+    def get_edms():
+        from hansard.sources.edms import EdmStore
+        from hansard.sync import edms_path
+
+        with lock:
+            if "edms" not in holder:
+                holder["edms"] = EdmStore(edms_path(settings))
+        return holder["edms"]
+
+    def edm_member(found: dict, mnis: int | None, on: str | None, name: str | None, party: str | None) -> dict:
+        m = found.get((mnis, on)) or {}
+        return {"name": m.get("name") or name, "party": m.get("party") or party, "number": m.get("number"),
+                "slug": m.get("slug")}
+
+    def edm_rows(rows: list[dict]) -> list[dict]:
+        found = get_people().by_parliament_id([(r["primary_mnis"], r["date_tabled"]) for r in rows
+                                               if r["primary_mnis"]])
+        return [{**{k: r[k] for k in ("id", "uin", "title", "date_tabled", "status", "sponsors_count", "prayer")},
+                 "sponsor": edm_member(found, r["primary_mnis"], r["date_tabled"], r["primary_name"],
+                                       r["primary_party"])} for r in rows]
+
+    @app.get("/api/edms")
+    def edms_index(q: str = "", page: int = 1, person: int | None = None):
+        """Early day motions, newest first, optionally matching words or signed by one member. Free: no AI."""
+        store = get_edms()
+        page = max(1, min(page, 500))
+        mnis = None
+        if person is not None:
+            pp = get_people()
+            pid = pp.resolve(person)
+            info = pp.page(pid) if pid else None
+            if not info or not info.get("parliament_id"):
+                raise HTTPException(404, "There is no member with that number.")
+            mnis = [int(info["parliament_id"])]
+        total, rows = store.search(q[:200], mnis=mnis, limit=25, offset=(page - 1) * 25)
+        return {"total": total, "page": page, "per_page": 25, "items": edm_rows(rows), "available": store.count() > 0}
+
+    @app.get("/api/edms/{edm_id}")
+    def edm_detail(edm_id: int):
+        e = get_edms().get(edm_id)
+        if e is None:
+            raise HTTPException(404, "There is no early day motion with that number.")
+        pairs = [(s["mnis"], s["signed"]) for s in e["sponsors"]]
+        if e["primary_mnis"]:
+            pairs.append((e["primary_mnis"], e["date_tabled"]))
+        found = get_people().by_parliament_id(pairs)
+        sponsors = [{**edm_member(found, s["mnis"], s["signed"], s["name"], s["party"]),
+                     **{k: s[k] for k in ("sponsoring_order", "signed", "withdrawn")}} for s in e["sponsors"]]
+        parties: dict[str, int] = {}
+        for s in sponsors:
+            if not s["withdrawn"]:
+                parties[s["party"] or "Unknown"] = parties.get(s["party"] or "Unknown", 0) + 1
+        return {**{k: e[k] for k in ("id", "uin", "title", "text", "date_tabled", "status", "status_date",
+                                     "sponsors_count", "amendment_to", "prayer")},
+                "sponsor": edm_member(found, e["primary_mnis"], e["date_tabled"], e["primary_name"],
+                                      e["primary_party"]),
+                "sponsors": sponsors, "signatures_known": bool(e["sponsors_fetched"]),
+                "party_counts": sorted(parties.items(), key=lambda x: (-x[1], x[0])),
+                "amendments": e["amendments"],
+                "official_url": f"https://edm.parliament.uk/early-day-motion/{e['id']}"}
+
+    @app.get("/edms/{edm_id}", include_in_schema=False)
+    def edm_page(edm_id: int, request: Request):
+        e = get_edms().get(edm_id)
+        index = dist / "edm.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        url = f"{str(request.base_url).rstrip('/')}/edms/{edm_id}"
+        if e is None:
+            return Response(page_with_meta(page, title="Early day motion not found — Where They Stand",
+                                           description="There is no early day motion with that number.", url=url,
+                                           image=None), status_code=404, media_type="text/html")
+        when = fmt_date(e["date_tabled"]) if e["date_tabled"] else "an unknown date"
+        return Response(page_with_meta(page, title=f"{e['title']} (early day motion) — Where They Stand",
+                                       description=f"Early day motion tabled on {when} by {e['primary_name']}, with "
+                                                   f"{e['sponsors_count'] or 0} signatures: the text and who signed.",
+                                       url=url, image=None, noindex=False), media_type="text/html")
+
     # ---- charts --------------------------------------------------------------------------------
     chart_slots = threading.Semaphore(2)  # each chart scans the record for a few seconds; keep the server responsive
 
@@ -762,7 +840,14 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         page = pp.page(pid) if pid else None
         if page is None:
             raise HTTPException(404, "There is no member with that number.")
-        return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid)}
+        edms = None
+        if page.get("parliament_id"):
+            try:
+                edms = get_edms().member_summary(int(page["parliament_id"]), recent=8)
+                edms["recent"] = edm_rows(edms["recent"])
+            except (ValueError, OSError):
+                edms = None
+        return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms}
 
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):

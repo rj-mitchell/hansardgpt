@@ -251,6 +251,23 @@ def sync(embed_minutes: float = typer.Option(60.0, help="time budget for embeddi
 
 
 @app.command()
+def edms(check: bool = typer.Option(False, help="show what the API returns now, to confirm the fields read"),
+         months: int = typer.Option(12, help="older months to fetch in this run"),
+         signatures: int = typer.Option(2000, help="motions whose signatures to fetch in this run")):
+    """Fetch early day motions (also done by every sync)."""
+    _setup_logging()
+    from hansard.sources.edms import EdmStore, sync_edms
+    from hansard.sources.edms import check as edm_check
+    from hansard.sync import edms_path
+
+    if check:
+        typer.echo(edm_check())
+        return
+    stats = sync_edms(EdmStore(edms_path(_settings())), months_per_run=months, sponsors_per_run=signatures)
+    typer.echo(json.dumps(stats, indent=2, default=str))
+
+
+@app.command()
 def bootstrap(sample: bool = typer.Option(False, help="offline demo using bundled fixtures"),
               since: str = typer.Option(None, "--from", help="first date to load (default: archive start)"),
               embed_minutes: float = typer.Option(None, help="limit initial embedding time (resumable later)"),

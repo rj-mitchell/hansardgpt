@@ -93,6 +93,10 @@ def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[d
     return load_demographics(demographics_path(settings)), status
 
 
+def edms_path(settings: Settings) -> Path:
+    return settings.data_dir / "edms.sqlite"
+
+
 def elections_path(settings: Settings) -> Path:
     return settings.data_dir / "raw" / "elections.json"
 
@@ -209,6 +213,17 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
             idx.optimize()  # merges new rows into the BM25 and scalar indices incrementally
         stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
+
+        t = time.time()
+        if fetch and settings.section("edms").get("enabled", True):
+            try:  # early day motions: recent changes, some older months, and who signed
+                from hansard.sources.edms import EdmStore, sync_edms
+
+                stats["edms"] = {**sync_edms(EdmStore(edms_path(settings)), today=today),
+                                 "seconds": round(time.time() - t, 1)}
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("early day motions not updated: %s", exc)
+                stats["edms"] = {"error": str(exc)[:200]}
 
         t = time.time()
         try:  # what each vote was on (amendment, second reading and so on), used across the site

@@ -66,6 +66,20 @@ class People:
                                                [person_id]).fetchall()]
 
     # ---- the page ----------------------------------------------------------------------------------------------
+    def by_parliament_id(self, pairs: list[tuple[int, str | None]]) -> dict[tuple[int, str | None], dict[str, Any]]:
+        """Members by UK Parliament ID, each with their party on a given date (or latest): for early day motions."""
+        if not pairs:
+            return {}
+        rows = self.con.execute("""
+            WITH p(mnis, on_date) AS (SELECT * FROM (VALUES {values}))
+            SELECT p.mnis, p.on_date, r.person_id, r.latest_name,
+                   (SELECT arg_max(m.party_name, m.start) FROM ref_memberships m WHERE m.person_id = r.person_id
+                      AND coalesce(try_cast(p.on_date AS DATE), current_date) BETWEEN m.start AND m."end") AS party
+            FROM p JOIN ref_persons r ON r.datadotparl_id = CAST(p.mnis AS VARCHAR)""".format(
+            values=", ".join("(?, ?)" for _ in pairs)), [x for pair in pairs for x in pair]).fetchall()
+        return {(mnis, on): {"number": person_number(pid), "slug": slug(name), "name": name, "party": party}
+                for mnis, on, pid, name, party in rows}
+
     def page(self, person_id: str) -> dict[str, Any] | None:
         person = self.con.execute("SELECT latest_name, gender, birth_date, birth_precision, datadotparl_id "
                                   "FROM ref_persons WHERE person_id = ?", [person_id]).fetchone()
