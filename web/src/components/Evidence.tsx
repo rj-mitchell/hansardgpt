@@ -60,6 +60,12 @@ export function EvidenceBar({
           members. The record found less from other parties on this question, so the briefing reflects that balance.
         </p>
       )}
+      {evidence.devolution?.map((d) => (
+        <p key={d.subject} className="evidence-note">
+          <strong>Devolution:</strong> {d.text}{" "}
+          <a href="/methodology#devolution">About these notes</a>
+        </p>
+      ))}
       <EvidenceRow label="Speakers" counts={evidence.groups} />
       <EvidenceRow label="Parties" counts={evidence.parties} />
       <EvidenceRow

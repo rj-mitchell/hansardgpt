@@ -228,10 +228,12 @@ class Pipeline:
         yield ev
 
         result, divisions, sources = self.find(plan, req)
+        from hansard.devolution import notes_for
         from hansard.rank.evidence import evidence_summary
 
         yield {"type": "sources", "sources": [s.card() for s in sources], "candidates": result.candidates,
-               "semantic": result.semantic_available, "evidence": evidence_summary(result.records, divisions)}
+               "semantic": result.semantic_available,
+               "evidence": {**evidence_summary(result.records, divisions), "devolution": notes_for(plan.question)}}
 
         if not sources or (result.no_records and not divisions):
             yield {"type": "final", "answer": {"segments": [{"text": NO_RECORDS + " The archive contains no "

@@ -186,6 +186,7 @@ export interface Evidence {
   genders?: Record<string, number>;
   age_bands?: Record<string, number>;
   imbalance?: { party: string; count: number; total: number } | null;
+  devolution?: { subject: string; name: string; text: string }[];
   tenure?: Record<string, number>;
   majority_bands?: Record<string, number>;
 }

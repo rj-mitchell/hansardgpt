@@ -189,7 +189,7 @@ data, which makes this much easier than starting from scratch.
 
 | Item | Time | Notes |
 |---|---|---|
-| **Devolution notes**: when a question is about a devolved subject (health, education, most transport, and so on), say so in the briefing, and which nations' policy Westminster decides | 1 day | Curated table of reserved and devolved matters for each nation, kept up to date by hand. Useful now, before any devolved data is added |
+| ✓ **Devolution notes**: when a question is about a devolved subject (health, education, most transport, and so on), say so in the briefing, and which nations' policy Westminster decides | 1 day | Done: a hand-kept table (src/hansard/devolution.py) matched to the question's words; the note is shown beside the briefing, not written by AI |
 | **Scottish Parliament** debates, questions and members | 4–6 days | Members, parties and offices from the same mySociety sources |
 | **Senedd** | 4–6 days | Bilingual record; search would cover English and Welsh |
 | **Northern Ireland Assembly** | 3–5 days | Includes the periods when the Assembly was not sitting |

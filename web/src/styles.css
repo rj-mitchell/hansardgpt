@@ -2872,3 +2872,10 @@ main:focus {
   border-inline-start: 3px solid var(--accent);
   background: color-mix(in oklch, var(--accent) 5%, transparent);
 }
+
+.evidence-note {
+  margin: 0;
+  padding: var(--space-2xs) var(--space-xs);
+  border-inline-start: 3px solid var(--accent);
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+}

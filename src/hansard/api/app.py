@@ -78,6 +78,7 @@ from hansard.api.usage import (
     visitor_key,
 )
 from hansard.config import REPO_ROOT, Settings, load_settings
+from hansard.devolution import notes_for
 from hansard.engine import Engine, Scope
 from hansard.rag import prompts
 from hansard.rag.pipeline import AskRequest, Pipeline
@@ -401,7 +402,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                          scope=Scope(**body.scope.model_dump()))
         res, _, sources = p.find(plan, req)
         return {"plan": plan.to_dict(), "sources": [s.card() for s in sources if s.kind == "record"],
-                "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
+                "candidates": res.candidates, "semantic": res.semantic_available,
+                "evidence": {**res.evidence, "devolution": notes_for(plan.question)} if res.evidence else res.evidence}
 
     def sources_only_events(body: AskBody, note: str, uid: int | None = None,
                             visitor: str | None = None) -> Iterator[dict[str, Any]]:
