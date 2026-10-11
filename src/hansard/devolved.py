@@ -166,6 +166,25 @@ class DevolvedStore:
                 ORDER BY s.date DESC, s.ord LIMIT ? OFFSET ?""", [*params, limit, offset]).fetchall()
         return total, [dict(r) for r in rows]
 
+    def yearly(self, phrase: str) -> dict[str, dict[int, tuple[int, int]]]:
+        """{body: {year: (contributions using the phrase, all contributions)}}, members' contributions only."""
+        words = re.findall(r"[\w'’-]+", phrase)[:8]
+        if not words:
+            return {}
+        with self.connect() as con:
+            totals = con.execute("SELECT legislature, CAST(substr(date, 1, 4) AS INTEGER), count(*) FROM speeches "
+                                 "WHERE person_id IS NOT NULL GROUP BY 1, 2").fetchall()
+            hits = con.execute("""
+                SELECT s.legislature, CAST(substr(s.date, 1, 4) AS INTEGER), count(*)
+                FROM speech_text JOIN speeches s ON s.id = speech_text.rowid
+                WHERE speech_text MATCH ? AND s.person_id IS NOT NULL GROUP BY 1, 2""",
+                               ('text: "' + " ".join(words) + '"',)).fetchall()
+        found = {(leg, y): n for leg, y, n in hits}
+        out: dict[str, dict[int, tuple[int, int]]] = {}
+        for leg, y, n in totals:
+            out.setdefault(leg, {})[y] = (found.get((leg, y), 0), n)
+        return out
+
     def for_person(self, person_id: str, limit: int = 8) -> dict[str, Any]:
         with self.connect() as con:
             n = con.execute("SELECT legislature, count(*) FROM speeches WHERE person_id = ? GROUP BY legislature",

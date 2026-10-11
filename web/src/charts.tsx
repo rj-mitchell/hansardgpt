@@ -9,8 +9,8 @@ interface ApiSeries {
   phrase: string;
   group: string;
   label: string;
-  counts: number[];
-  totals: number[];
+  counts: (number | null)[];
+  totals: (number | null)[];
   rate: (number | null)[];
 }
 interface ChartData {
@@ -27,6 +27,7 @@ const BY: [string, string][] = [
   ["party", "By party"],
   ["house", "Commons and Lords"],
   ["nation", "By nation"],
+  ["parliaments", "Across the UK's parliaments"],
 ];
 const EXAMPLES = ["food banks", "artificial intelligence", "onshore wind", "cost of living, energy bills"];
 
@@ -150,6 +151,14 @@ function Charts() {
               <li>2010 starts in May, at the general election, and the current year is not yet over.</li>
               {data.by === "nation" && <li>Nations are those of MPs' seats; members of the Lords have none and are shown separately.</li>}
               {data.by === "party" && <li>Party is the member's party on the day. Labour includes Labour/Co-operative members.</li>}
+              {data.by === "parliaments" && (
+                <li>
+                  The devolved parliaments' records are collected from 2021 (2022 for the Northern Ireland Assembly), so
+                  the chart starts then. Compare the rates rather than the counts: the bodies differ greatly in size and
+                  sitting time. Many subjects are devolved, so the devolved parliaments may debate them more. See{" "}
+                  <a href="/devolved">devolved parliaments</a> to read what was said.
+                </li>
+              )}
             </ul>
           </div>
           <details className="chart-table">
@@ -173,7 +182,9 @@ function Charts() {
                       <th scope="row">{data.partial_years.includes(yr) ? `${yr} (part)` : yr}</th>
                       {data.series.map((s) => (
                         <td key={s.key}>
-                          {s.counts[i].toLocaleString("en-GB")} of {s.totals[i].toLocaleString("en-GB")}
+                          {s.counts[i] == null
+                            ? "—"
+                            : `${s.counts[i]!.toLocaleString("en-GB")} of ${(s.totals[i] ?? 0).toLocaleString("en-GB")}`}
                           {s.rate[i] != null && <span className="muted"> ({s.rate[i]} per 10,000)</span>}
                         </td>
                       ))}

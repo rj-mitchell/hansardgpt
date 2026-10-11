@@ -194,7 +194,7 @@ data, which makes this much easier than starting from scratch.
 | ✓ **Senedd** | 4–6 days | Done (English record, including the official translation of Welsh contributions), as above |
 | ✓ **Northern Ireland Assembly** | 3–5 days | Done from 2022, as above |
 | **One common format** for all four, so filters and groupings work the same way | Included above | The site's format is already general; mostly new labels (MSP, MS, MLA) and offices |
-| **Cross-border comparison**: "how did Westminster, Holyrood and the Senedd debate the same issue?" | 2–3 days, after at least one devolved parliament | Builds on the comparisons feature |
+| ✓ **Cross-border comparison**: "how did Westminster, Holyrood and the Senedd debate the same issue?" | 2–3 days, after at least one devolved parliament | Done as a chart: "Across the UK's parliaments" on the Charts page compares how often a subject is raised in all five chambers, as rates. A comparative briefing across parliaments is still to do |
 
 ---
 

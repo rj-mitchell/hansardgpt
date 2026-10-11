@@ -986,6 +986,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         """How often words were used in Parliament each year, with the context to read the numbers (free)."""
         requester(request, user)
         phrases = [p for p in q.split(",") if p.strip()]
+        if by == "parliaments":
+            return parliaments_chart(phrases[:1])
         if not chart_slots.acquire(timeout=30):
             raise HTTPException(503, "The site is busy drawing other charts. Please try again in a moment.")
         try:
@@ -994,6 +996,42 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             raise HTTPException(400, str(exc)) from exc
         finally:
             chart_slots.release()
+
+    def parliaments_chart(phrases: list[str]) -> dict[str, Any]:
+        """Westminster's two Houses and the three devolved parliaments, side by side, as rates (comparable)."""
+        from hansard.devolved import LEGISLATURES
+        from hansard.trends import clean_phrase
+
+        try:
+            phrase = clean_phrase(phrases[0]) if phrases else ""
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not phrase:
+            raise HTTPException(400, "Give a word or phrase.")
+        if not chart_slots.acquire(timeout=30):
+            raise HTTPException(503, "The site is busy drawing other charts. Please try again in a moment.")
+        try:
+            base = get_trends().chart([phrase], "house", str(state.latest_record_date()))
+        finally:
+            chart_slots.release()
+        dev = get_devolved()[0].yearly(phrase)
+        first = min((min(v) for v in dev.values() if v), default=None)
+        years = [y for y in base["years"] if first is None or y >= first]
+        keep = [base["years"].index(y) for y in years]
+        series = [{**s, **{k: [s[k][i] for i in keep] for k in ("counts", "totals", "rate")}} for s in base["series"]]
+        for leg, cfg in LEGISLATURES.items():
+            by_year = dev.get(leg) or {}
+            if not by_year:
+                continue
+            counts = [by_year[y][0] if y in by_year else None for y in years]
+            totals = [by_year[y][1] if y in by_year else None for y in years]
+            series.append({"key": f"{phrase}|{leg}", "phrase": phrase, "group": leg, "label": cfg["name"],
+                           "counts": counts, "totals": totals,
+                           "rate": [round(10000 * c / t, 2) if c is not None and t else None
+                                    for c, t in zip(counts, totals, strict=True)]})
+        partial = sorted({*[y for y in base["partial_years"] if y in years], *([first] if first else [])})
+        return {"phrases": [phrase], "by": "parliaments", "years": years, "series": series,
+                "partial_years": partial, "total": sum(sum(c or 0 for c in s["counts"]) for s in series)}
 
     # ---- timelines -----------------------------------------------------------------------------
     @app.get("/api/timeline")

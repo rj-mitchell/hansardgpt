@@ -100,3 +100,12 @@ def test_pages(indexed_settings, tmp_path):
     finally:
         for suffix in ("", "-wal", "-shm"):
             path.with_name(path.name + suffix).unlink(missing_ok=True)
+
+
+def test_yearly_counts_for_the_cross_border_chart(tmp_path):
+    store = DevolvedStore(tmp_path / "devolved.sqlite")
+    sync_devolved(store, since=date(2026, 6, 1), sleep=lambda _s: None,
+                  client=fake_twfy({"meeting-of-the-parliament/2026-09-17_20233.xml": SP}))
+    assert store.yearly("ferry services") == {"scottish-parliament": {2026: (1, 2)}}, \
+        "members' contributions only, matching the words as a phrase"
+    assert store.yearly("services ferry")["scottish-parliament"][2026][0] == 0
