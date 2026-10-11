@@ -225,9 +225,18 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
         t = time.time()
         if fetch and settings.section("interests").get("enabled", True):
             try:  # the Register of Members' Financial Interests: a new edition every two weeks or so
-                from hansard.sources.regmem import refresh
+                import duckdb
 
-                stats["interests"] = {**refresh(regmem_path(settings)), "seconds": round(time.time() - t, 1)}
+                from hansard.reference.profiles import attach_reference
+                from hansard.sources.regmem import former_members, refresh, refresh_history
+
+                stats["interests"] = refresh(regmem_path(settings))
+                con = duckdb.connect()
+                attach_reference(con, settings.reference_dir)
+                # former MPs: the last edition before they left, a few old editions per run
+                stats["interests"]["history"] = refresh_history(regmem_path(settings).with_name("regmem_history.json"),
+                                                                former_members(con))
+                stats["interests"]["seconds"] = round(time.time() - t, 1)
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("register of interests not updated: %s", exc)
                 stats["interests"] = {"error": str(exc)[:200]}

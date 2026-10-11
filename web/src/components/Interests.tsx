@@ -12,6 +12,7 @@ export interface Interests {
   source: string | null;
   official: string;
   listed: boolean;
+  former?: boolean;
   categories: { type: string; name: string; items: InterestItem[] }[];
 }
 
@@ -63,15 +64,19 @@ export function InterestsSection({ interests, name, isMP }: { interests: Interes
     <section aria-labelledby="h-interests">
       <h2 id="h-interests">Registered interests</h2>
       <p>
-        {interests.listed && total > 0
-          ? `${name} has ${total} entr${total === 1 ? "y" : "ies"} in the Register of Members' Financial Interests`
-          : `${name} has no entries in the Register of Members' Financial Interests`}
-        {interests.edition ? `, as published on ${fmtDate(interests.edition)}` : ""}.
+        {interests.former
+          ? `When ${name} left the Commons, they had ${total} entr${total === 1 ? "y" : "ies"} in the Register of ` +
+            `Members' Financial Interests (the last edition before they left, published ${interests.edition ? fmtDate(interests.edition) : ""}).`
+          : `${
+              interests.listed && total > 0
+                ? `${name} has ${total} entr${total === 1 ? "y" : "ies"} in the Register of Members' Financial Interests`
+                : `${name} has no entries in the Register of Members' Financial Interests`
+            }${interests.edition ? `, as published on ${fmtDate(interests.edition)}` : ""}.`}
       </p>
       <p className="muted small">
         MPs must register their jobs and earnings, donations, gifts, visits abroad, property and shareholdings. These
         are declarations, shown as registered: an entry is not a finding of wrongdoing, and being listed here does not
-        mean an interest influenced anything the member said or did. Donors' addresses are left out. Read the{" "}
+        mean an interest influenced anything the member said or did. Addresses listed separately are left out. Read the{" "}
         <a href={interests.official}>official register</a>.
       </p>
       {interests.categories.map((c) => (

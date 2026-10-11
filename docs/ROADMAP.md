@@ -161,7 +161,7 @@ review before launch is advised.
 
 | Item | Time | Notes |
 |---|---|---|
-| ✓ **Register of Members' Financial Interests** on MP pages: declared jobs, gifts, donations, shareholdings, with dates | 2–3 days | Done for the latest edition (current MPs), from TheyWorkForYou's copy, matched by member ID, with a plain note that a declaration is not wrongdoing. Earlier editions (former MPs, changes over time) still to do |
+| ✓ **Register of Members' Financial Interests** on MP pages: declared jobs, gifts, donations, shareholdings, with dates | 2–3 days | Done for the latest edition (current MPs), from TheyWorkForYou's copy, matched by member ID, with a plain note that a declaration is not wrongdoing. Former MPs show the last edition before they left, collected a few old editions per update. Changes over time still to do |
 | **Declared interests next to speeches**: flag where the speaker had a relevant declared interest on the day | 2 days, after the above | Deciding "relevant" needs care; start with exact category matches and show the register entry, not a judgement |
 | **Electoral Commission donations** to MPs and their local parties | 2–3 days | Donations to individual MPs match by name and constituency, so each match needs a confidence check; ambiguous ones are left out |
 | **All-Party Parliamentary Groups**: which groups a member belongs to and who funds the secretariat | 1–2 days | The register is published per edition; needs a small scraper |
