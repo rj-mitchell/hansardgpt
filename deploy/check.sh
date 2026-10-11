@@ -3,6 +3,8 @@
 #   bash /opt/hansardgpt/deploy/check.sh
 # It changes nothing. Each line is a tick (fine), a cross (needs attention, with what to do) or a note.
 set -uo pipefail
+# Never pipe a long output into "grep -q": grep stops at the first match, the writer is cut off, and pipefail then
+# reports a match as a failure. Match against "$(command)" instead.
 
 DIR="${DIR:-/opt/hansardgpt}"
 cd "$DIR/deploy" 2>/dev/null || { echo "✗ $DIR/deploy not found: run the setup script first (step 4 of the guide)."; exit 1; }
@@ -70,7 +72,7 @@ else
   bad "the app does not answer" "docker compose logs --tail 50 app"
 fi
 if [[ -n "$DOMAIN" ]]; then
-  if curl -sI --max-time 20 "http://$DOMAIN/" 2>/dev/null | grep -qi '^server: cloudflare'; then
+  if grep -qi '^server: cloudflare' <<<"$(curl -sI --max-time 20 "http://$DOMAIN/" 2>/dev/null)"; then
     bad "$DOMAIN is going through Cloudflare's proxy (orange cloud)" \
         "in Cloudflare's DNS settings, set each A record to 'DNS only' (grey cloud); see step 2 of the guide"
   fi
@@ -102,7 +104,7 @@ fi
 echo
 
 echo "Data"
-if docker ps --format '{{.Command}}' 2>/dev/null | grep -q "bootstrap"; then
+if grep -q "bootstrap" <<<"$(docker ps --format '{{.Command}}' 2>/dev/null)"; then
   note "the first data load is still running: $(tail -n 1 /var/log/hansard-bootstrap.log 2>/dev/null | cut -c1-120)"
 elif [[ -f /var/log/hansard-bootstrap.log ]]; then
   if grep -q '"next"' /var/log/hansard-bootstrap.log; then
@@ -123,16 +125,20 @@ for t in hansard-sync.timer hansard-backup.timer; do
 done
 last_backup="$(ls -1t backups/where-they-stand-*.tar.gz 2>/dev/null | head -1)"
 [[ -n "$last_backup" ]] && ok "latest backup: $last_backup" || note "no backups yet (the first runs at 3.30am)"
-ufw status 2>/dev/null | grep -q "Status: active" && ok "firewall is on" || bad "firewall is off" "ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable"
+grep -q "Status: active" <<<"$(ufw status 2>/dev/null)" && ok "firewall is on" || bad "firewall is off" "ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable"
 systemctl is-active --quiet fail2ban 2>/dev/null && ok "fail2ban is on" || bad "fail2ban is off" "apt-get install -y fail2ban && systemctl enable --now fail2ban"
-# what matters is apt's daily setting and timer, not the unattended-upgrades service itself
-if apt-config dump 2>/dev/null | grep -q 'APT::Periodic::Unattended-Upgrade "1"' \
-   && systemctl is-enabled --quiet apt-daily-upgrade.timer 2>/dev/null; then
+# what matters is apt's daily setting (the last one read wins) and the timer that acts on it
+AUTO_FIX="printf 'APT::Periodic::Update-Package-Lists \"1\";\\nAPT::Periodic::Unattended-Upgrade \"1\";\\n' > /etc/apt/apt.conf.d/99zz-auto-upgrades && systemctl unmask apt-daily.timer apt-daily-upgrade.timer && systemctl enable --now apt-daily.timer apt-daily-upgrade.timer"
+setting="$(apt-config dump 2>/dev/null | grep '^APT::Periodic::Unattended-Upgrade ' | tail -1)"
+timer="$(systemctl is-enabled apt-daily-upgrade.timer 2>/dev/null || true)"
+if [[ "$setting" == *'"1"'* && "$timer" == enabled ]]; then
   ok "automatic security updates are on"
+elif [[ "$setting" != *'"1"'* ]]; then
+  bad "automatic security updates are off (apt setting: ${setting:-not set})" "$AUTO_FIX"
 else
-  bad "automatic security updates are off" "dpkg-reconfigure -f noninteractive unattended-upgrades"
+  bad "automatic security updates are set up, but their daily timer is ${timer:-missing}" "$AUTO_FIX"
 fi
-if sshd -T 2>/dev/null | grep -qi "^passwordauthentication no"; then
+if grep -qi "^passwordauthentication no" <<<"$(sshd -T 2>/dev/null)"; then
   ok "password logins are off (key only)"
 else
   note "password logins are still on: fine for now; step 5 of the guide switches to a key"
