@@ -2,7 +2,8 @@
 
 * Gender comes from the UK Parliament Members API, which records it as F or M.
 * Date of birth comes from Wikidata (property P569), matched by the member's UK Parliament ID (P10428).
-  Precision is kept: a year-only date gives an approximate age.
+  Precision is kept: a year-only date gives an approximate age. The Wikidata item is kept too: a few members have
+  no UK Parliament ID in ParlParse but do have their Wikidata item, which then supplies the ID.
 
 Members are matched to parlparse people by their UK Parliament ID ("datadotparl_id"), never by name. Both are
 cached in one file in the data folder, each part with its own date, and refreshed weekly. If a service cannot be
@@ -33,7 +34,7 @@ SOURCES = {"gender": "UK Parliament Members API", "birth_date": "Wikidata (P569,
 # Wikidata time precision codes: 9 = year, 10 = month, 11 = day
 PRECISION = {9: "year", 10: "month", 11: "day"}
 WIKIDATA_QUERY = """
-SELECT ?mnis ?dob ?precision WHERE {
+SELECT ?person ?mnis ?dob ?precision WHERE {
   ?person wdt:P10428 ?mnis .
   ?person p:P569 ?stmt .
   ?stmt psv:P569 [ wikibase:timeValue ?dob ; wikibase:timePrecision ?precision ] .
@@ -89,8 +90,11 @@ def parse_births(body: dict[str, Any]) -> dict[str, dict[str, str]]:
             continue
         prev = best.get(mnis)
         if prev is None or precision > prev["p"]:  # prefer the most precise statement
-            best[mnis] = {"date": value.replace("-00", "-01"), "precision": PRECISION[precision], "p": precision}
-    return {k: {"date": v["date"], "precision": v["precision"]} for k, v in best.items()}
+            qid = (b.get("person") or {}).get("value", "").rsplit("/", 1)[-1] or None
+            best[mnis] = {"date": value.replace("-00", "-01"), "precision": PRECISION[precision], "p": precision,
+                          "qid": qid}
+    return {k: {"date": v["date"], "precision": v["precision"], **({"qid": v["qid"]} if v["qid"] else {})}
+            for k, v in best.items()}
 
 
 def fetch_births(timeout: float = 120) -> dict[str, dict[str, str]]:

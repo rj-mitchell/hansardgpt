@@ -183,6 +183,8 @@ def build_reference(
 ) -> ReferenceData:
     genders = (demographics or {}).get("genders", {})
     births = (demographics or {}).get("births", {})
+    # members with a Wikidata item but no UK Parliament ID in ParlParse: Wikidata records the ID (P10428)
+    mnis_by_qid = {b["qid"]: m for m, b in births.items() if b.get("qid")}
     people = json.loads((members_dir / "people.json").read_text(encoding="utf-8"))
     ref = ReferenceData()
     ref.constituencies = load_constituencies(geo_csv)
@@ -205,7 +207,7 @@ def build_reference(
             })
         mains.sort(key=lambda r: r["start"])
         ref.names.extend(mains)
-        mnis = idents.get("datadotparl_id")
+        mnis = idents.get("datadotparl_id") or mnis_by_qid.get(idents.get("wikidata", ""))
         birth = births.get(mnis) if mnis else None
         ref.persons.append({
             "person_id": p["id"],
