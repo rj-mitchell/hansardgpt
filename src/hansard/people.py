@@ -17,6 +17,7 @@ import duckdb
 import httpx
 
 from hansard.config import Settings
+from hansard.debates import debate_path
 from hansard.reference.build import office_display
 from hansard.reference.profiles import ProfileResolver, attach_reference
 from hansard.sources.demographics import USER_AGENT, age_on, assumed_birth
@@ -146,18 +147,20 @@ class People:
         for since in (year - 1, year - 5, 0):  # look at recent years first: most people have spoken lately
             rows = self.con.execute(
                 f"""SELECT DISTINCT ON (record_id) record_id, date, chamber, record_type, major_heading, minor_heading,
-                           left(text, 320) AS excerpt, twfy_url, official_url
+                           left(text, 320) AS excerpt, twfy_url, official_url, source, bill
                     FROM records WHERE year >= {int(since)} AND list_contains(?, xml_person_id)
                     ORDER BY record_id, date DESC""", [xml]).fetchall()
             if len(rows) >= limit or since == 0:
                 break
         rows.sort(key=lambda r: (r[1], r[0]), reverse=True)
         cols = ["record_id", "date", "chamber", "record_type", "major_heading", "minor_heading", "excerpt",
-                "twfy_url", "official_url"]
+                "twfy_url", "official_url", "source", "bill"]
         out = []
         for r in rows[:limit]:
             d = dict(zip(cols, r, strict=True))
             d["date"] = d["date"].isoformat()
+            d["debate_path"] = debate_path(d.pop("source"), d["date"], d["major_heading"], d["minor_heading"],
+                                           d.pop("bill"), d["record_id"])
             d["heading"] = " — ".join(x for x in (d.pop("major_heading"), d.pop("minor_heading")) if x)
             out.append(d)
         return out

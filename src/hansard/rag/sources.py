@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+from hansard.debates import debate_path
 from hansard.rank.evidence import GROUPS, demographic_group, seat_type_label, speaker_group
 from hansard.sources.demographics import AGE_BAND_LABEL
 from hansard.sources.elections import MAJORITY_BAND_LABEL
@@ -125,6 +126,8 @@ def record_source(n: int, r: dict[str, Any], facets: set[str] | bool = False, gr
     url = r.get("official_url") or r["twfy_url"]
     meta = {
         "record_id": r["record_id"],
+        "debate_path": debate_path(r.get("source") or "", r["date"], r.get("major_heading"), r.get("minor_heading"),
+                                   r.get("bill"), r["record_id"]),
         "date": r["date"],
         "chamber": r["chamber"],
         "record_type": r["record_type"],

@@ -13,6 +13,7 @@ interface Sitting {
   stages: string[];
   contributions: number;
   url: string | null;
+  path?: string | null;
 }
 interface Division {
   date: string;
@@ -88,13 +89,20 @@ function Bill({ slug }: { slug: string }) {
             <p className="timeline-head">{s.stages.join("; ")}</p>
             <p className="timeline-excerpt small">
               {s.contributions} contribution{s.contributions === 1 ? "" : "s"}
-              {s.url && (
+              {s.path ? (
                 <>
                   {" · "}
-                  <a href={s.url} target="_blank" rel="noreferrer">
-                    Read the record
-                  </a>
+                  <a href={s.path}>Read the debate</a>
                 </>
+              ) : (
+                s.url && (
+                  <>
+                    {" · "}
+                    <a href={s.url} target="_blank" rel="noreferrer">
+                      Read the record
+                    </a>
+                  </>
+                )
               )}
             </p>
           </li>

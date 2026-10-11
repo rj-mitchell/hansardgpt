@@ -52,6 +52,7 @@ export default defineConfig({
         timeline: here("./timeline.html"),
         bills: here("./bills.html"),
         bill: here("./bill.html"),
+        debate: here("./debate.html"),
         charts: here("./charts.html"),
         compare: here("./compare.html"),
         notfound: here("./404.html"),

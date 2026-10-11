@@ -74,6 +74,7 @@ export interface SourceCard {
   uin?: string | null;
   time?: string | null;
   official_url?: string | null;
+  debate_path?: string | null;
   url_kind?: string | null;
   speaker?: Speaker | null;
   speaker_name_raw?: string | null;

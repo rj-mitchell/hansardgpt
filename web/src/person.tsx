@@ -37,6 +37,7 @@ interface PersonData {
     excerpt: string;
     twfy_url: string;
     official_url: string | null;
+    debate_path: string | null;
   }[];
   voting: {
     votes: number;
@@ -168,6 +169,9 @@ function Person({ number }: { number: string }) {
 
       <section aria-labelledby="h-recent">
         <h2 id="h-recent">Recent contributions</h2>
+        <p className="small feed-link">
+          <a href={`/feeds/people/${p.number}.xml`}>Follow what {p.name} says in a feed reader (RSS)</a>
+        </p>
         {p.contributions.length === 0 ? (
           <p className="muted">No contributions in the record since 2010.</p>
         ) : (
@@ -180,7 +184,7 @@ function Person({ number }: { number: string }) {
                 </p>
                 <p>{c.excerpt.length >= 320 ? `${c.excerpt.trimEnd()}…` : c.excerpt}</p>
                 <p className="small">
-                  <a href={c.twfy_url}>Read in full</a>
+                  <a href={c.debate_path ?? c.twfy_url}>Read in full</a>
                   {c.official_url && (
                     <>
                       {" · "}

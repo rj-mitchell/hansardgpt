@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from hansard.debates import debate_path
 from hansard.engine import Engine, Filters, Scope
 from hansard.people import People
 from hansard.vote_types import vote_types
@@ -29,6 +30,8 @@ def _record_item(r: dict[str, Any]) -> dict[str, Any]:
         "speaker": sp.get("name") or r.get("speaker_name_raw"), "party": sp.get("party"),
         "role": offices[0] if offices else None, "url": r.get("official_url") or r.get("twfy_url"),
         "twfy_url": r.get("twfy_url"),
+        "debate_path": debate_path(r.get("source") or "", r["date"], r.get("major_heading"), r.get("minor_heading"),
+                                   r.get("bill"), r["record_id"]),
     }
 
 

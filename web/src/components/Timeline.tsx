@@ -25,6 +25,7 @@ export interface TimelineItem {
   party_ayes?: number;
   party_noes?: number;
   url?: string | null;
+  debate_path?: string | null;
   vote_type?: VoteType;
 }
 
@@ -78,10 +79,16 @@ export function Timeline({ query, showSpeaker }: { query: string; showSpeaker: b
                   {i.heading}
                 </p>
                 <p className="timeline-excerpt">{i.excerpt}</p>
-                {i.url && (
-                  <a className="small" href={i.url} target="_blank" rel="noreferrer">
-                    Read it in full
+                {i.debate_path ? (
+                  <a className="small" href={i.debate_path}>
+                    Read it in the debate
                   </a>
+                ) : (
+                  i.url && (
+                    <a className="small" href={i.url} target="_blank" rel="noreferrer">
+                      Read it in full
+                    </a>
+                  )
                 )}
               </div>
             ) : (

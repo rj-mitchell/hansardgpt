@@ -23,12 +23,13 @@ from typing import Any
 import duckdb
 
 from hansard.config import Settings
+from hansard.debates import debate_path
 from hansard.store.parquet import attach_store
 from hansard.vote_types import vote_types
 
 log = logging.getLogger(__name__)
 
-FORMAT = 2  # raise when the shape of a bill changes, so a cached index is rebuilt (2: kinds of vote)
+FORMAT = 4  # raise when the shape of a bill changes, so a cached index is rebuilt (2: kinds of vote, 3: debates)
 GAP = timedelta(days=200)  # sittings further apart than this belong to different bills of the same name
 _HEADING = re.compile(r"^(?P<name>.*?\bBill\b(?:\s*\[(?:HL|Lords)\])?)\s*(?P<tail>.*)$", re.I)
 _MOTIONS = [("programme", "Programme motion"), ("money", "Money resolution"),
@@ -175,14 +176,20 @@ def _bill(key: str, names: Counter, group: list[dict[str, Any]]) -> dict[str, An
         k = (s["date"], s["house"], s["source"])
         cur = merged.get(k)
         stages = stage_of(s, s["tail"])
+        # the debate page for this sitting (not for "Bill presented" entries, which sit under another heading)
+        path = None if s["presented"] else debate_path(s["source"], s["date"], s["raw"], None, s["raw"])
         if cur is None:
             merged[k] = {"date": s["date"].isoformat(), "house": s["house"], "source": s["source"],
-                         "stages": stages, "contributions": s["n"], "url": s["url"]}
+                         "stages": stages, "contributions": s["n"], "url": s["url"], "path": path,
+                         "_path_n": s["n"] if path else 0}
         else:
             cur["contributions"] += s["n"]
             cur["stages"] += [x for x in stages if x not in cur["stages"]]
+            if path and s["n"] > cur["_path_n"]:  # link to the main debate, not a short timetable motion
+                cur["path"], cur["_path_n"] = path, s["n"]
     sittings = sorted(merged.values(), key=lambda s: (s["date"], s["house"]))
     for s in sittings:  # "Debate" adds nothing once a stage is known
+        s.pop("_path_n", None)
         if len(s["stages"]) > 1 and "Debate" in s["stages"]:
             s["stages"].remove("Debate")
     return {"key": key, "name": _display(names), "first": sittings[0]["date"], "last": sittings[-1]["date"],

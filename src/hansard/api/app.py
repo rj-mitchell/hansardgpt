@@ -46,6 +46,7 @@ from hansard.api.briefings import (
     withdraw_briefing,
 )
 from hansard.api.cards import card_png
+from hansard.api.feeds import FEED_TYPE, changelog_items, rss
 from hansard.api.reports import (
     CLOSED,
     DAILY_LIMIT,
@@ -606,6 +607,47 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                         f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
                         media_type="application/xml")
 
+    # ---- debates -------------------------------------------------------------------------------
+    def get_debates():
+        from hansard.debates import Debates
+
+        with lock:
+            if "debates" not in holder:
+                holder["debates"] = Debates(settings)
+        return holder["debates"]
+
+    _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    _SLUG = re.compile(r"^[a-z0-9-]{1,200}$")
+
+    def find_debate(day: str, chamber: str, slug: str):
+        if not (_DAY.match(day) and _SLUG.match(chamber) and _SLUG.match(slug)):
+            return None
+        return get_debates().get(day, chamber, slug, state.latest_record_date())
+
+    @app.get("/api/debates/{day}/{chamber}/{slug}")
+    def debate_detail(day: str, chamber: str, slug: str):
+        """A whole debate as recorded, in order, with each speaker as they were on the day. Free: no AI."""
+        d = find_debate(day, chamber, slug)
+        if d is None:
+            raise HTTPException(404, "There is no debate at this address.")
+        return d
+
+    @app.get("/debates/{day}/{chamber}/{slug}", include_in_schema=False)
+    def debate_page(day: str, chamber: str, slug: str, request: Request):
+        d = find_debate(day, chamber, slug)
+        index = dist / "debate.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        url = f"{str(request.base_url).rstrip('/')}/debates/{day}/{chamber}/{slug}"
+        if d is None:
+            return Response(page_with_meta(page, title="Debate not found — Where They Stand",
+                                           description="There is no debate at this address.", url=url, image=None),
+                            status_code=404, media_type="text/html")
+        description = (f"{d['title']}: the debate in the {d['chamber_name']} on {fmt_date(d['date'])}, as recorded "
+                       f"in Hansard, with {d['contributions']} contributions from {d['speakers']} members.")
+        return Response(page_with_meta(page, title=f"{d['title']}, {fmt_date(d['date'])} — Where They Stand",
+                                       description=description, url=url, image=None, noindex=False),
+                        media_type="text/html")
+
     # ---- charts --------------------------------------------------------------------------------
     chart_slots = threading.Semaphore(2)  # each chart scans the record for a few seconds; keep the server responsive
 
@@ -708,6 +750,72 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
                         f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
                         media_type="application/xml")
+
+    # ---- RSS feeds -------------------------------------------------------------------------
+    def feed(request: Request, path: str, title: str, link: str, description: str, items: list) -> Response:
+        base = str(request.base_url).rstrip("/")
+        return Response(rss(title=f"{title} — Where They Stand", link=base + link, description=description,
+                            self_url=base + path, items=items), media_type=FEED_TYPE)
+
+    @app.get("/feeds/people/{number}.xml", include_in_schema=False)
+    def feed_person(number: int, request: Request):
+        pp = get_people()
+        pid = pp.resolve(number)
+        page = pp.page(pid) if pid else None
+        if page is None:
+            raise HTTPException(404, "There is no member with that number.")
+        base = str(request.base_url).rstrip("/")
+        items = [{"title": c["heading"] or c["chamber"], "date": c["date"], "guid": c["record_id"],
+                  "link": base + c["debate_path"] if c.get("debate_path") else c["twfy_url"],
+                  "description": f"{c['chamber']}, {fmt_date(c['date'])}. {c['excerpt'].strip()}…"}
+                 for c in pp.contributions(pid)]
+        return feed(request, f"/feeds/people/{number}.xml", page["name"], f"/people/{number}/{page['slug']}",
+                    f"What {page['name']} has said in Parliament, newest first, from the official record.", items)
+
+    @app.get("/feeds/topics.xml", include_in_schema=False)
+    def feed_topics(request: Request):
+        from hansard.topics import topic_listing
+
+        base = str(request.base_url).rstrip("/")
+        items = [{"title": f"{t['title']}: updated briefing", "link": f"{base}/topics/{t['slug']}",
+                  "guid": f"{base}/b/{t['current']['briefing_id']}", "date": t["current"]["prepared_at"],
+                  "description": t["current"].get("summary") or t["question"]}
+                 for t in topic_listing(settings, state) if t["current"]]
+        items.sort(key=lambda i: i["date"], reverse=True)
+        return feed(request, "/feeds/topics.xml", "Topic briefings", "/topics",
+                    "Each topic briefing when it is updated with new contributions.", items)
+
+    @app.get("/feeds/bills.xml", include_in_schema=False)
+    def feed_bills(request: Request):
+        base = str(request.base_url).rstrip("/")
+        items = []
+        for b in get_bills().all(state.latest_record_date())[:40]:
+            last = b["sittings"][-1]
+            house = "Lords" if last["house"] == "lords" else "Commons"
+            items.append({"title": f"{b['name']}: {', '.join(last['stages'])} ({house})",
+                          "link": f"{base}/bills/{b['slug']}", "guid": f"{base}/bills/{b['slug']}#{last['date']}",
+                          "date": last["date"],
+                          "description": f"Debated in the {house} on {fmt_date(last['date'])}."})
+        return feed(request, "/feeds/bills.xml", "Bills", "/bills",
+                    "Bills as they are debated in Parliament, latest sitting first.", items)
+
+    @app.get("/feeds/corrections.xml", include_in_schema=False)
+    def feed_corrections(request: Request):
+        base = str(request.base_url).rstrip("/")
+        items = [{"title": "Briefing withdrawn" if c["kind"] == "withdrawn" else "Correction",
+                  "link": f"{base}/corrections", "guid": f"{base}/corrections#{c['date']}-{k}", "date": c["date"],
+                  "description": " ".join(x for x in (c.get("question"), c.get("note")) if x)}
+                 for k, c in enumerate(corrections(state))]
+        return feed(request, "/feeds/corrections.xml", "Corrections", "/corrections",
+                    "Withdrawn briefings and published corrections.", items)
+
+    @app.get("/feeds/changelog.xml", include_in_schema=False)
+    def feed_changelog(request: Request):
+        page = dist / "changelog.html"
+        base = str(request.base_url).rstrip("/")
+        items = changelog_items(page.read_text(), base) if page.is_file() else []
+        return feed(request, "/feeds/changelog.xml", "Changelog", "/changelog",
+                    "New features and changes to the site.", items)
 
     # ---- feedback, visit counts and public status ---------------------------------------
     @app.post("/api/feedback")

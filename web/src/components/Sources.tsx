@@ -234,6 +234,7 @@ export function SourceDrawer({
           <dd className="num">{source.colnum ?? source.uin ?? "Not given in the source data"}</dd>
           <dt>Links</dt>
           <dd className="links">
+            {source.debate_path && <a href={source.debate_path}>The whole debate on this site</a>}
             {source.official_url && (
               <a href={source.official_url} target="_blank" rel="noreferrer">
                 {source.url_kind === "sitting" ? "Official Hansard (sitting day)" : "Official Parliament record"}
