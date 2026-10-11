@@ -777,6 +777,15 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return {"runs": state.runs(30)}
 
     # ---- web app -------------------------------------------------------------------
+    @app.middleware("http")
+    async def head_requests(request: Request, call_next):
+        """HEAD (used by link checkers and search engines) answers like GET, without the body."""
+        if request.method != "HEAD":
+            return await call_next(request)
+        request.scope["method"] = "GET"
+        resp = await call_next(request)
+        return Response(status_code=resp.status_code, headers=dict(resp.headers))
+
     if dist.exists():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
 
@@ -788,8 +797,12 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             if path and f.is_file() and f.is_relative_to(dist.resolve()):  # never serve outside the build
                 return FileResponse(f)
             page = dist / f"{path.strip('/')}.html"  # static pages: /methodology -> methodology.html
-            if path and "/" not in path.strip("/") and page.is_file():
+            if path and "/" not in path.strip("/") and page.is_file() and page.name != "404.html":
                 return FileResponse(page)
-            return FileResponse(dist / "index.html")
+            if path.strip("/") in ("", "index.html"):
+                return FileResponse(dist / "index.html")
+            # anything else is not a page: say so, so search engines do not index it as one
+            missing = dist / "404.html"
+            return FileResponse(missing if missing.is_file() else dist / "index.html", status_code=404)
 
     return app
