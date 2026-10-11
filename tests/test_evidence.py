@@ -74,6 +74,7 @@ def test_sync_search_and_page(indexed_settings, tmp_path):
         assert found["total"] == 1 and found["items"][0]["committees"] == "Transport Committee"
         assert client.get("/api/inquiries/900").json()["sessions"][0]["transcript"] is True
         assert client.get("/evidence/77").status_code == 200 and client.get("/evidence/78").status_code == 404
+        assert "/evidence/77</loc>" in client.get("/sitemap-committees.xml").text
     finally:
         for p in (cpath, epath):
             for suffix in ("", "-wal", "-shm"):

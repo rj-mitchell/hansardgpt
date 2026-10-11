@@ -1235,7 +1235,12 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             cs, iq = get_committees().sitemap_ids()
         except HTTPException:
             cs, iq = [], []
-        return sitemap([f"{base}/committees/{c}" for c in cs] + [f"{base}/inquiries/{i}" for i in iq])
+        try:  # transcripts collected so far
+            ev = sorted(get_evidence().available(), reverse=True)
+        except Exception:
+            ev = []
+        return sitemap([f"{base}/committees/{c}" for c in cs] + [f"{base}/inquiries/{i}" for i in iq]
+                       + [f"{base}/evidence/{e}" for e in ev])
 
     @app.get("/sitemap-edms.xml", include_in_schema=False)
     def sitemap_edms(request: Request):
