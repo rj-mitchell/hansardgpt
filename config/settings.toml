@@ -49,6 +49,13 @@ no_records_threshold = 0.2
 # opposition, committee chairs, city/town/rural backbenchers, peers).
 max_per_speaker = 2
 min_relevance_ratio = 0.25
+# Re-ranking: a small model on the server takes a second, closer look at the best candidates (no cost per question).
+# Off for now: on the test set it raised the share of sources directly on the question from 64% to 68% (re-ranking
+# 100) without narrowing the balance, but added about 5 seconds per search on a 4-core machine. See docs/EVALUATION.md.
+# reranker = "Xenova/ms-marco-MiniLM-L-6-v2"
+rerank_top = 100            # how many of the best candidates it re-reads
+rerank_weight = 0.6         # share of the final relevance it decides
+rerank_query = "both"       # what passages are compared with: question | keywords | both
 
 [answer]
 model = "claude-opus-5-5"

@@ -376,7 +376,7 @@ def run_briefings(settings: Settings, plans: dict[str, dict[str, Any]], question
         u = fin.get("usage")
         segs = ans.get("segments", [])
         cards = (out.get("sources") or {}).get("sources", [])
-        cited = {c for sg in segs for c in sg.get("cited", [])}
+        cited = {n for sg in segs for n in sg.get("sources", []) or []}
         rows.append({
             "id": q.id, "question": q.question, "seconds": round(secs, 1), "usage": u,
             "cost": cost_usd(u, settings.usage, model), "error": (out.get("error") or {}).get("message"),

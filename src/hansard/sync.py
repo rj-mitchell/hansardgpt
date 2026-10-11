@@ -198,6 +198,11 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
         stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
 
+        from hansard.rank.rerank import ensure_reranker
+
+        # before the embedder loads: once a model is on disk, downloads are switched off for this process
+        stats["reranker"] = ensure_reranker(settings)
+
         if settings.embedding.get("enabled", True) and (embed_minutes is None or embed_minutes > 0):
             from hansard.embed.base import get_embedder
 
