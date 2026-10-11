@@ -210,6 +210,15 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
         stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
 
+        t = time.time()
+        try:  # the bill pages' index, ready before anyone asks for it
+            from hansard.bills import Bills
+
+            stats["bills"] = {"bills": len(Bills(settings).all(state.latest_record_date())),
+                              "seconds": round(time.time() - t, 1)}
+        except Exception as exc:
+            log.warning("bill index not rebuilt: %s", exc)
+
         from hansard.rank.rerank import ensure_reranker
 
         # before the embedder loads: once a model is on disk, downloads are switched off for this process

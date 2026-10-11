@@ -558,6 +558,58 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             raise HTTPException(404, "That briefing is not featured.")
         return {"ok": True}
 
+    # ---- bills ---------------------------------------------------------------------------------
+    def get_bills():
+        from hansard.bills import Bills
+
+        with lock:
+            if "bills" not in holder:
+                holder["bills"] = Bills(settings)
+        return holder["bills"]
+
+    @app.get("/api/bills")
+    def bills_index():
+        """Every bill debated since 2010, newest first (summary only)."""
+        out = []
+        for b in get_bills().all(state.latest_record_date()):
+            last = b["sittings"][-1]
+            out.append({k: b[k] for k in ("slug", "name", "first", "last", "houses", "contributions")}
+                       | {"sittings": len(b["sittings"]), "divisions": len(b["divisions"]),
+                          "latest": f"{', '.join(last['stages'])} ({'Lords' if last['house'] == 'lords' else 'Commons'})"})
+        return {"bills": out}
+
+    @app.get("/api/bills/{slug}")
+    def bill_detail(slug: str):
+        b = get_bills().get(slug, state.latest_record_date())
+        if b is None:
+            raise HTTPException(404, "There is no bill at this address.")
+        return b
+
+    @app.get("/bills/{slug}", include_in_schema=False)
+    def bill_page(slug: str, request: Request):
+        b = get_bills().get(slug, state.latest_record_date())
+        index = dist / "bill.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        if b is None:
+            return Response(page_with_meta(page, title="Bill not found — Where They Stand",
+                                           description="There is no bill at this address.", url=f"{base}/bills/{slug}",
+                                           image=None), status_code=404, media_type="text/html")
+        houses = " and ".join("the Lords" if h == "lords" else "the Commons" for h in b["houses"])
+        description = (f"The {b['name']} in Parliament: every debate and vote in {houses}, "
+                       f"{fmt_date(b['first'])} to {fmt_date(b['last'])}, from the official record.")
+        return Response(page_with_meta(page, title=f"{b['name']} — Where They Stand", description=description,
+                                       url=f"{base}/bills/{slug}", image=None, noindex=False), media_type="text/html")
+
+    @app.get("/sitemap-bills.xml", include_in_schema=False)
+    def sitemap_bills(request: Request):
+        base = str(request.base_url).rstrip("/")
+        urls = "".join(f"<url><loc>{base}/bills/{b['slug']}</loc><lastmod>{b['last']}</lastmod></url>"
+                       for b in get_bills().all(state.latest_record_date()))
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
+                        f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
+                        media_type="application/xml")
+
     # ---- timelines -----------------------------------------------------------------------------
     @app.get("/api/timeline")
     def timeline_api(request: Request, q: str = "", person: int | None = None, party: str | None = None,
