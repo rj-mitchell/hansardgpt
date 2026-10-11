@@ -77,3 +77,13 @@ def test_seat_type_labels_say_how_big_the_urban_area_is():
         == "town seat (urban area of 172,000)"
     assert seat_type_label({"settlement": "rural", "urban_area_pop": 11_087}) == "rural seat"
     assert seat_type_label({"settlement": None}) is None
+
+
+def test_one_sided_evidence_is_flagged():
+    from collections import Counter
+
+    from hansard.rank.evidence import imbalance
+
+    assert imbalance(Counter({"Labour": 8, "Conservative": 2}), 10) == {"party": "Labour", "count": 8, "total": 10}
+    assert imbalance(Counter({"Labour": 6, "Conservative": 4}), 10) is None
+    assert imbalance(Counter({"Labour": 3}), 3) is None  # too few to say

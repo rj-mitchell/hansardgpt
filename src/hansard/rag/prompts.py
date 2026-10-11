@@ -23,7 +23,12 @@ What a good briefing does
   sceptical, hostile, divided) and backs it with one to three concrete examples: who (name and role or seat), when,
   and what they said, preferably as a short exact quotation.
 - The opening headline and every stance sentence are claims too: cite the example(s) that show them, in the same
-  sentence. Only headings, bold group labels and notes about what the records do or do not contain may go uncited.
+  sentence. Never write a summary of what a group or person said ("Most backbenchers criticised the system",
+  "Ministers presented it as necessary") as a sentence on its own: join it to its quoted, cited example with "as
+  when", or leave it out. Only headings, bold group labels and the closing note may go uncited.
+- Put every remark about the evidence itself (what the records cover, their dates, how many speakers each group
+  rests on, what is missing, such as division records) in one short closing paragraph that begins
+  "About the evidence:". Do not scatter such notes through the briefing.
 - It is honest about strength of evidence: say "several", "two", "one MP" based on the records shown, describe
   the evidence as "in the records retrieved", note dissenting voices within a group, and never generalise beyond
   what the records show.
@@ -51,8 +56,9 @@ Grounding rules (these override everything else)
    slammed, dodged, evaded, refused to answer, gaffe, scandal or extreme. If a speaker used such a word, it may
    appear only inside an exact, cited quotation attributed to that speaker. Never say an individual contradicted
    themselves or changed their mind: give what they said on each date and leave the comparison to the reader.
-10. Mention a speaker's gender or age only when the question asks about it. Never generalise about women, men or
-   any age group beyond the cited examples, and never suggest why views might differ by gender or age.
+10. Mention a speaker's gender, age, length of service or majority only when the question asks about it. Never
+   generalise about any such group beyond the cited examples, and never suggest why views might differ between them
+   (for example, never imply that an MP's majority explains their position).
 
 Language: British English throughout, as used in Hansard and by UK newspapers of record: British spelling
 (organise, recognise, analyse, labour, behaviour, programme, defence, centre, travelled, per cent), British
@@ -69,13 +75,14 @@ MODE_INSTRUCTIONS = {
         "'**Ministers - supportive**'), one sentence characterising it that also gives its clearest example as a short "
         "quotation, so the sentence carries its own citation (for example: 'Rural MPs were sceptical, as when Jane "
         "Smith said \"...\"'), then up to two further cited examples as bullets. Any sentence comparing groups must "
-        "also quote and cite an example. Keep it to roughly 300-450 words."
+        "also quote and cite an example. End with the short 'About the evidence:' paragraph. Keep it to roughly "
+        "300-450 words."
     ),
     "comprehensive": (
         "Write a detailed briefing: a headline answer; then positions by group, each with a characterisation that "
         "itself quotes and cites the group's clearest example, and one to three further cited examples; then a short section on how positions changed over time, in date order; then "
-        "the main points of agreement and contention; and finally 'Evidence and gaps': what the supplied records "
-        "do not cover. Roughly 700-1300 words, depending on the material."
+        "the main points of agreement and contention, each quoting and citing an example; and finally the "
+        "'About the evidence:' paragraph, including what the supplied records do not cover. Roughly 700-1300 words, depending on the material."
     ),
 }
 
@@ -85,6 +92,16 @@ def system_prompt(today: date) -> str:
 
 
 GROUP_BY_INSTRUCTIONS = {
+    "tenure": (
+        "The question asks how newly elected MPs differ from more experienced ones. Group the MPs into first-term "
+        "MPs (still in the Parliament they were first elected to, on the date they spoke) and MPs re-elected at "
+        "least once, as given in each result title. Say plainly where the two groups said similar things."
+    ),
+    "majority": (
+        "The question asks how MPs in marginal and safe seats differ. Group the MPs by their seat's majority at the "
+        "time they spoke, as given in each result title: marginal (under 10% of votes cast), 10% to 20%, and safe "
+        "(over 20%). Leave out groups with no supplied records, and say plainly where the groups said similar things."
+    ),
     "gender": (
         "The question asks how women and men differ. Group the speakers by the gender given in each result title "
         "(women, men) rather than by role, and say plainly where the two groups said similar things. Gender is as "
@@ -98,7 +115,8 @@ GROUP_BY_INSTRUCTIONS = {
 }
 
 
-def user_instruction(question: str, mode: str, plan_note: str, history_note: str, group_by: str = "role") -> str:
+def user_instruction(question: str, mode: str, plan_note: str, history_note: str, group_by: str = "role",
+                     compare: list[dict[str, str]] | None = None) -> str:
     parts = []
     if history_note:
         parts.append(history_note)
@@ -106,6 +124,10 @@ def user_instruction(question: str, mode: str, plan_note: str, history_note: str
     if plan_note:
         parts.append(f"Search scope applied: {plan_note}")
     parts.append(MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["summary"]))
-    if group_by in GROUP_BY_INSTRUCTIONS:
+    if compare:
+        from hansard.compare import instruction
+
+        parts.append(instruction(compare))
+    elif group_by in GROUP_BY_INSTRUCTIONS:
         parts.append(GROUP_BY_INSTRUCTIONS[group_by])
     return "\n\n".join(parts)

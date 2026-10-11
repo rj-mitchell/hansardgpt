@@ -6,13 +6,16 @@ import { Login } from "./components/Login";
 import { PlanChips } from "./components/PlanChips";
 import { EvidenceBar } from "./components/Evidence";
 import { SourceDrawer, SourceList } from "./components/Sources";
+import { SupportReminder } from "./components/SupportReminder";
+import { TopicHeader } from "./components/TopicHeader";
 import { ATTRIBUTION } from "./attribution";
 import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
-import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
+import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
+const TOPIC = /^\/topics\/([a-z0-9-]+)\/?$/;
 
 /**
  * Example questions, one set a day. Each set spans parties, both Houses, the nations and kinds of seat, and
@@ -71,10 +74,39 @@ export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [question, setQuestion] = useState("");
+  // a question handed over from another page, such as an MP's page ("What has … said about …?")
+  const [question, setQuestion] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("q")?.slice(0, 500) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  // sides to compare, handed over from the Compare page (?compare=party:labour,party:conservative)
+  const [compare, setCompare] = useState<CompareSide[]>(() => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get("compare") ?? "";
+      return raw
+        .split(",")
+        .map((x) => x.split(":"))
+        .filter(([k, id]) => ["party", "person", "nation"].includes(k) && id)
+        .slice(0, 3)
+        .map(([k, id]) => ({ kind: k as CompareSide["kind"], id }));
+    } catch {
+      return [];
+    }
+  });
+  const compareLabels = (() => {
+    try {
+      return (new URLSearchParams(window.location.search).get("sides") ?? "").split("|").filter(Boolean).slice(0, 3);
+    } catch {
+      return [];
+    }
+  })();
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const [drawer, setDrawer] = useState<{ turn: string; h: Highlight } | null>(null);
   const [showControls, setShowControls] = useState(false);
+  const [supportCount, setSupportCount] = useState(0); // > 0: show the note on what the site costs
   const abortRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
@@ -94,6 +126,62 @@ export default function App() {
     void refresh();
     void api.hit(window.location.pathname, document.referrer); // cookie-free page count
   }, [refresh]);
+
+  // a topic address (/topics/<slug>) opens that topic's current briefing
+  useEffect(() => {
+    const m = window.location.pathname.match(TOPIC);
+    if (!m) return;
+    const slug = m[1];
+    api
+      .topic(slug)
+      .then(({ topic, briefing: b, versions }) => {
+        document.title = `${topic.title}: where MPs and peers stand — Where They Stand`;
+        setTurns([
+          b
+            ? {
+                id: b.id,
+                question: b.question,
+                settings,
+                plan: b.plan ?? undefined,
+                sources: b.sources,
+                candidates: b.candidates,
+                semantic: b.semantic,
+                evidence: b.evidence,
+                streamText: "",
+                answer: b.answer,
+                status: "done",
+                briefingId: b.id,
+                preparedAt: b.created_at,
+                recordsUpTo: b.records_up_to,
+                topic: { ...topic, versions },
+              }
+            : {
+                id: slug,
+                question: topic.question,
+                settings,
+                sources: [],
+                streamText: "",
+                status: "error",
+                error: "This topic briefing has not been written yet. It will appear here after a coming update.",
+                topic: { ...topic, versions },
+              },
+        ]);
+      })
+      .catch(() =>
+        setTurns([
+          {
+            id: slug,
+            question: "Topic not found",
+            settings,
+            sources: [],
+            streamText: "",
+            status: "error",
+            error: "There is no topic at this address. The list of topics is at /topics.",
+          },
+        ]),
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, []);
 
   // a shared address (/b/<id>) opens that briefing, exactly as it was prepared
   useEffect(() => {
@@ -155,7 +243,7 @@ export default function App() {
 
   const busy = turns.some((t) => !["done", "error"].includes(t.status));
 
-  async function run(q: string, plan?: Plan, replaceId?: string) {
+  async function run(q: string, plan?: Plan, replaceId?: string, sourcesOnly = false) {
     const id = replaceId ?? crypto.randomUUID();
     const turn: Turn = { id, question: q, settings, sources: [], streamText: "", status: "planning", plan };
     setTurns((ts) => (replaceId ? ts.map((t) => (t.id === id ? turn : t)) : [...ts, turn]));
@@ -167,7 +255,9 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      for await (const ev of askStream(askBody(q, settings, plan, history), ctrl.signal)) {
+      const sides = plan ? [] : compare;
+      if (sides.length) setCompare([]); // the comparison applies to the question it came with
+      for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly, sides), ctrl.signal)) {
         if (ev.type === "plan") update(id, { plan: ev.plan as Plan, status: "searching" });
         else if (ev.type === "sources")
           update(id, {
@@ -191,6 +281,7 @@ export default function App() {
             status: "done",
           });
         else if (ev.type === "error") update(id, { status: "error", error: ev.message as string });
+        if (ev.type === "final" && typeof ev.support_reminder === "number") setSupportCount(ev.support_reminder);
         if (ev.type === "final" && typeof ev.briefing_id === "string") {
           // the address bar becomes this briefing's permanent link
           window.history.replaceState(null, "", `/b/${ev.briefing_id}`);
@@ -201,12 +292,12 @@ export default function App() {
     }
   }
 
-  function submit(e?: React.FormEvent) {
+  function submit(e?: React.FormEvent, sourcesOnly = false) {
     e?.preventDefault();
     const q = question.trim();
     if (q.length < 3 || busy) return;
     setQuestion("");
-    void run(q);
+    void run(q, undefined, undefined, sourcesOnly);
   }
 
   if (auth === "unknown") return <div className="loading">Loading…</div>;
@@ -234,9 +325,20 @@ export default function App() {
           }
         }}
       />
-      <button type="submit" className="primary" disabled={busy || question.trim().length < 3}>
-        Ask
-      </button>
+      <div className="composer-buttons">
+        <button type="submit" className="primary" disabled={busy || question.trim().length < 3}>
+          Ask
+        </button>
+        <button
+          type="button"
+          className="link small"
+          disabled={busy || question.trim().length < 3}
+          onClick={() => submit(undefined, true)}
+          title="Find and show the sources without writing a briefing"
+        >
+          Sources only
+        </button>
+      </div>
     </form>
   );
 
@@ -246,15 +348,26 @@ export default function App() {
         Skip to main content
       </a>
       <header className="masthead full-width">
+        <p className="phase-banner">
+          <strong className="phase-tag">Beta</strong>{" "}
+          <span>
+            This is a new service and it is still being tested. Briefings can contain mistakes, so check the cited
+            sources. <a href="/corrections#report">Tell us about a problem</a>.
+          </span>
+        </p>
         <div className="running-head">
           <span>
             Debates, written answers and divisions{meta ? ` · ${meta.archive_start.slice(0, 4)} to date` : ""}
           </span>
           <span className="masthead-actions">
             <nav className="page-nav" aria-label="Site">
+              <a href="/topics">Topics</a>
+              <a href="/people">MPs and peers</a>
+              <a href="/bills">Bills</a>
+              <a href="/charts">Charts</a>
+              <a href="/compare">Compare</a>
+              <a href="/timeline">Timelines</a>
               <a href="/about">About</a>
-              <a href="/methodology">Methodology</a>
-              <a href="/status">Status</a>
             </nav>
             <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
               Settings
@@ -278,6 +391,18 @@ export default function App() {
         </div>
       </header>
 
+      {supportCount > 0 && meta?.donate_url && (
+        <SupportReminder count={supportCount} donateUrl={meta.donate_url} onClose={() => setSupportCount(0)} />
+      )}
+      {compare.length > 0 && (
+        <aside className="banner" aria-label="Comparison">
+          Comparing {compareLabels.length === compare.length ? compareLabels.join(" and ") : "the chosen sides"}: each is
+          searched separately and given an equal share of the sources.{" "}
+          <button type="button" className="link" onClick={() => setCompare([])}>
+            Cancel the comparison
+          </button>
+        </aside>
+      )}
       {showControls && (
         <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />
       )}
@@ -298,11 +423,13 @@ export default function App() {
               and the column or question reference.
             </p>
             <p className="muted small">
-              Looking for every mention of a word?{" "}
+              Where They Stand is in beta: it is new and still being tested, so check the cited sources. Looking for
+              every mention of a word?{" "}
               <a href="https://hansard.parliament.uk/search" target="_blank" rel="noreferrer">
                 Hansard's own search
               </a>{" "}
-              does that best.
+              does that best, and the <a href="/resources">other resources</a> page lists more sites worth using
+              alongside this one.
             </p>
             {composer("composer composer-inline")}
             <h3 className="examples-head">Example questions</h3>
@@ -322,6 +449,7 @@ export default function App() {
         )}
         {turns.map((t) => (
           <article key={t.id} className="turn">
+            {t.topic && <TopicHeader topic={t.topic} preparedAt={t.preparedAt} recordsUpTo={t.recordsUpTo} />}
             <h2 className="question">{t.question}</h2>
             {t.shared && t.preparedAt && (
               <p className="shared-note">
@@ -336,9 +464,15 @@ export default function App() {
               evidence={t.evidence}
               demographics={
                 !!t.plan &&
-                ((t.plan.group_by ?? "role") !== "role" ||
+                (["gender", "age"].includes(t.plan.group_by ?? "role") ||
                   !!t.plan.filters.genders?.length ||
                   !!t.plan.filters.age_bands?.length)
+              }
+              seats={
+                !!t.plan &&
+                (["tenure", "majority"].includes(t.plan.group_by ?? "role") ||
+                  !!t.plan.filters.tenure?.length ||
+                  !!t.plan.filters.majority_bands?.length)
               }
             />
             {t.status === "planning" && <p className="status" role="status">Interpreting the question…</p>}
@@ -390,12 +524,18 @@ export default function App() {
       <footer className="footer full-width">
         <p className="independence">{BRAND.independence}</p>
         <p className="print-only">
-          From {BRAND.name}, wheretheystand.uk. Briefings are written by AI from the cited Hansard records; check the
+          From {BRAND.name} (beta), wheretheystand.uk. Briefings are written by AI from the cited Hansard records; check the
           sources.
         </p>
         <nav className="footer-nav" aria-label="About this site">
           <a href="/about">About</a>
+          <a href="/topics">Topics</a>
+          <a href="/timeline">Timelines</a>
+          <a href="/bills">Bills</a>
+          <a href="/charts">Charts</a>
+          <a href="/compare">Compare</a>
           <a href="/methodology">Methodology</a>
+          <a href="/resources">Other resources</a>
           <a href="/changelog">Changelog</a>
           <a href="/status">Status</a>
           <a href="/corrections">Corrections</a>
@@ -403,6 +543,7 @@ export default function App() {
           <a href="/accessibility">Accessibility</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
+          <a href="https://github.com/rj-mitchell/hansardgpt">Source code</a>
           {meta?.donate_url && <a href={meta.donate_url}>Support this site</a>}
         </nav>
         <p className="licence">

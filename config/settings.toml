@@ -49,6 +49,13 @@ no_records_threshold = 0.2
 # opposition, committee chairs, city/town/rural backbenchers, peers).
 max_per_speaker = 2
 min_relevance_ratio = 0.25
+# Re-ranking: a small model on the server takes a second, closer look at the best candidates (no cost per question).
+# Off for now: on the test set it raised the share of sources directly on the question from 64% to 68% (re-ranking
+# 100) without narrowing the balance, but added about 5 seconds per search on a 4-core machine. See docs/EVALUATION.md.
+# reranker = "Xenova/ms-marco-MiniLM-L-6-v2"
+rerank_top = 100            # how many of the best candidates it re-reads
+rerank_weight = 0.6         # share of the final relevance it decides
+rerank_query = "both"       # what passages are compared with: question | keywords | both
 
 [answer]
 model = "claude-opus-5-5"
@@ -57,6 +64,10 @@ comprehensive_sources = 40
 summary_effort = "medium"
 comprehensive_effort = "high"
 query_parse_effort = "low"
+# The model that reads each question and chooses the filters (defaults to the model above). On the 62-question test
+# set (eval/), Haiku chose every filter right on 60 (Opus: 62), about twice as fast, at a thirtieth of the cost
+# (about 0.01p a question), so it also reads the question for "Sources only".
+query_parse_model = "claude-haiku-5-5"
 max_tokens = 16000
 # Server-side refusal fallback (beta). Disable if your account or platform rejects it.
 use_fallbacks = true
@@ -75,16 +86,33 @@ batch_size = 8
 
 [usage]
 # The site is public; each new model-written briefing costs money.
-per_visitor_daily_questions = 15   # anonymous visitors (keyed by a salted hash of their IP address)
+# Every this many new briefings in a day, a visitor is shown a short note on what the site costs, with the donation
+# link (only when [site] donate_url is set). Going through to the donation page stops it for the rest of the day.
+support_reminder_every = 10
+# A backstop against automated use, not an everyday limit (the reminder above does that job).
+per_visitor_daily_questions = 40   # anonymous visitors (keyed by a salted hash of their IP address)
 per_user_daily_questions = 60      # signed-in users, when invite-only sign-in is on
 requests_per_minute = 20           # questions and searches per visitor
-answer_cache_hours = 24            # identical questions within this window are not re-run
+answer_cache_hours = 168           # identical questions are not re-run until new records arrive (or a week)
 daily_spend_cap_usd = 10.0
 monthly_spend_cap_usd = 150.0
 # USD per million tokens, used for spend tracking only.
 price_input_per_mtok = 4.0
 price_output_per_mtok = 20.0
-price_cache_read_per_mtok = 0.4
+price_cache_read_per_mtok = 0.2
+cache_write_multiplier = 1.25
+
+# Prices for other models, where they differ from the above (Claude Opus 5.5).
+[usage.models."claude-sonnet-5-5"]
+price_input_per_mtok = 2.0
+price_output_per_mtok = 10.0
+price_cache_read_per_mtok = 0.2
+
+[usage.models."claude-haiku-5-5"]
+# for prompts up to 100,000 tokens, which covers every call this site makes
+price_input_per_mtok = 0.1
+price_output_per_mtok = 0.5
+price_cache_read_per_mtok = 0.01
 
 [auth]
 # Public by default. Set required = true for an invite-only site (accounts are
@@ -100,3 +128,10 @@ times = ["07:15", "19:15"]
 # The "Support this site" link (a Ko-fi or similar page). Empty: the link is not shown anywhere.
 # HANSARD_DONATE_URL in the server's .env overrides this.
 donate_url = "https://ko-fi.com/wheretheystand"
+
+[topics]
+# Topic briefings (/topics): standing questions listed in config/topics.toml, refreshed by the sync.
+enabled = true
+file = "topics.toml"
+max_per_run = 4             # at most this many rewrites per sync (the sync runs twice a day)
+unchanged_overlap = 0.8     # not rewritten when this share of the sources is the same as last time

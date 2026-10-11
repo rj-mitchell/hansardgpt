@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 from collections.abc import Iterator
@@ -31,13 +32,17 @@ from hansard.api.auth import (
 )
 from hansard.api.briefings import (
     ID_PATTERN,
+    feature,
+    featured_list,
     fmt_date,
     get_briefing,
+    is_featured,
+    keep,
     page_with_meta,
     public_view,
     recent_briefings,
-    store_briefing,
     summary_text,
+    unfeature,
     withdraw_briefing,
 )
 from hansard.api.cards import card_png
@@ -52,14 +57,21 @@ from hansard.api.reports import (
 )
 from hansard.api.usage import (
     RateLimiter,
+    alerts,
     cache_key,
     cached_events,
     check_caps,
+    count_question,
+    mark_supporter,
+    popular_questions,
+    recent_failures,
+    record_failure,
     record_feedback,
     record_usage,
     record_visit,
     store_events,
     summary,
+    support_reminder_due,
     visit_summary,
     visitor_key,
 )
@@ -67,7 +79,7 @@ from hansard.config import REPO_ROOT, Settings, load_settings
 from hansard.engine import Engine, Scope
 from hansard.rag import prompts
 from hansard.rag.pipeline import AskRequest, Pipeline
-from hansard.rag.query_parse import ITL1_REGIONS, QueryPlan
+from hansard.rag.query_parse import ITL1_REGIONS, QueryPlan, parse_model
 from hansard.reference.portfolios import PORTFOLIOS
 from hansard.store.state import StateDB
 
@@ -124,6 +136,12 @@ class WithdrawBody(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class FeatureBody(BaseModel):
+    briefing: str = Field(min_length=10, max_length=300, description="the briefing's id or full address")
+    title: str | None = Field(default=None, max_length=200)
+    blurb: str | None = Field(default=None, max_length=600)
+
+
 class HitBody(BaseModel):
     path: str = Field(min_length=1, max_length=200)
     referrer: str | None = Field(default=None, max_length=500)
@@ -137,6 +155,8 @@ class AskBody(BaseModel):
     scope: ScopeBody = ScopeBody()
     plan: dict[str, Any] | None = None
     history: list[dict[str, str]] = Field(default_factory=list, max_length=10)
+    sources_only: bool = False  # find and show the sources, but write no briefing (free)
+    compare: list[dict[str, str]] = Field(default_factory=list, max_length=3)  # sides, from the Compare page
 
 
 def donate_url(settings: Settings) -> str | None:
@@ -171,6 +191,15 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             if "p" not in holder:
                 holder["p"] = Pipeline(settings, Engine(settings))
             return holder["p"]
+
+    def get_people():
+        from hansard.people import People
+
+        p = get_pipeline()
+        with lock:
+            if "people" not in holder:
+                holder["people"] = People(settings, p.engine.resolver, p.today)
+            return holder["people"]
 
     def current_user(request: Request) -> dict[str, Any] | None:
         user = user_for_token(state, request.cookies.get(COOKIE))
@@ -249,6 +278,14 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         """Small, public settings for the static pages."""
         return {"donate_url": donate_url(settings)}
 
+    @app.post("/api/support-clicked")
+    def support_clicked(request: Request, user=Depends(current_user)):
+        """The reader went through to the donation page from the reminder: no more reminders for them today."""
+        visitor, _ = requester(request, user)
+        if visitor:
+            mark_supporter(state, visitor)
+        return {"ok": True}
+
     @app.get("/api/health")
     def health():
         return {"ok": True}
@@ -265,7 +302,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         uid = user["user_id"] if user else None
         req = AskRequest(question=body.question, mode=body.mode, recency=body.recency,
                          role_weight=body.role_weight, scope=Scope(**body.scope.model_dump()), plan=body.plan,
-                         history=body.history)
+                         history=body.history, compare=body.compare)
         model_on = p.has_model()
         key = None
         if model_on and cache_hours > 0:
@@ -273,8 +310,10 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             key = cache_key({"q": " ".join(body.question.lower().split()), **body.model_dump(exclude={"question"}),
                              "model": settings.answer.get("model"), "data": last[0]["run_id"] if last else None,
                              "instructions": INSTRUCTIONS_VERSION})
-        hit = cached_events(state, key, cache_hours) if key else None
-        blocked = check_caps(state, uid, settings.usage, visitor) if model_on and hit is None else None
+        count_question(state, body.question)
+        hit = cached_events(state, key, cache_hours) if key and not body.sources_only else None
+        blocked = (check_caps(state, uid, settings.usage, visitor)
+                   if model_on and hit is None and not body.sources_only else None)
 
         def events() -> Iterator[dict[str, Any]]:
             if hit is not None:
@@ -285,18 +324,31 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                     store_events(state, key, hit, cache_hours)
                 yield from hit
                 return
-            if blocked:
-                yield {"type": "error", "message": blocked}
+            if body.sources_only:
+                yield from sources_only_events(body, "Sources only: no briefing was written. Ask again without "
+                                                     "'Sources only' for a written briefing.", uid, visitor)
+                return
+            if blocked:  # the sources still help, and cost nothing
+                yield from sources_only_events(body, f"{blocked} The sources found are shown below.", uid, visitor)
                 return
             kept: list[dict[str, Any]] = []
             text: list[str] = []
+            remind = 0  # > 0: show this reader the note on costs, with the number of briefings so far today
             try:
                 for ev in p.run(req):
+                    if ev["type"] == "plan" and ev.get("parse_error"):
+                        # the model could not read the question (a bad API key, say); offline rules were used
+                        record_failure(state, "question reading", body.question, ev.pop("parse_error"))
+                    if ev["type"] == "error":
+                        record_failure(state, "briefing", body.question, ev.get("message", ""))
                     if ev["type"] == "plan" and ev.get("usage"):
-                        record_usage(state, uid, "parse", settings.answer.get("model"), ev["usage"], settings.usage,
+                        record_usage(state, uid, "parse", parse_model(settings), ev["usage"], settings.usage,
                                      visitor)
                     if ev["type"] == "final" and ev.get("usage"):
                         record_usage(state, uid, "answer", ev.get("model"), ev["usage"], settings.usage, visitor)
+                        if uid is None and donate_url(settings):
+                            remind = support_reminder_due(state, visitor,
+                                                          int(settings.usage.get("support_reminder_every", 10)))
                     if ev["type"] == "final" and key:
                         ev = {**ev, "briefing_key": key}  # lets the reader's feedback refer to this briefing
                     if ev["type"] == "final" and ev.get("answer") and not ev["answer"].get("no_records"):
@@ -305,10 +357,13 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                         text.append(ev["text"])
                     else:
                         kept.append(ev)
-                    yield ev
+                    # the reminder goes to this reader only: never into saved, shared or cached copies
+                    yield {**ev, "support_reminder": remind} if ev["type"] == "final" and remind else ev
             except Exception as exc:  # never leave the client hanging
                 log.exception("ask failed")
-                yield {"type": "error", "message": f"Something went wrong: {type(exc).__name__}"}
+                record_failure(state, "briefing", body.question, f"{type(exc).__name__}: {exc}")
+                yield {"type": "error", "message": "The briefing could not be written just now. The sources found are "
+                                                   "shown above; please try again later."}
                 return
             final = kept[-1] if kept else {}
             if key and final.get("type") == "final" and final.get("answer"):
@@ -319,33 +374,49 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return StreamingResponse(_sse(events()), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-    @app.post("/api/search")
-    def search(body: AskBody, request: Request, user=Depends(current_user)):
-        """Retrieval only (no model call): ranked sources for the question or edited plan."""
-        requester(request, user)
+    def retrieve(body: AskBody, read_with_model: bool = False, uid: int | None = None,
+                 visitor: str | None = None) -> dict[str, Any]:
+        """The plan and ranked sources for the question or edited plan, without writing a briefing.
+
+        The question is read by the model when ``read_with_model`` (a fraction of a penny with a small model, and far
+        more accurate), otherwise by the free built-in rules.
+        """
         p = get_pipeline()
         if body.plan:
             plan = QueryPlan.from_dict({"question": body.question, **body.plan})
+        elif read_with_model and p.has_model():
+            plan, usage = p.make_plan(AskRequest(question=body.question, history=body.history, compare=body.compare))
+            if plan.parse_error:
+                record_failure(state, "question reading", body.question, plan.parse_error)
+            if usage:
+                record_usage(state, uid, "parse", parse_model(settings), usage, settings.usage, visitor)
         else:
             from hansard.rag.query_parse import parse_offline
 
             plan = parse_offline(body.question, settings.regions, p.today)
-        limit = int(settings.answer.get("comprehensive_sources" if body.mode == "comprehensive"
-                                        else "summary_sources", 12))
-        res = p.engine.search(plan.search_text, plan.filters, Scope(**body.scope.model_dump()), plan.portfolios,
-                              body.recency, body.role_weight, limit, diversify=True)
-        from hansard.rag.sources import build_sources
-
-        return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [])],
+            p._set_comparison(plan, AskRequest(question=body.question, compare=body.compare))
+        req = AskRequest(question=body.question, mode=body.mode, recency=body.recency, role_weight=body.role_weight,
+                         scope=Scope(**body.scope.model_dump()))
+        res, _, sources = p.find(plan, req)
+        return {"plan": plan.to_dict(), "sources": [s.card() for s in sources if s.kind == "record"],
                 "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
 
+    def sources_only_events(body: AskBody, note: str, uid: int | None = None,
+                            visitor: str | None = None) -> Iterator[dict[str, Any]]:
+        # read the question with the model unless the site's own budget is used up
+        r = retrieve(body, check_caps(state, None, settings.usage, None) is None, uid, visitor)
+        yield {"type": "plan", "plan": r["plan"], "usage": None}
+        yield {"type": "sources", **{k: r[k] for k in ("sources", "candidates", "semantic", "evidence")}}
+        yield {"type": "final", "answer": None, "usage": None, "note": note}
+
+    @app.post("/api/search")
+    def search(body: AskBody, request: Request, user=Depends(current_user)):
+        """Retrieval only (no model call): ranked sources for the question or edited plan."""
+        requester(request, user)
+        return retrieve(body)
+
     def keep_briefing(body: AskBody, kept: list[dict[str, Any]], final: dict[str, Any]) -> dict[str, Any]:
-        records_up_to = state.latest_record_date()
-        events = [e for e in kept if e["type"] in ("plan", "sources")] + [
-            {k: v for k, v in final.items() if k not in ("usage", "briefing_key")}]
-        meta = store_briefing(state, body.question, body.model_dump(exclude={"question", "history"}), events,
-                              records_up_to, final.get("model"))
-        return {"briefing_id": meta["id"], "prepared_at": meta["created_at"], "records_up_to": records_up_to}
+        return keep(state, body.question, body.model_dump(exclude={"question", "history"}), kept, final)
 
     # ---- shared briefings ---------------------------------------------------------------
     def _briefing_or_error(bid: str) -> dict[str, Any]:
@@ -388,7 +459,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         html_page = page_with_meta(
             page, title=f"{b['question']} — Where They Stand", description=description, url=f"{base}/b/{bid}",
             image=f"{base}/b/{bid}/card.png",
-            image_alt=f"Where They Stand briefing: {b['question']} Prepared {prepared}.")
+            image_alt=f"Where They Stand briefing: {b['question']} Prepared {prepared}.",
+            noindex=not is_featured(state, bid))  # featured briefings are for search engines to find
         return Response(html_page, media_type="text/html")
 
     @app.post("/api/admin/briefings/{bid}/withdraw")
@@ -401,6 +473,241 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     @app.get("/api/admin/briefings")
     def briefings_list(limit: int = 50, user=Depends(admin_user)):
         return {"briefings": recent_briefings(state, min(max(limit, 1), 500))}
+
+    # ---- topic briefings and featured briefings ------------------------------------------------
+    def _topic(slug: str):
+        from hansard.topics import load_topics, topics_file
+
+        t = next((t for t in load_topics(topics_file(settings)) if t.slug == slug), None)
+        if t is None:
+            raise HTTPException(404, "There is no topic at this address.")
+        return t
+
+    @app.get("/api/topics")
+    def topics_index():
+        from hansard.topics import topic_listing
+
+        topics = [{k: v for k, v in t.items() if k != "last_check"} for t in topic_listing(settings, state)]
+        return {"topics": topics, "featured": featured_list(state)}
+
+    @app.get("/api/topics/{slug}")
+    def topic_detail(slug: str):
+        from hansard.topics import versions
+
+        t = _topic(slug)
+        vs = versions(state, slug)
+        b = get_briefing(state, vs[0]["briefing_id"]) if vs else None
+        return {"topic": {"slug": t.slug, "title": t.title, "area": t.area, "question": t.question,
+                          "description": t.description, "refresh_days": t.refresh_days},
+                "briefing": public_view(b) if b else None, "versions": vs}
+
+    @app.get("/topics/{slug}", include_in_schema=False)
+    def topic_page(slug: str, request: Request):
+        """The app, showing the topic's current briefing, with its title and preview card in the page head."""
+        from hansard.topics import current
+
+        t = _topic(slug)
+        index = dist / "index.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        cur = current(state, slug)
+        b = get_briefing(state, cur["briefing_id"]) if cur else None
+        description = (summary_text(public_view(b)["answer"]) if b else "") or t.description or t.question
+        html_page = page_with_meta(
+            page, title=f"{t.title}: where MPs and peers stand — Where They Stand", description=description,
+            url=f"{base}/topics/{slug}", image=f"{base}/b/{b['id']}/card.png" if b else None,
+            image_alt=f"Where They Stand topic briefing: {t.title}", noindex=False)
+        return Response(html_page, media_type="text/html")
+
+    @app.get("/sitemap-briefings.xml", include_in_schema=False)
+    def sitemap_briefings(request: Request):
+        from hansard.topics import topic_listing
+
+        base = str(request.base_url).rstrip("/")
+        urls = [f"<url><loc>{base}/topics</loc><changefreq>weekly</changefreq></url>"]
+        for t in topic_listing(settings, state):
+            if t["current"]:
+                urls.append(f"<url><loc>{base}/topics/{t['slug']}</loc>"
+                            f"<lastmod>{t['current']['prepared_at'][:10]}</lastmod></url>")
+        urls += [f"<url><loc>{base}/b/{f['id']}</loc><lastmod>{f['prepared_at'][:10]}</lastmod></url>"
+                 for f in featured_list(state)]
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
+                        f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{"".join(urls)}</urlset>',
+                        media_type="application/xml")
+
+    @app.get("/api/admin/topics")
+    def admin_topics(user=Depends(admin_user)):
+        from hansard.topics import topic_listing
+
+        return {"topics": topic_listing(settings, state), "featured": featured_list(state)}
+
+    @app.post("/api/admin/featured")
+    def admin_feature(body: FeatureBody, user=Depends(admin_user)):
+        m = re.search(r"([a-km-z2-9]{10})/?$", body.briefing.strip())
+        if not m or not feature(state, m.group(1), body.title, body.blurb):
+            raise HTTPException(404, "There is no briefing at that address (or it has been withdrawn).")
+        return {"ok": True, "id": m.group(1)}
+
+    @app.delete("/api/admin/featured/{bid}")
+    def admin_unfeature(bid: str, user=Depends(admin_user)):
+        if not unfeature(state, bid):
+            raise HTTPException(404, "That briefing is not featured.")
+        return {"ok": True}
+
+    # ---- bills ---------------------------------------------------------------------------------
+    def get_bills():
+        from hansard.bills import Bills
+
+        with lock:
+            if "bills" not in holder:
+                holder["bills"] = Bills(settings)
+        return holder["bills"]
+
+    @app.get("/api/bills")
+    def bills_index():
+        """Every bill debated since 2010, newest first (summary only)."""
+        out = []
+        for b in get_bills().all(state.latest_record_date()):
+            last = b["sittings"][-1]
+            out.append({k: b[k] for k in ("slug", "name", "first", "last", "houses", "contributions")}
+                       | {"sittings": len(b["sittings"]), "divisions": len(b["divisions"]),
+                          "latest": f"{', '.join(last['stages'])} ({'Lords' if last['house'] == 'lords' else 'Commons'})"})
+        return {"bills": out}
+
+    @app.get("/api/bills/{slug}")
+    def bill_detail(slug: str):
+        b = get_bills().get(slug, state.latest_record_date())
+        if b is None:
+            raise HTTPException(404, "There is no bill at this address.")
+        return b
+
+    @app.get("/bills/{slug}", include_in_schema=False)
+    def bill_page(slug: str, request: Request):
+        b = get_bills().get(slug, state.latest_record_date())
+        index = dist / "bill.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        if b is None:
+            return Response(page_with_meta(page, title="Bill not found — Where They Stand",
+                                           description="There is no bill at this address.", url=f"{base}/bills/{slug}",
+                                           image=None), status_code=404, media_type="text/html")
+        houses = " and ".join("the Lords" if h == "lords" else "the Commons" for h in b["houses"])
+        description = (f"The {b['name']} in Parliament: every debate and vote in {houses}, "
+                       f"{fmt_date(b['first'])} to {fmt_date(b['last'])}, from the official record.")
+        return Response(page_with_meta(page, title=f"{b['name']} — Where They Stand", description=description,
+                                       url=f"{base}/bills/{slug}", image=None, noindex=False), media_type="text/html")
+
+    @app.get("/sitemap-bills.xml", include_in_schema=False)
+    def sitemap_bills(request: Request):
+        base = str(request.base_url).rstrip("/")
+        urls = "".join(f"<url><loc>{base}/bills/{b['slug']}</loc><lastmod>{b['last']}</lastmod></url>"
+                       for b in get_bills().all(state.latest_record_date()))
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
+                        f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
+                        media_type="application/xml")
+
+    # ---- charts --------------------------------------------------------------------------------
+    chart_slots = threading.Semaphore(2)  # each chart scans the record for a few seconds; keep the server responsive
+
+    def get_trends():
+        from hansard.trends import Trends
+
+        today = get_pipeline().today  # before taking the lock: get_pipeline takes it too
+        with lock:
+            if "trends" not in holder:
+                holder["trends"] = Trends(settings, today)
+        return holder["trends"]
+
+    @app.get("/api/trends")
+    def trends(request: Request, q: str = "", by: str = "all", user=Depends(current_user)):
+        """How often words were used in Parliament each year, with the context to read the numbers (free)."""
+        requester(request, user)
+        phrases = [p for p in q.split(",") if p.strip()]
+        if not chart_slots.acquire(timeout=30):
+            raise HTTPException(503, "The site is busy drawing other charts. Please try again in a moment.")
+        try:
+            return get_trends().chart(phrases, by, str(state.latest_record_date()))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        finally:
+            chart_slots.release()
+
+    # ---- timelines -----------------------------------------------------------------------------
+    @app.get("/api/timeline")
+    def timeline_api(request: Request, q: str = "", person: int | None = None, party: str | None = None,
+                     user=Depends(current_user)):
+        """What a member or a party said on a topic, and how they voted, in date order (free: no AI)."""
+        from hansard.timeline import timeline
+
+        requester(request, user)
+        q = " ".join(q.split())
+        if len(q) < 3:
+            raise HTTPException(400, "Give a topic of at least three letters.")
+        pid = get_people().resolve(person) if person is not None else None
+        if person is not None and pid is None:
+            raise HTTPException(404, "There is no member with that number.")
+        if (pid is None) == (not party):
+            raise HTTPException(400, "Choose a member or a party.")
+        if party and party not in {p for p, _ in get_pipeline().parties()}:
+            raise HTTPException(404, "There is no party with that name.")
+        return timeline(get_pipeline().engine, get_people(), q, person_id=pid, party_id=party)
+
+    # ---- MPs and peers -----------------------------------------------------------------------
+    @app.get("/api/people")
+    def people_list(q: str = "", everyone: bool = False):
+        return {"people": get_people().search(q.strip()[:80], current_only=not everyone)}
+
+    @app.get("/api/people/{number}")
+    def person(number: int):
+        pp = get_people()
+        pid = pp.resolve(number)
+        page = pp.page(pid) if pid else None
+        if page is None:
+            raise HTTPException(404, "There is no member with that number.")
+        return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid)}
+
+    @app.get("/api/postcode/{postcode}")
+    def postcode(postcode: str, request: Request, user=Depends(current_user)):
+        requester(request, user)
+        try:
+            found = get_people().by_postcode(postcode)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        except Exception:  # Parliament's service could not be reached
+            raise HTTPException(503, "The postcode service could not be reached. Please try again.") from None
+        if not found:
+            raise HTTPException(404, "No constituency was found for that postcode.")
+        return found
+
+    @app.get("/people/{number}", include_in_schema=False)
+    @app.get("/people/{number}/{name}", include_in_schema=False)
+    def person_page(number: int, request: Request, name: str = ""):
+        """The person page, with that member's name and description in the page head."""
+        page_file = dist / "person.html"
+        html_doc = page_file.read_text() if page_file.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        pp = get_people()
+        pid = pp.resolve(number)
+        info = pp.page(pid) if pid else None
+        base = str(request.base_url).rstrip("/")
+        if info is None:
+            return Response(page_with_meta(html_doc, title="Member not found — Where They Stand",
+                                           description="There is no member at this address.",
+                                           url=f"{base}/people/{number}", image=None), status_code=404,
+                            media_type="text/html")
+        desc = f"{info['status']}. What {info['name']} has said in Parliament, with roles, majorities and votes."
+        return Response(page_with_meta(html_doc, title=f"{info['name']} — Where They Stand", description=desc,
+                                       url=f"{base}/people/{info['number']}/{info['slug']}",
+                                       image=f"{base}/og-image.png", image_alt="Where They Stand", noindex=False),
+                        media_type="text/html")
+
+    @app.get("/sitemap-people.xml", include_in_schema=False)
+    def sitemap_people(request: Request):
+        base = str(request.base_url).rstrip("/")
+        urls = "".join(f"<url><loc>{base}/people/{p['number']}/{p['slug']}</loc><changefreq>weekly</changefreq></url>"
+                       for p in get_people().search(current_only=True))
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
+                        f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
+                        media_type="application/xml")
 
     # ---- feedback, visit counts and public status ---------------------------------------
     @app.post("/api/feedback")
@@ -462,7 +769,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
 
     @app.get("/api/admin/usage")
     def usage(user=Depends(admin_user)):
-        return {**summary(state), "visits": visit_summary(state)}
+        return {**summary(state), "visits": visit_summary(state), "alerts": alerts(state, settings.usage),
+                "failures": recent_failures(state), "popular_questions": popular_questions(state)}
 
     @app.get("/api/admin/sync")
     def sync_log(user=Depends(admin_user)):

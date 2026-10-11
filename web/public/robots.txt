@@ -4,3 +4,6 @@ Disallow: /api/
 Disallow: /admin
 
 Sitemap: https://wheretheystand.uk/sitemap.xml
+Sitemap: https://wheretheystand.uk/sitemap-people.xml
+Sitemap: https://wheretheystand.uk/sitemap-briefings.xml
+Sitemap: https://wheretheystand.uk/sitemap-bills.xml

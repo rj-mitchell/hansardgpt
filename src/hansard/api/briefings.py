@@ -45,6 +45,54 @@ def store_briefing(state: StateDB, question: str, settings: dict[str, Any], even
     raise RuntimeError("could not allocate a briefing id")
 
 
+def keep(state: StateDB, question: str, settings: dict[str, Any], kept: list[dict[str, Any]],
+         final: dict[str, Any]) -> dict[str, Any]:
+    """Keep a just-written briefing from its stream events; returns its id, preparation time and record date."""
+    records_up_to = state.latest_record_date()
+    events = [e for e in kept if e["type"] in ("plan", "sources")] + [
+        {k: v for k, v in final.items() if k not in ("usage", "briefing_key", "support_reminder")}]
+    meta = store_briefing(state, question, settings, events, records_up_to, final.get("model"))
+    return {"briefing_id": meta["id"], "prepared_at": meta["created_at"], "records_up_to": records_up_to}
+
+
+# ---- featured briefings ------------------------------------------------------------------------------------------
+
+
+def feature(state: StateDB, bid: str, title: str | None = None, blurb: str | None = None) -> bool:
+    b = get_briefing(state, bid)
+    if b is None or b["withdrawn_at"]:
+        return False
+    with state.connect() as con:
+        con.execute("INSERT OR REPLACE INTO featured (briefing_id, title, blurb, featured_at) VALUES (?, ?, ?, ?)",
+                    (bid, (title or "").strip() or None, (blurb or "").strip() or None, utcnow()))
+    return True
+
+
+def unfeature(state: StateDB, bid: str) -> bool:
+    with state.connect() as con:
+        return con.execute("DELETE FROM featured WHERE briefing_id = ?", (bid,)).rowcount > 0
+
+
+def is_featured(state: StateDB, bid: str) -> bool:
+    with state.connect() as con:
+        return con.execute("SELECT 1 FROM featured WHERE briefing_id = ?", (bid,)).fetchone() is not None
+
+
+def featured_list(state: StateDB) -> list[dict[str, Any]]:
+    """Featured briefings, newest first, with a short summary; withdrawn ones are left out."""
+    with state.connect() as con:
+        rows = con.execute("SELECT f.briefing_id, f.title, f.blurb, f.featured_at, b.question, b.created_at, "
+                           "b.records_up_to, b.events FROM featured f JOIN briefings b ON b.id = f.briefing_id "
+                           "WHERE b.withdrawn_at IS NULL ORDER BY f.featured_at DESC").fetchall()
+    out = []
+    for r in rows:
+        final = next((e for e in json.loads(r["events"]) if e.get("type") == "final"), {})
+        out.append({"id": r["briefing_id"], "title": r["title"] or r["question"], "question": r["question"],
+                    "blurb": r["blurb"] or summary_text(final.get("answer")), "prepared_at": r["created_at"],
+                    "records_up_to": r["records_up_to"], "featured_at": r["featured_at"]})
+    return out
+
+
 def get_briefing(state: StateDB, bid: str) -> dict[str, Any] | None:
     if not ID_PATTERN.match(bid):
         return None

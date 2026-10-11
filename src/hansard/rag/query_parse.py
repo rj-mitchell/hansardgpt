@@ -21,6 +21,7 @@ from hansard.reference.portfolios import PORTFOLIOS, portfolios_for_query
 from hansard.sources.demographics import AGE_BANDS
 
 AGE_BAND_KEYS = [k for k, *_ in AGE_BANDS]
+GROUP_BY_KEYS = ("role", "gender", "age", "tenure", "majority")
 
 log = logging.getLogger(__name__)
 
@@ -28,11 +29,15 @@ ITL1_REGIONS = [
     "North East", "North West", "Yorkshire and The Humber", "East Midlands", "West Midlands",
     "East of England", "London", "South East", "South West", "Scotland", "Wales", "Northern Ireland",
 ]
+Region = Literal["North East", "North West", "Yorkshire and The Humber", "East Midlands", "West Midlands",
+                 "East of England", "London", "South East", "South West", "Scotland", "Wales", "Northern Ireland"]
 Office = Literal["gov", "shadow", "chair", "backbench"]
 House = Literal["commons", "lords"]
 Gender = Literal["F", "M"]
 AgeBand = Literal["under-40", "40-54", "55-69", "70-plus"]
-GroupBy = Literal["role", "gender", "age"]
+GroupBy = Literal["role", "gender", "age", "tenure", "majority"]
+Tenure = Literal["first-term", "returning"]
+MajorityBand = Literal["marginal", "middle", "safe"]
 
 
 class ParsedQuery(BaseModel):
@@ -42,12 +47,14 @@ class ParsedQuery(BaseModel):
     date_from: str | None = Field(description="YYYY-MM-DD or null")
     date_to: str | None = Field(description="YYYY-MM-DD or null")
     houses: list[House]
-    regions: list[str]
+    regions: list[Region]
     parties: list[str]
     speakers: list[str]
     offices: list[Office]
     genders: list[Gender]
     age_bands: list[AgeBand]
+    tenure: list[Tenure]
+    majority_bands: list[MajorityBand]
     group_by: GroupBy
     portfolios: list[str]
     wants_votes: bool
@@ -66,6 +73,8 @@ class QueryPlan:
     interpretation: str = ""
     parser: str = "offline"
     group_by: str = "role"   # how the briefing groups speakers: role (default), gender or age on the day
+    parse_error: str | None = None  # set when the model could not be used and offline rules were (not shown to readers)
+    compare: list[dict[str, str]] = field(default_factory=list)  # sides compared: {"kind", "id", "label"}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -79,6 +88,7 @@ class QueryPlan:
             "interpretation": self.interpretation,
             "parser": self.parser,
             "group_by": self.group_by,
+            "compare": self.compare,
         }
 
     @classmethod
@@ -91,12 +101,16 @@ class QueryPlan:
             offices=list(f.get("offices") or []), record_types=list(f.get("record_types") or []),
             genders=[g for g in f.get("genders") or [] if g in ("F", "M")],
             age_bands=[b for b in f.get("age_bands") or [] if b in AGE_BAND_KEYS],
+            tenure=[t for t in f.get("tenure") or [] if t in ("first-term", "returning")],
+            majority_bands=[b for b in f.get("majority_bands") or [] if b in ("marginal", "middle", "safe")],
         )
         return cls(question=d.get("question", ""), search_text=d.get("search_text") or d.get("question", ""),
                    filters=filters, portfolios=list(d.get("portfolios") or []),
                    wants_votes=bool(d.get("wants_votes")), speakers=list(d.get("speakers") or []),
                    interpretation=d.get("interpretation", ""), parser=d.get("parser", "edited"),
-                   group_by=d.get("group_by") if d.get("group_by") in ("role", "gender", "age") else "role")
+                   group_by=d.get("group_by") if d.get("group_by") in GROUP_BY_KEYS else "role",
+                   compare=[{k: str(x.get(k, "")) for k in ("kind", "id", "label")} for x in d.get("compare") or []
+                            if isinstance(x, dict)][:3])
 
 
 def _iso(v: Any) -> date | None:
@@ -171,10 +185,30 @@ def demographic_rules(ql: str) -> tuple[list[str], list[str], str]:
     return genders, bands, group_by
 
 
+def seat_rules(ql: str) -> tuple[list[str], list[str], str | None]:
+    """First-term / marginal-seat filters and grouping from plain words."""
+    tenure: list[str] = []
+    if re.search(rf"\b(new|newly[- ]elected|first[- ]term|new intake of) {_WHO}\b|\b20\d\d intake\b", ql):
+        tenure.append("first-term")
+    majority: list[str] = []
+    if re.search(r"\bmarginal (seats?|constituenc)", ql):
+        majority.append("marginal")
+    if re.search(r"\bsafe (seats?|constituenc)", ql):
+        majority.append("safe")
+    group = None
+    if re.search(r"\bmarginal and safe\b|\bsafe and marginal\b|\bby majority\b", ql):
+        group, majority = "majority", []
+    elif re.search(rf"\b(new|first[- ]term) and (long[- ]serving|experienced|returning) {_WHO}\b", ql):
+        group, tenure = "tenure", []
+    return tenure, majority, group
+
+
 _DEMOGRAPHIC_PHRASES = re.compile(
-    rf"\b(?:(?:women|female|men|male|younger|young|older|oldest)(?: and (?:women|female|men|male|older|younger))? "
+    rf"\b(?:(?:women|female|men|male|younger|young|older|oldest|new|newly[- ]elected|first[- ]term)"
+    rf"(?: and (?:women|female|men|male|older|younger|long[- ]serving|experienced|returning))? "
     rf"{_WHO}|under (?:the age of )?40|(?:over|aged) 70|by (?:gender|sex|age)|"
-    rf"(?:gender|age) (?:split|divide|gap|groups?|differences?))\b", re.I)
+    rf"(?:gender|age) (?:split|divide|gap|groups?|differences?)|(?:marginal|safe)(?: and (?:marginal|safe))? "
+    rf"(?:seats?|constituencies)|20\d\d intake|by majority)\b", re.I)
 
 
 def topic_words(question: str) -> str:
@@ -212,12 +246,17 @@ def parse_offline(question: str, region_groups: dict[str, list[str]], today: dat
         offices.append("backbench")
     wants_votes = bool(re.search(r"\bvot(e|ed|es|ing)\b|dissent|rebel|divisions?\b", ql))
     genders, age_bands, group_by = demographic_rules(ql)
+    tenure, majority_bands, seat_group = seat_rules(ql)
+    group_by = seat_group or group_by
+    if tenure or majority_bands or seat_group:
+        houses.append("commons")
     parties = [pid for pid, pattern in _PARTY_WORDS if re.search(pattern, ql)]
     return QueryPlan(
         question=question,
         search_text=topic_words(_DEMOGRAPHIC_PHRASES.sub(" ", question)) or question,
         filters=Filters(date_from=date_from, date_to=date_to, houses=sorted(set(houses)) if len(set(houses)) == 1 else [],
-                        regions=regions, offices=offices, parties=parties, genders=genders, age_bands=age_bands),
+                        regions=regions, offices=offices, parties=parties, genders=genders, age_bands=age_bands,
+                        tenure=tenure, majority_bands=majority_bands),
         portfolios=list(portfolios_for_query(_DEMOGRAPHIC_PHRASES.sub(" ", question))),
         wants_votes=wants_votes,
         interpretation="Interpreted with offline rules (no language model).",
@@ -244,8 +283,10 @@ Rules:
 - date_from/date_to: ISO dates for explicit or clearly implied periods ("between 2018 and 2022" ->
   2018-01-01 to 2022-12-31; "since the 2024 election" -> 2024-07-04).
 - houses: "commons" for MPs/House of Commons/constituencies, "lords" for peers/House of Lords.
-- regions: ITL1 regions for questions about where MPs' seats are. Named groups:
+- regions: ITL1 regions, only for questions about where MPs' seats are, listed individually by name. A named group
+  stands for all its regions, so list each of them:
 {groups}
+  Choose exactly the places asked about: "Scottish MPs" -> ["Scotland"], "Welsh MPs" -> ["Wales"].
   Region filters apply to MPs only (peers have no constituency), so also set houses to ["commons"].
 - parties: party ids from this list: {party_list}
 - speakers: full names of specific people the question asks about, as written.
@@ -255,9 +296,16 @@ Rules:
   A topic about women or men ("women's health", "men's mental health") is never a gender filter.
 - age_bands: speakers' age on the date they spoke: "under-40", "40-54", "55-69", "70-plus". Only when the
   question restricts speakers by age ("younger MPs" -> ["under-40"], "MPs over 70" -> ["70-plus"]).
-- group_by: "gender" if the question asks how women and men differ, "age" if it asks how views differ by age;
-  otherwise "role" (the default: ministers, opposition, backbenchers by seat type). When grouping by gender or age,
-  leave genders and age_bands empty so both sides are searched.
+- tenure: MPs' length of service on the date they spoke: "first-term" (newly elected: still in the Parliament they
+  were first elected to, e.g. "new MPs", "the 2024 intake") or "returning" (re-elected at least once). Only when the
+  question restricts speakers this way; it also implies houses ["commons"].
+- majority_bands: the MP's majority at the time they spoke, as a share of votes cast: "marginal" (under 10%),
+  "middle" (10% to 20%), "safe" (over 20%). Only when the question restricts to marginal or safe seats; it also
+  implies houses ["commons"].
+- group_by: "gender" if the question asks how women and men differ, "age" if it asks how views differ by age,
+  "tenure" if it compares new and long-serving MPs, "majority" if it compares MPs in marginal and safe seats;
+  otherwise "role" (the default: ministers, opposition, backbenchers by seat type). When grouping by one of these,
+  leave the matching filter empty so every group is searched.
 - portfolios: the policy areas the question is about (used to boost relevant ministers, not to filter):
 {ports}
 - wants_votes: true if the question is about how members voted, rebellions, dissent or divisions.
@@ -265,17 +313,39 @@ Rules:
   dates written as 9 October 2026)."""
 
 
+def expand_regions(names: list[str], groups: dict[str, list[str]]) -> list[str]:
+    """ITL1 region names, in the standard order; a named group ("northern") becomes its regions."""
+    lower = {r.lower(): r for r in ITL1_REGIONS}
+    out: set[str] = set()
+    for n in names:
+        key = n.strip()
+        group = groups.get(key) or groups.get(key.lower().replace(" ", "_"))
+        out.update(group or ([lower[key.lower()]] if key.lower() in lower else []))
+    return [r for r in ITL1_REGIONS if r in out]
+
+
+def _open_end(d: date | None, today: date) -> date | None:
+    """An end date of today or later is the same as no end date (and reads better as a filter)."""
+    return None if d is not None and d >= today else d
+
+
+def parse_model(settings) -> str:
+    return settings.answer.get("query_parse_model") or settings.answer.get("model", "claude-opus-5-5")
+
+
 def parse_with_model(client, settings, question: str, history: list[dict[str, str]] | None,
                      parties: list[tuple[str, str]], today: date | None = None) -> tuple[QueryPlan, Any]:
+    from hansard.rag.answer import cached_system
+
     today = today or date.today()
     convo = ""
     if history:
         convo = "Earlier questions in this conversation (for resolving references like 'what about the Lords?'):\n"
         convo += "\n".join(f"- {h['question']}" for h in history[-4:]) + "\n\n"
     resp = client.messages.parse(
-        model=settings.answer.get("model", "claude-opus-5-5"),
+        model=parse_model(settings),
         max_tokens=2000,
-        system=system_prompt(settings.regions, parties, today),
+        system=cached_system(system_prompt(settings.regions, parties, today)),
         messages=[{"role": "user", "content": f"{convo}Question: {question}"}],
         output_config={"effort": settings.answer.get("query_parse_effort", "low")},
         output_format=ParsedQuery,
@@ -289,11 +359,14 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
         question=question,
         search_text=p.search_text.strip() or question,
         filters=Filters(
-            date_from=_iso(p.date_from), date_to=_iso(p.date_to), houses=sorted(set(p.houses)),
-            regions=[r for r in p.regions if r in ITL1_REGIONS],
+            date_from=_iso(p.date_from), date_to=_open_end(_iso(p.date_to), today),
+            houses=sorted(set(p.houses)), regions=expand_regions(p.regions, settings.regions),
             parties=[x for x in p.parties if x in known_parties], offices=sorted(set(p.offices)),
             genders=sorted(set(p.genders)) if p.group_by != "gender" else [],
             age_bands=[b for b in AGE_BAND_KEYS if b in p.age_bands] if p.group_by != "age" else [],
+            tenure=sorted(set(p.tenure)) if p.group_by != "tenure" else [],
+            majority_bands=[b for b in ("marginal", "middle", "safe") if b in p.majority_bands]
+            if p.group_by != "majority" else [],
         ),
         portfolios=[x for x in p.portfolios if x in known_ports],
         wants_votes=p.wants_votes,

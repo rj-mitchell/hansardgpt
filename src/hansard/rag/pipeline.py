@@ -24,8 +24,9 @@ from hansard.rag.neutral import flag_loaded
 from hansard.rag.prompts import NO_RECORDS
 from hansard.rag.query_parse import QueryPlan, parse_offline, parse_with_model, resolve_speakers
 from hansard.rag.sources import build_sources
-from hansard.rag.verify import verify
+from hansard.rag.verify import check_quotes, verify
 from hansard.sources.demographics import AGE_BAND_LABEL, GENDER_LABEL
+from hansard.sources.elections import MAJORITY_BAND_LABEL, TENURE_LABEL
 from hansard.votes import VoteFinder
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ class AskRequest:
     scope: Scope = field(default_factory=Scope)
     plan: dict[str, Any] | None = None        # edited plan from the UI (skips re-parsing)
     history: list[dict[str, str]] = field(default_factory=list)
+    compare: list[dict[str, Any]] = field(default_factory=list)  # sides to compare, from the Compare page
 
 
 def plan_note(plan: QueryPlan, scope: Scope) -> str:
@@ -61,11 +63,39 @@ def plan_note(plan: QueryPlan, scope: Scope) -> str:
         bits.append("speakers: " + " and ".join(GENDER_LABEL[g] for g in f.genders))
     if f.age_bands:
         bits.append("speakers aged " + ", ".join(AGE_BAND_LABEL[b] for b in f.age_bands) + " on the day")
+    if f.tenure:
+        bits.append("speakers: " + " and ".join(TENURE_LABEL[t] for t in f.tenure) + " (on the day)")
+    if f.majority_bands:
+        bits.append("MPs in seats that were " + ", ".join(MAJORITY_BAND_LABEL[b] for b in f.majority_bands)
+                    + " at the time")
     if not scope.written:
         bits.append("written answers/statements excluded")
     if not scope.pbc:
         bits.append("Public Bill Committees excluded")
+    if plan.compare:
+        bits.append("comparing " + " and ".join(s["label"] for s in plan.compare) + ", each searched separately")
     return "; ".join(bits)
+
+
+def plan_facets(plan: QueryPlan) -> set[str]:
+    """Speaker facts the question is about (gender, age, first term, majority): only these are given to the model."""
+    f = plan.filters
+    out = {plan.group_by} - {"role"}
+    for facet, active in (("gender", f.genders), ("age", f.age_bands), ("tenure", f.tenure),
+                          ("majority", f.majority_bands)):
+        if active:
+            out.add(facet)
+    return out
+
+
+def rerank_query(plan: QueryPlan, how: str | None) -> str:
+    """What the re-ranker compares passages with: the question as asked, the search keywords, or both
+    (the keywords carry the topic of a follow-up such as "what about the Lords?")."""
+    if how == "keywords":
+        return plan.search_text
+    if how == "question":
+        return plan.question
+    return f"{plan.question} ({plan.search_text})"
 
 
 class Pipeline:
@@ -115,27 +145,89 @@ class Pipeline:
             except Exception as exc:
                 log.warning("model query parsing failed (%s); using offline rules", exc)
                 plan = parse_offline(req.question, self.settings.regions, self.today)
+                plan.parse_error = f"{type(exc).__name__}: {exc}"
         else:
             plan = parse_offline(req.question, self.settings.regions, self.today)
         if plan.unresolved_speakers:
             plan.speakers, plan.unresolved_speakers = resolve_speakers(
                 self.engine.resolver.con, plan.unresolved_speakers, plan.filters)
             plan.filters.person_ids = [s["person_id"] for s in plan.speakers]
+        self._set_comparison(plan, req)
         return plan, usage
 
-    def run(self, req: AskRequest) -> Iterator[dict[str, Any]]:
-        plan, parse_usage = self.make_plan(req)
-        yield {"type": "plan", "plan": plan.to_dict(), "usage": parse_usage}
+    def person_name(self, person_id: str) -> str | None:
+        row = self.engine.resolver.con.execute("SELECT latest_name FROM ref_persons WHERE person_id = ?",
+                                               [person_id]).fetchone()
+        return row[0] if row else None
 
+    def _set_comparison(self, plan: QueryPlan, req: AskRequest) -> None:
+        """Sides from the Compare page, or from a question that asks to compare named members or parties."""
+        from hansard.compare import resolve_sides, sides_from_question
+
+        names = dict(self.parties())
+        sides = (resolve_sides(req.compare, names, self.person_name) if req.compare
+                 else sides_from_question(plan.question, plan.filters, plan.speakers, names))
+        if not sides:
+            return
+        plan.compare = sides
+        kinds = {s["kind"] for s in sides}
+        # each side brings its own filter; the question's other filters (dates, House, roles) still apply to both
+        if "party" in kinds:
+            plan.filters.parties = []
+        if "person" in kinds:
+            plan.filters.person_ids = []
+        if "nation" in kinds:
+            plan.filters.regions = []
+        plan.group_by = "role"
+        plan.interpretation = (plan.interpretation + " " if plan.interpretation else "") + \
+            "Comparing " + " and ".join(s["label"] for s in sides) + ", each searched separately."
+
+    def find(self, plan: QueryPlan, req: AskRequest):
+        """The evidence for a plan: (search result, divisions, numbered sources). Free: no model call."""
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))
-        result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
-                                    req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by)
+        rq = rerank_query(plan, self.settings.ranking.get("rerank_query"))
+        if plan.compare:
+            result = self._compare_search(plan, req, limit, rq)
+        else:
+            result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
+                                        req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by,
+                                        rerank_query=rq)
         divisions = []
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
-        demographics = plan.group_by != "role" or bool(plan.filters.genders or plan.filters.age_bands)
-        sources = build_sources(result.records, divisions, demographics, plan.group_by)
+        return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by)
+
+    def _compare_search(self, plan: QueryPlan, req: AskRequest, limit: int, rq: str):
+        """One search per side, each with an equal share of the sources."""
+        from dataclasses import replace
+
+        from hansard.compare import side_filters
+
+        share = max(4, -(-limit // len(plan.compare)))
+        results = []
+        for side in plan.compare:
+            res = self.engine.search(plan.search_text, side_filters(plan.filters, side), req.scope, plan.portfolios,
+                                     req.recency, req.role_weight, share, diversify=True, group_by="role",
+                                     rerank_query=rq)
+            for r in res.records:
+                r["compare_side"] = side["label"]
+            results.append(res)
+        records = [r for res in results for r in res.records]
+        from hansard.rank.evidence import evidence_summary
+
+        return replace(results[0], records=records, scored=[x for res in results for x in res.scored],
+                       no_records=all(res.no_records for res in results),
+                       candidates=sum(res.candidates for res in results), evidence=evidence_summary(records))
+
+    def run(self, req: AskRequest) -> Iterator[dict[str, Any]]:
+        plan, parse_usage = self.make_plan(req)
+        ev: dict[str, Any] = {"type": "plan", "plan": plan.to_dict(), "usage": parse_usage}
+        if plan.parse_error:
+            ev["parse_error"] = plan.parse_error  # for the operator's failure log; removed before reaching readers
+        yield ev
+
+        result, divisions, sources = self.find(plan, req)
         from hansard.rank.evidence import evidence_summary
 
         yield {"type": "sources", "sources": [s.card() for s in sources], "candidates": result.candidates,
@@ -157,7 +249,7 @@ class Pipeline:
         final = None
         for ev in Answerer(self.settings, self.client).stream(
                 req.question, sources, req.mode, plan_note(plan, req.scope), req.history, self.today,
-                group_by=plan.group_by):
+                group_by=plan.group_by, compare=plan.compare):
             if ev["type"] == "final":
                 final = ev
             else:
@@ -168,6 +260,7 @@ class Pipeline:
         report = verify(final["blocks"], sources)
         britishise_segments(report.segments)  # the model's own words only; quotations stay verbatim
         flag_loaded(report.segments)          # judgemental words in its own voice are highlighted, not hidden
+        check_quotes(report, sources)         # quotations not found word for word in their sources are marked
         yield {"type": "final", "answer": report.to_dict(), "usage": final["usage"], "model": final["model"],
                "stop_reason": final["stop_reason"]}
 

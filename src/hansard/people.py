@@ -1,0 +1,256 @@
+"""MP and peer pages: who someone is, the seats and roles they have held, their majorities, recent contributions
+and voting record, and "Your MP" by postcode.
+
+Everything is computed from the same reference tables and records as the briefings. Voting summaries use the
+rebellion definition in ``votes.py``: voting against the majority of one's own party in that division.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import threading
+from datetime import date
+from typing import Any
+
+import duckdb
+import httpx
+
+from hansard.config import Settings
+from hansard.reference.build import office_display
+from hansard.reference.profiles import ProfileResolver, attach_reference
+from hansard.sources.demographics import USER_AGENT, age_on, assumed_birth
+from hansard.sources.elections import election_label, majority_band
+from hansard.store.parquet import attach_store
+
+log = logging.getLogger(__name__)
+
+PREFIX = "uk.org.publicwhip/person/"
+POSTCODE = re.compile(r"^[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}$")
+OPEN_END = date(9999, 12, 31)
+
+
+def person_number(person_id: str) -> int | None:
+    return int(person_id.rsplit("/", 1)[1]) if person_id and person_id.startswith(PREFIX) else None
+
+
+def slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+
+
+def _iso(d: date | None) -> str | None:
+    return None if d is None or d == OPEN_END else d.isoformat()
+
+
+class People:
+    def __init__(self, settings: Settings, resolver: ProfileResolver, today: date | None = None):
+        self.settings = settings
+        self.resolver = resolver
+        self.today = today
+        self.con = duckdb.connect()
+        attach_reference(self.con, settings.reference_dir)
+        self.stores = set(attach_store(self.con, settings.parquet_dir))
+        self._lock = threading.Lock()
+        self._votes_version: Any = None
+
+    # ---- identity ----------------------------------------------------------------------------------------------
+    def resolve(self, number: int) -> str | None:
+        """Canonical person id for a parlparse person number (following redirects)."""
+        row = self.con.execute("SELECT person_id FROM ref_person_ids WHERE xml_id = ?", [f"{PREFIX}{number}"]).fetchone()
+        return row[0] if row else None
+
+    def _xml_ids(self, person_id: str) -> list[str]:
+        return [r[0] for r in self.con.execute("SELECT xml_id FROM ref_person_ids WHERE person_id = ?",
+                                               [person_id]).fetchall()]
+
+    # ---- the page ----------------------------------------------------------------------------------------------
+    def page(self, person_id: str) -> dict[str, Any] | None:
+        person = self.con.execute("SELECT latest_name, gender, birth_date, birth_precision, datadotparl_id "
+                                  "FROM ref_persons WHERE person_id = ?", [person_id]).fetchone()
+        if person is None:
+            return None
+        name, gender, born, precision, mnis = person
+        today = self.today or date.today()
+        names = [r[0] for r in self.con.execute(
+            "SELECT name FROM ref_names WHERE person_id = ? GROUP BY name ORDER BY min(start)", [person_id]).fetchall()]
+        memberships = [
+            {"house": h, "constituency": c, "region": reg, "party": party, "start": _iso(s), "end": _iso(e)}
+            for h, c, reg, party, s, e in self.con.execute(
+                """SELECT house, constituency, region, party_name, start, "end" FROM ref_memberships
+                   WHERE person_id = ? ORDER BY start""", [person_id]).fetchall()]
+        offices = []
+        for kind, role, cid, cname, s, e in self.con.execute(
+                """SELECT kind, role, committee_id, committee_name, start, "end" FROM ref_offices
+                   WHERE person_id = ? AND kind IN ('gov', 'shadow', 'chair', 'whip', 'parliamentary')
+                   ORDER BY start DESC""", [person_id]).fetchall():
+            title = office_display({"kind": kind, "role": role, "committee_id": cid, "committee_name": cname}, s)
+            offices.append({"kind": kind, "title": title, "start": _iso(s), "end": _iso(e)})
+        current = [m for m in memberships if m["end"] is None]
+        seats = self._seats(person_id)
+        birth = assumed_birth(born, precision)
+        return {
+            "person_id": person_id,
+            "number": person_number(person_id),
+            "name": names[-1] if names else name,
+            "other_names": names[:-1],
+            "slug": slug(names[-1] if names else name),
+            "current": current[-1] if current else None,
+            "status": self._status(memberships, current),
+            "gender": gender,
+            "age": age_on(birth, today) if birth else None,
+            "age_approximate": precision == "year" if birth else None,
+            "parliament_id": mnis,
+            "memberships": memberships,
+            "offices": offices,
+            "seats": seats,
+            "first_elected": self.resolver._seat_index()["first"].get(person_id).isoformat()
+            if self.resolver._seat_index()["first"].get(person_id) else None,
+        }
+
+    @staticmethod
+    def _status(memberships: list[dict[str, Any]], current: list[dict[str, Any]]) -> str:
+        if current:
+            m = current[-1]
+            if m["house"] == "commons":
+                return f"MP for {m['constituency']}" + (f" ({m['party']})" if m.get("party") else "")
+            return "Member of the House of Lords" + (f" ({m['party']})" if m.get("party") else "")
+        if memberships:
+            last = memberships[-1]
+            return f"Former {'MP' if last['house'] == 'commons' else 'member of the House of Lords'} (until {last['end']})"
+        return "Not a current member"
+
+    def _seats(self, person_id: str) -> list[dict[str, Any]]:
+        """Each seat held, with the results of the elections they won there (newest first)."""
+        idx = self.resolver._seat_index()
+        out = []
+        for start, end, cid, cname in reversed(idx["reps"].get(person_id, [])):
+            results = []
+            first_day, last_day = start.isoformat(), _iso(end) or "9999-12-31"
+            for r in reversed(idx["results"].get(cid, [])):
+                if first_day <= r["date"] <= last_day:  # the elections they won while holding this seat
+                    votes = r.get("votes") or 0
+                    pct = round(100 * r["majority"] / votes, 1) if votes and r.get("majority") is not None else None
+                    results.append({"election": election_label(r), "date": r["date"], "majority": r["majority"],
+                                    "pct": pct, "band": majority_band(pct), "party": r.get("party")})
+            out.append({"constituency": cname, "start": start.isoformat(), "end": _iso(end), "results": results})
+        return out
+
+    # ---- recent contributions ----------------------------------------------------------------------------------
+    def contributions(self, person_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        if "records" not in self.stores:
+            return []
+        xml = self._xml_ids(person_id)
+        year = (self.today or date.today()).year
+        rows: list[tuple] = []
+        for since in (year - 1, year - 5, 0):  # look at recent years first: most people have spoken lately
+            rows = self.con.execute(
+                f"""SELECT DISTINCT ON (record_id) record_id, date, chamber, record_type, major_heading, minor_heading,
+                           left(text, 320) AS excerpt, twfy_url, official_url
+                    FROM records WHERE year >= {int(since)} AND list_contains(?, xml_person_id)
+                    ORDER BY record_id, date DESC""", [xml]).fetchall()
+            if len(rows) >= limit or since == 0:
+                break
+        rows.sort(key=lambda r: (r[1], r[0]), reverse=True)
+        cols = ["record_id", "date", "chamber", "record_type", "major_heading", "minor_heading", "excerpt",
+                "twfy_url", "official_url"]
+        out = []
+        for r in rows[:limit]:
+            d = dict(zip(cols, r, strict=True))
+            d["date"] = d["date"].isoformat()
+            d["heading"] = " — ".join(x for x in (d.pop("major_heading"), d.pop("minor_heading")) if x)
+            out.append(d)
+        return out
+
+    # ---- voting record -----------------------------------------------------------------------------------------
+    def _ensure_votes(self) -> bool:
+        if not {"votes", "divisions"} <= self.stores:
+            return False
+        version = self.con.execute("SELECT count(*), max(date) FROM divisions").fetchone()
+        with self._lock:
+            if version != self._votes_version:
+                # every member's vote with their whip group on the day, and each group's majority (about 2-3 s)
+                self.con.execute("""
+                    CREATE OR REPLACE TABLE party_votes AS
+                    WITH v AS (
+                      SELECT v.division_id, v.date, v.vote, coalesce(pid.person_id, v.xml_person_id) AS person_id
+                      FROM votes v LEFT JOIN ref_person_ids pid ON pid.xml_id = v.xml_person_id
+                      WHERE v.vote IN ('aye', 'no')),
+                    m AS (
+                      SELECT v.division_id, v.date, v.person_id, v.vote, arg_max(mm.party_id, mm.start) AS party_id
+                      FROM v LEFT JOIN ref_memberships mm
+                        ON mm.person_id = v.person_id AND v.date BETWEEN mm.start AND mm."end"
+                      GROUP BY ALL)
+                    SELECT m.*, p.whip_group FROM m LEFT JOIN ref_parties p ON p.party_id = m.party_id""")
+                self.con.execute("""
+                    CREATE OR REPLACE TABLE party_majorities AS
+                    SELECT division_id, whip_group, mode(vote) AS majority, count(*) AS n
+                    FROM party_votes WHERE whip_group IS NOT NULL GROUP BY ALL""")
+                self._votes_version = version
+        return True
+
+    def voting(self, person_id: str, recent: int = 15) -> dict[str, Any] | None:
+        if not self._ensure_votes():
+            return None
+        total, rebellions, first, last = self.con.execute("""
+            SELECT count(*), count(*) FILTER (WHERE pm.n >= 2 AND pv.vote <> pm.majority), min(pv.date), max(pv.date)
+            FROM party_votes pv LEFT JOIN party_majorities pm USING (division_id, whip_group)
+            WHERE pv.person_id = ?""", [person_id]).fetchone()
+        rows = self.con.execute("""
+            SELECT d.date, d.house, d.number, d.major_heading, d.minor_heading, pv.vote, pm.majority, d.twfy_url,
+                   d.official_url
+            FROM party_votes pv JOIN party_majorities pm USING (division_id, whip_group)
+            JOIN divisions d ON d.division_id = pv.division_id
+            WHERE pv.person_id = ? AND pm.n >= 2 AND pv.vote <> pm.majority
+            ORDER BY d.date DESC, d.number DESC LIMIT ?""", [person_id, recent]).fetchall()
+        recent_rebellions = [{
+            "date": r[0].isoformat(), "house": r[1], "number": r[2],
+            "title": " — ".join(x for x in (r[3], r[4]) if x), "vote": r[5], "party_majority": r[6],
+            "twfy_url": r[7], "official_url": r[8]} for r in rows]
+        return {"votes": total, "rebellions": rebellions, "since": first.isoformat() if first else None,
+                "until": last.isoformat() if last else None, "recent_rebellions": recent_rebellions,
+                "method": "A rebellion is a vote against the majority of the member's own party in that division, "
+                          "using their party on the day. Some divisions are free votes, where parties set no line, so "
+                          "voting differently from colleagues there breaks no whip. Members without a party whip are "
+                          "not counted, and absences are not recorded."}
+
+    # ---- finding people ----------------------------------------------------------------------------------------
+    def search(self, text: str = "", current_only: bool = True, limit: int = 2000) -> list[dict[str, Any]]:
+        """Members for the people index: current MPs and peers (or anyone since 2010), optionally by name."""
+        where = ['m."end" >= ?' if not current_only else 'm."end" = DATE \'9999-12-31\'']
+        params: list[Any] = [] if current_only else [date(2010, 5, 6)]
+        if text:
+            where.append("lower(n.name) LIKE ?")
+            params.append(f"%{text.lower()}%")
+        rows = self.con.execute(f"""
+            SELECT m.person_id, arg_max(m.house, m.start), arg_max(m.constituency, m.start), arg_max(m.party_name, m.start),
+                   (SELECT arg_max(n2.name, n2.start) FROM ref_names n2 WHERE n2.person_id = m.person_id) AS name
+            FROM ref_memberships m JOIN ref_names n ON n.person_id = m.person_id
+            WHERE {' AND '.join(where)} GROUP BY m.person_id ORDER BY name LIMIT {int(limit)}""", params).fetchall()
+        return [{"number": person_number(pid), "name": name, "slug": slug(name), "house": house,
+                 "constituency": cons, "party": party} for pid, house, cons, party, name in rows if person_number(pid)]
+
+    def by_postcode(self, postcode: str, client: httpx.Client | None = None) -> dict[str, Any] | None:
+        """The current MP for a postcode, via the UK Parliament Members API."""
+        compact = re.sub(r"\s+", "", postcode.upper())
+        pc = f"{compact[:-3]} {compact[-3:]}" if len(compact) >= 5 else compact
+        if not POSTCODE.match(pc):
+            raise ValueError("That does not look like a UK postcode.")
+        own = client is None
+        client = client or httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=15)
+        try:
+            body = client.get("https://members-api.parliament.uk/api/Location/Constituency/Search",
+                              params={"searchText": pc, "take": 1}).json()
+        finally:
+            if own:
+                client.close()
+        items = body.get("items") or []
+        if not items:
+            return None
+        v = items[0]["value"]
+        member = ((v.get("currentRepresentation") or {}).get("member") or {}).get("value") or {}
+        row = self.con.execute("SELECT person_id FROM ref_persons WHERE datadotparl_id = ?",
+                               [str(member.get("id"))]).fetchone() if member.get("id") else None
+        pid = row[0] if row else None
+        name = member.get("nameDisplayAs")
+        return {"postcode": pc, "constituency": v.get("name"), "name": name,
+                "number": person_number(pid) if pid else None, "slug": slug(name or "")}

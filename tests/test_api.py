@@ -108,13 +108,27 @@ def test_ask_streams_plan_sources_text_and_verified_answer(api):
         assert con.execute("SELECT count(*) FROM usage WHERE kind = 'answer'").fetchone()[0] == 1
 
 
+def sources_but_no_briefing(evs, word):
+    """Over a limit, readers still get the (free) sources, with a note saying why there is no briefing."""
+    final = evs[-1]
+    return (final["type"] == "final" and final["answer"] is None and word in final["note"]
+            and any(e["type"] == "sources" and e["sources"] for e in evs))
+
+
+def test_sources_only_needs_no_model(public):
+    client, state, fake = public
+    before = len(fake.calls)
+    evs = events(client.post("/api/ask", json={"question": "trial by jury", "sources_only": True}))
+    assert sources_but_no_briefing(evs, "Sources only") and len(fake.calls) == before
+
+
 def test_daily_question_cap(api):
     client, _ = api
     login(client)
     for _ in range(2):
         assert events(client.post("/api/ask", json={"question": "trial by jury"}))[-1]["type"] == "final"
     last = events(client.post("/api/ask", json={"question": "trial by jury"}))
-    assert last[-1]["type"] == "error" and "limit" in last[-1]["message"]
+    assert sources_but_no_briefing(last, "limit")
 
 
 def test_search_endpoint_needs_no_model(api):
@@ -174,7 +188,7 @@ def test_each_visitor_has_a_daily_limit_but_cached_answers_still_load(public):
     for q in ("trial by jury", "jury trials and courts"):
         assert events(client.post("/api/ask", json={"question": q}))[-1]["type"] == "final"
     blocked = events(client.post("/api/ask", json={"question": "security in Northern Ireland"}))
-    assert blocked[-1]["type"] == "error" and "limit" in blocked[-1]["message"]
+    assert sources_but_no_briefing(blocked, "limit")
     assert events(client.post("/api/ask", json={"question": "trial by jury"}))[-1]["type"] == "final"
     other = TestClient(client.app, client=("203.0.113.9", 50000))
     assert events(other.post("/api/ask", json={"question": "security in Northern Ireland"}))[-1]["type"] == "final"
@@ -184,7 +198,7 @@ def test_site_wide_daily_budget(public):
     client, state, _ = public
     record_usage(state, None, "answer", "claude-opus-5-5", {"input_tokens": 3_000_000}, {})
     evs = events(client.post("/api/ask", json={"question": "trial by jury"}))
-    assert evs[-1]["type"] == "error" and "budget" in evs[-1]["message"]
+    assert sources_but_no_briefing(evs, "budget")
 
 
 def test_requests_per_minute_limit(indexed_settings, tmp_path):
@@ -407,3 +421,63 @@ def test_visitor_codes_change_daily_and_old_secrets_are_deleted(tmp_path):
     with state.connect() as con:
         keys = [r[0] for r in con.execute("SELECT key FROM kv WHERE key LIKE 'visitor_salt%'")]
     assert keys == ["visitor_salt:2026-10-13"]
+
+
+def test_failures_and_spending_show_as_alerts(tmp_path):
+    from hansard.api.usage import alerts, recent_failures, record_failure
+
+    state = StateDB(tmp_path / "state.sqlite")
+    caps = {"daily_spend_cap_usd": 10, "monthly_spend_cap_usd": 150, "price_input_per_mtok": 4.0}
+    assert alerts(state, caps) == []
+    record_failure(state, "question reading", "Q?", "AuthenticationError: invalid x-api-key")
+    a = alerts(state, caps)
+    assert len(a) == 1 and "1 briefing failed" in a[0]["text"] and "invalid x-api-key" in a[0]["text"]
+    assert recent_failures(state)[0]["kind"] == "question reading"
+    record_usage(state, None, "answer", "m", {"input_tokens": 2_000_000}, caps, "v")  # $8 of a $10 day
+    texts = " ".join(x["text"] for x in alerts(state, caps))
+    assert "80% of the $10 cap" in texts
+
+
+def test_failed_briefing_is_logged_and_readers_see_plain_words(indexed_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("HANSARD_ADMIN_TOKEN", "s3cret-token")
+    app, state, client = make_app(indexed_settings, tmp_path, auth=False)
+
+    def broken(*a, **k):
+        raise RuntimeError("upstream is down")
+
+    monkeypatch.setattr(client.messages, "stream", broken)
+    monkeypatch.setattr(client.beta.messages, "stream", broken)
+    tc = TestClient(app)
+    evs = events(tc.post("/api/ask", json={"question": "What has been said about trial by jury?"}))
+    err = evs[-1]
+    assert err["type"] == "error" and "could not be written" in err["message"] and "RuntimeError" not in err["message"]
+    usage = tc.get("/api/admin/usage", headers={"Authorization": "Bearer s3cret-token"}).json()
+    assert usage["failures"][0]["error"].startswith("RuntimeError") and usage["alerts"]
+    assert usage["popular_questions"][0] == {"question": "what has been said about trial by jury?", "times": 1,
+                                              "last": usage["popular_questions"][0]["last"]}
+
+
+def test_cache_writes_and_reads_are_priced(tmp_path):
+    prices = {"price_input_per_mtok": 4.0, "price_output_per_mtok": 20.0, "price_cache_read_per_mtok": 0.2}
+    assert cost_usd({"input_tokens": 1_000_000, "cache_write_tokens": 1_000_000}, prices) == 5.0
+    assert cost_usd({"input_tokens": 0, "cache_read_tokens": 1_000_000}, prices) == 0.2
+
+
+def test_support_reminder_every_n_new_briefings(indexed_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("HANSARD_DONATE_URL", "https://ko-fi.com/example")
+    app, state, _ = make_app(indexed_settings, tmp_path, auth=False, support_reminder_every=2,
+                             per_visitor_daily_questions=10)
+    client = TestClient(app)
+
+    def final(q):
+        return [e for e in events(client.post("/api/ask", json={"question": q})) if e["type"] == "final"][-1]
+
+    assert "support_reminder" not in final("trial by jury")
+    second = final("onshore wind farms")
+    assert second["support_reminder"] == 2  # every second new briefing, with the count so far
+    assert "support_reminder" not in final("trial by jury")  # an earlier briefing again: no new cost, no reminder
+    # the shared copy of a briefing never carries the reminder
+    assert "support_reminder" not in client.get(f"/api/briefings/{second['briefing_id']}").text
+    assert client.post("/api/support-clicked").status_code == 200
+    final("rail fares")
+    assert "support_reminder" not in final("prison places")  # went to donate: no more reminders today

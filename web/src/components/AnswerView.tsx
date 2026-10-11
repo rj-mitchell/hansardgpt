@@ -134,14 +134,19 @@ export function Grounding({ answer }: { answer: Answer }) {
   }
   const flagged = answer.unsupported_segments;
   const loaded = answer.loaded_words ?? 0;
+  const misquoted = answer.quotes_unverified ?? 0;
   return (
-    <p className={flagged || loaded ? "grounding warn" : "grounding ok"}>
+    <p className={flagged || loaded || misquoted ? "grounding warn" : "grounding ok"}>
       {flagged
         ? `${flagged} passage${flagged === 1 ? "" : "s"} not directly supported by a cited source (highlighted). Treat with caution.`
         : `Every substantive statement is cited (${answer.citations_total} citation${answer.citations_total === 1 ? "" : "s"}, each checked against the source text).`}
       {loaded > 0 &&
         ` ${loaded} judgemental word${loaded === 1 ? "" : "s"} in the briefing's own voice (underlined); the record itself should be checked.`}
       {answer.citations_invalid > 0 && ` ${answer.citations_invalid} citation(s) could not be verified and were removed.`}
+      {misquoted > 0 &&
+        ` ${misquoted} quotation${misquoted === 1 ? " was" : "s were"} not found word for word in the cited source (marked); check the source before relying on ${misquoted === 1 ? "it" : "them"}.`}
+      {!misquoted && (answer.quotes_total ?? 0) > 0 &&
+        ` All ${answer.quotes_total} quotations were checked word for word against their sources.`}
     </p>
   );
 }

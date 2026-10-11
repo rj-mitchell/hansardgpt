@@ -93,6 +93,25 @@ def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[d
     return load_demographics(demographics_path(settings)), status
 
 
+def elections_path(settings: Settings) -> Path:
+    return settings.data_dir / "raw" / "elections.json"
+
+
+def refresh_elections_data(settings: Settings, members_dir: Path, fetch: bool = True
+                           ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Seats and election results for every MP since 2010 (refreshed weekly when ``fetch``), and what happened."""
+    from hansard.sources.elections import commons_member_ids, load_elections, refresh_elections
+
+    status: dict[str, Any] = {"status": "not fetched"}
+    if fetch and settings.section("elections").get("enabled", True):
+        try:
+            status = refresh_elections(elections_path(settings), commons_member_ids(members_dir / "people.json"))
+        except Exception as exc:  # never let this stop a sync
+            log.warning("election results refresh failed: %s", exc)
+            status = {"status": "failed", "error": repr(exc)}
+    return load_elections(elections_path(settings)), status
+
+
 def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | None) -> dict[str, Any]:
     from hansard.sources import parlparse
 
@@ -103,16 +122,22 @@ def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | No
         sha = parlparse.ensure_checkout(settings.sources["parlparse_repo"], settings.parlparse_dir,
                                         settings.sources.get("parlparse_branch", "master"))
         members_dir = parlparse.members_dir(settings.parlparse_dir)
-        if (sha == state.get("parlparse_sha") and (settings.reference_dir / "persons.parquet").exists()
-                and demo_status.get("status") not in ("updated", "partial")):
-            return {"parlparse_sha": sha, "reference_changed": False, "people_changed": [],
-                    "demographics": demo_status}
+    elections, elec_status = refresh_elections_data(settings, members_dir, fetch=fetch)
+    unchanged = (fetch and sha == state.get("parlparse_sha")
+                 and (settings.reference_dir / "persons.parquet").exists()
+                 and (settings.reference_dir / "election_results.parquet").exists()
+                 and demo_status.get("status") not in ("updated", "partial")
+                 and elec_status.get("status") != "updated")
+    if unchanged:
+        return {"parlparse_sha": sha, "reference_changed": False, "people_changed": [],
+                "demographics": demo_status, "elections": elec_status}
     ref = build_reference(members_dir, STATIC_DIR / "geo" / "constituencies.csv",
                           Path(settings.config_path).parent / "overrides" / "constituency_names.csv",
-                          demographics)
+                          demographics, elections)
     people = install_reference(settings, state, ref, sha)
     return {"parlparse_sha": sha, "reference_changed": True, "people_changed": sorted(people),
-            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", []), "demographics": demo_status}
+            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", []), "demographics": demo_status,
+            "elections": elec_status}
 
 
 def install_reference(settings: Settings, state: StateDB, ref: ReferenceData, sha: str | None) -> set[str]:
@@ -135,6 +160,18 @@ def install_reference(settings: Settings, state: StateDB, ref: ReferenceData, sh
     if sha:
         state.set("parlparse_sha", sha)
     return people
+
+
+def refresh_topics_safely(settings: Settings, state: StateDB) -> list[dict[str, Any]] | str:
+    """Refresh the topic briefings that are due; a failure here never fails the sync."""
+    try:
+        from hansard.rag.pipeline import Pipeline
+        from hansard.topics import refresh_topics
+
+        return refresh_topics(settings, state, Pipeline(settings))
+    except Exception as exc:
+        log.warning("topic briefings were not refreshed: %s", exc)
+        return f"error: {type(exc).__name__}: {exc}"
 
 
 def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | None = 60.0,
@@ -173,6 +210,31 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
         stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
 
+        t = time.time()
+        try:  # the bill pages' index, ready before anyone asks for it
+            from hansard.bills import Bills
+
+            stats["bills"] = {"bills": len(Bills(settings).all(state.latest_record_date())),
+                              "seconds": round(time.time() - t, 1)}
+        except Exception as exc:
+            log.warning("bill index not rebuilt: %s", exc)
+
+        t = time.time()
+        try:  # the totals every chart is read against, ready before anyone asks
+            from hansard.trends import BY, Trends
+
+            trends = Trends(settings)
+            for by in BY:
+                trends.totals(by, str(state.latest_record_date()))
+            stats["chart_totals_seconds"] = round(time.time() - t, 1)
+        except Exception as exc:
+            log.warning("chart totals not rebuilt: %s", exc)
+
+        from hansard.rank.rerank import ensure_reranker
+
+        # before the embedder loads: once a model is on disk, downloads are switched off for this process
+        stats["reranker"] = ensure_reranker(settings)
+
         if settings.embedding.get("enabled", True) and (embed_minutes is None or embed_minutes > 0):
             from hansard.embed.base import get_embedder
 
@@ -182,6 +244,11 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                               max_seconds=embed_minutes * 60 if embed_minutes else None)
             stats["embed"] = {"passages_embedded": n, "files_remaining": len(state.unembedded()),
                               "seconds": round(time.time() - t, 1)}
+
+        if settings.section("topics").get("enabled", True) and fetch:
+            t = time.time()
+            stats["topics"] = refresh_topics_safely(settings, state)
+            stats["topics_seconds"] = round(time.time() - t, 1)
 
         t = time.time()
         cutoff = ((today or date.today()) - timedelta(days=COMPACT_AFTER_DAYS)).isoformat()

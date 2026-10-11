@@ -18,13 +18,27 @@ from typing import Any
 from hansard.store.state import StateDB, utcnow
 
 
-def cost_usd(usage: dict[str, int] | None, prices: dict[str, Any]) -> float:
+def prices_for(prices: dict[str, Any], model: str | None) -> dict[str, Any]:
+    """The [usage] prices, with any per-model prices (``[usage.models."<model>"]``) on top."""
+    per_model = prices.get("models") or {}
+    for name, own in per_model.items():
+        if model and (model == name or model.startswith(name)):
+            return {**prices, **own}
+    return prices
+
+
+def cost_usd(usage: dict[str, int] | None, prices: dict[str, Any], model: str | None = None) -> float:
+    """Cost of one call. Cache writes cost 1.25x the input price; cache reads are priced separately."""
     if not usage:
         return 0.0
+    prices = prices_for(prices, model)
+    price_in = float(prices.get("price_input_per_mtok", 4.0))
+    writes = usage.get("cache_write_tokens", 0)
     return round(
-        usage.get("input_tokens", 0) / 1e6 * float(prices.get("price_input_per_mtok", 4.0))
+        (usage.get("input_tokens", 0) - writes) / 1e6 * price_in
+        + writes / 1e6 * price_in * float(prices.get("cache_write_multiplier", 1.25))
         + usage.get("output_tokens", 0) / 1e6 * float(prices.get("price_output_per_mtok", 20.0))
-        + usage.get("cache_read_tokens", 0) / 1e6 * float(prices.get("price_cache_read_per_mtok", 0.4)),
+        + usage.get("cache_read_tokens", 0) / 1e6 * float(prices.get("price_cache_read_per_mtok", 0.2)),
         6,
     )
 
@@ -48,7 +62,7 @@ def visitor_key(state: StateDB, address: str | None, day: str | None = None) -> 
 
 def record_usage(state: StateDB, user_id: int | None, kind: str, model: str | None,
                  usage: dict[str, int] | None, prices: dict[str, Any], visitor: str | None = None) -> float:
-    cost = cost_usd(usage, prices)
+    cost = cost_usd(usage, prices, model)
     u = usage or {}
     with state.connect() as con:
         con.execute(
@@ -58,6 +72,34 @@ def record_usage(state: StateDB, user_id: int | None, kind: str, model: str | No
             (user_id, visitor, utcnow(), kind, model, u.get("input_tokens", 0), u.get("output_tokens", 0),
              u.get("cache_read_tokens", 0), cost))
     return cost
+
+
+def new_briefings_today(state: StateDB, visitor: str) -> int:
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
+    with state.connect() as con:
+        return con.execute("SELECT count(*) FROM usage WHERE visitor = ? AND kind = 'answer' AND at >= ?",
+                           (visitor, day)).fetchone()[0]
+
+
+def _supporter_key(visitor: str) -> str:
+    return f"supporter:{datetime.now(UTC).strftime('%Y-%m-%d')}:{visitor}"
+
+
+def mark_supporter(state: StateDB, visitor: str) -> None:
+    """The visitor went through to the donation page: no more reminders today (visitor codes change daily)."""
+    with state.connect() as con:
+        con.execute("INSERT OR REPLACE INTO kv (key, value) VALUES (?, '1')", (_supporter_key(visitor),))
+        con.execute("DELETE FROM kv WHERE key LIKE 'supporter:%' AND key NOT LIKE ?",
+                    (f"supporter:{datetime.now(UTC).strftime('%Y-%m-%d')}:%",))
+
+
+def support_reminder_due(state: StateDB, visitor: str | None, every: int) -> int:
+    """After every ``every``-th new briefing a visitor has had written today, how many that is (else 0); never
+    once they have gone through to donate today."""
+    if not visitor or every <= 0:
+        return 0
+    n = new_briefings_today(state, visitor)
+    return n if n > 0 and n % every == 0 and state.get(_supporter_key(visitor)) is None else 0
 
 
 def check_caps(state: StateDB, user_id: int | None, limits: dict[str, Any], visitor: str | None = None) -> str | None:
@@ -74,7 +116,7 @@ def check_caps(state: StateDB, user_id: int | None, limits: dict[str, Any], visi
         elif visitor is not None:
             asked = con.execute("SELECT count(*) FROM usage WHERE visitor = ? AND kind = 'answer' AND at >= ?",
                                 (visitor, day)).fetchone()[0]
-            if asked >= int(limits.get("per_visitor_daily_questions", 15)):
+            if asked >= int(limits.get("per_visitor_daily_questions", 40)):
                 return ("You have reached today's limit for new briefings. It resets at midnight UTC; "
                         "briefings others have already asked for still load.")
         spent_today = con.execute("SELECT coalesce(sum(cost_usd), 0) FROM usage WHERE at >= ?", (day,)).fetchone()[0]
@@ -137,6 +179,61 @@ def record_feedback(state: StateDB, briefing_key: str | None, question: str, use
     with state.connect() as con:
         con.execute("INSERT INTO feedback (at, briefing_key, question, useful, visitor) VALUES (?, ?, ?, ?, ?)",
                     (utcnow(), briefing_key, question[:500], int(useful), visitor))
+
+
+def record_failure(state: StateDB, kind: str, question: str | None, error: str) -> None:
+    with state.connect() as con:
+        con.execute("INSERT INTO failures (at, kind, question, error) VALUES (?, ?, ?, ?)",
+                    (utcnow(), kind, (question or "")[:500], error[:500]))
+        # keep the table small: the latest 500 are plenty to diagnose anything
+        con.execute("DELETE FROM failures WHERE id NOT IN (SELECT id FROM failures ORDER BY id DESC LIMIT 500)")
+
+
+def alerts(state: StateDB, usage_settings: dict[str, Any]) -> list[dict[str, str]]:
+    """Things the operator should know about now: recent failures and spending close to the caps."""
+    out: list[dict[str, str]] = []
+    since = (datetime.now(UTC) - timedelta(hours=24)).isoformat(timespec="seconds")
+    with state.connect() as con:
+        n, latest = con.execute("SELECT count(*), max(at) FROM failures WHERE at >= ?", (since,)).fetchone()
+        last_error = con.execute("SELECT kind, error FROM failures ORDER BY id DESC LIMIT 1").fetchone()
+    if n:
+        out.append({"level": "error" if n >= 3 else "warning",
+                    "text": f"{n} briefing{'s' if n != 1 else ''} failed in the last 24 hours "
+                            f"(latest: {last_error[0]}, {last_error[1]}). See Recent failures."})
+    s = summary(state)
+    for label, spent, cap in (("today", s["today_usd"], float(usage_settings.get("daily_spend_cap_usd", 0) or 0)),
+                              ("this month", s["total_usd"],
+                               float(usage_settings.get("monthly_spend_cap_usd", 0) or 0))):
+        if cap and spent >= 0.8 * cap:
+            out.append({"level": "error", "text": f"Spending {label} is ${spent:.2f}, {spent / cap:.0%} of the "
+                                                  f"${cap:.0f} cap. New briefings pause at the cap."})
+        elif cap and spent >= 0.5 * cap:
+            out.append({"level": "warning", "text": f"Spending {label} is ${spent:.2f}, {spent / cap:.0%} of the "
+                                                    f"${cap:.0f} cap."})
+    return out
+
+
+def recent_failures(state: StateDB, limit: int = 20) -> list[dict[str, Any]]:
+    with state.connect() as con:
+        rows = con.execute("SELECT at, kind, question, error FROM failures ORDER BY id DESC LIMIT ?",
+                           (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def count_question(state: StateDB, question: str) -> None:
+    q = " ".join(question.lower().split())[:300]
+    with state.connect() as con:
+        con.execute("INSERT INTO question_counts (day, question, n) VALUES (?, ?, 1) "
+                    "ON CONFLICT(day, question) DO UPDATE SET n = n + 1", (datetime.now(UTC).strftime("%Y-%m-%d"), q))
+
+
+def popular_questions(state: StateDB, days: int = 30, limit: int = 20) -> list[dict[str, Any]]:
+    """The questions asked most often (counts only, nothing about who asked)."""
+    since = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
+    with state.connect() as con:
+        rows = con.execute("SELECT question, sum(n) total, max(day) last FROM question_counts WHERE day >= ? "
+                           "GROUP BY question ORDER BY total DESC, last DESC LIMIT ?", (since, limit)).fetchall()
+    return [{"question": q, "times": n, "last": last} for q, n, last in rows]
 
 
 def record_visit(state: StateDB, path: str, referrer_host: str | None, visitor: str | None) -> None:

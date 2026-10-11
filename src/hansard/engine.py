@@ -20,6 +20,7 @@ from hansard.embed.base import Embedder, get_embedder
 from hansard.index.lance import SearchIndex, date_lit, sql_list, sql_str
 from hansard.rank.composite import Candidate, RankParams, Scored, rank
 from hansard.rank.evidence import evidence_summary, select_evidence
+from hansard.rank.rerank import Reranker, get_reranker, rerank
 from hansard.reference.profiles import ProfileResolver
 from hansard.sources.demographics import AGE_BANDS, age_band, age_on, assumed_birth, band_dates
 from hansard.store.parquet import read_partition_rows
@@ -29,7 +30,7 @@ log = logging.getLogger(__name__)
 WRITTEN_SOURCES = {"wrans", "lordswrans", "wms", "lordswms"}
 PBC_SOURCES = {"standing"}
 ORAL_SOURCES = {"debates", "westminhall", "lordspages"}
-GROUP_BY = ("role", "gender", "age")
+GROUP_BY = ("role", "gender", "age", "tenure", "majority")
 ARCHIVE_START = date(2010, 5, 6)
 
 
@@ -45,6 +46,8 @@ class Filters:
     record_types: list[str] = field(default_factory=list)    # speech/question/answer/statement
     genders: list[str] = field(default_factory=list)         # "F", "M" (as recorded by Parliament)
     age_bands: list[str] = field(default_factory=list)       # see sources.demographics.AGE_BANDS; age on the day
+    tenure: list[str] = field(default_factory=list)          # "first-term", "returning" (MPs, on the day)
+    majority_bands: list[str] = field(default_factory=list)  # "marginal", "middle", "safe" (MPs, on the day)
 
     def as_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -113,8 +116,11 @@ def build_where(filters: Filters, scope: Scope) -> str:
 
 
 class Engine:
-    def __init__(self, settings: Settings, embedder: Embedder | None = None, today: date | None = None):
+    def __init__(self, settings: Settings, embedder: Embedder | None = None, today: date | None = None,
+                 reranker: Reranker | None | bool = True):
         self.settings = settings
+        # True: load the model named in the settings when first needed; None or False: no re-ranking
+        self._reranker: Reranker | None | bool = reranker
         dim = int(settings.embedding.get("dim", 384))
         self.index = SearchIndex(settings.index_dir, dim)
         self.resolver = ProfileResolver(settings.reference_dir)
@@ -133,6 +139,12 @@ class Engine:
                 return None
         return self._embedder
 
+    @property
+    def reranker(self) -> Reranker | None:
+        if self._reranker is True:
+            self._reranker = get_reranker(self.settings)  # None if switched off or the model cannot be loaded
+        return self._reranker or None
+
     def expand_parties(self, parties: list[str]) -> list[str]:
         """'labour' also matches Labour/Co-operative members (same whip)."""
         if not parties:
@@ -150,9 +162,11 @@ class Engine:
         people who were in an age band at some point in the date range, and each record is then checked against
         the speaker's age on the day it was spoken.
         """
-        if not filters.genders and not filters.age_bands:
+        if not (filters.genders or filters.age_bands or filters.tenure or filters.majority_bands):
             return None, {}
         clauses, params = ["m.\"end\" >= ?"], [filters.date_from or ARCHIVE_START]
+        if filters.tenure or filters.majority_bands:
+            clauses.append("m.house = 'commons'")  # first terms and majorities apply to MPs
         if filters.date_to:
             clauses.append("m.start <= ?")
             params.append(filters.date_to)
@@ -184,30 +198,56 @@ class Engine:
     def search(self, query: str, filters: Filters | None = None, scope: Scope | None = None,
                portfolios: list[str] | None = None, recency: float | None = None,
                role_weight: float | None = None, limit: int = 12, diversify: bool = False,
-               group_by: str = "role") -> SearchResult:
+               group_by: str = "role", rerank_query: str | None = None) -> SearchResult:
         filters, scope = filters or Filters(), scope or Scope()
         r = self.settings.ranking
         if filters.parties:
             filters = Filters(**{**filters.__dict__, "parties": self.expand_parties(filters.parties)})
-        people, births = self.demographic_people(filters)
+        post_filters = bool(filters.age_bands or filters.tenure or filters.majority_bands)
+        if (filters.tenure or filters.majority_bands) and not (filters.genders or filters.age_bands):
+            # First terms and majorities depend on the day, so each candidate is checked below; listing every MP
+            # in the search itself would only slow it down. Limiting it to the Commons is enough.
+            people, births = None, {}
+            if not filters.houses:
+                filters = Filters(**{**filters.__dict__, "houses": ["commons"]})
+        else:
+            people, births = self.demographic_people(filters)
         if people is not None:
             # an impossible id keeps the search empty when nobody matches
             filters = Filters(**{**filters.__dict__, "person_ids": people or ["-none-"]})
         bands = set(filters.age_bands)
+        tenure, majority = set(filters.tenure), set(filters.majority_bands)
+        facts: dict[tuple[str, date], dict[str, Any]] = {}
+
+        def seat(pid: str, on: date) -> dict[str, Any]:
+            if (pid, on) not in facts:
+                facts[(pid, on)] = self.resolver.seat_facts(pid, on)
+            return facts[(pid, on)]
 
         def age_ok(hit: dict[str, Any]) -> bool:
-            if not bands:
-                return True
-            birth = births.get(hit.get("person_id"))
-            return birth is not None and age_band(age_on(birth, hit["date"])) in bands
+            """The checks that depend on the date of the record: age, first term, majority at the time."""
+            pid = hit.get("person_id")
+            if bands:
+                birth = births.get(pid)
+                if birth is None or age_band(age_on(birth, hit["date"])) not in bands:
+                    return False
+            if tenure or majority:
+                f = seat(pid, hit["date"]) if pid else {}
+                if tenure and {True: "first-term", False: "returning"}.get(f.get("first_term")) not in tenure:
+                    return False
+                if majority and f.get("majority_band") not in majority:
+                    return False
+            return True
 
         where = build_where(filters, scope)
-        bm = self.index.bm25(query, where, int(r.get("candidates_bm25", 300)))
+        # checks made after the search discard some candidates, so fetch more to start with
+        widen = 2 if post_filters else 1
+        bm = self.index.bm25(query, where, int(r.get("candidates_bm25", 300)) * widen)
         vec_hits: list[dict[str, Any]] = []
         semantic = self.index.stats()["vectors"] > 0 and self.embedder is not None
         if semantic:
             vec_hits = self.index.vector(self.embedder.embed_query(query), where,
-                                         int(r.get("candidates_vector", 300)))
+                                         int(r.get("candidates_vector", 300)) * widen)
 
         cands: dict[str, Candidate] = {}
 
@@ -237,6 +277,8 @@ class Engine:
                 c.best_passage_id = h["passage_id"]
         for h in vec_hits:
             c = cand_for(h)
+            if h.get("text"):
+                c.data["passages"].setdefault(h["passage_id"], {"text": h["text"], "heading": h.get("heading")})
             sim = 1.0 - float(h["_distance"])
             if c.cosine is None or sim > c.cosine:
                 c.cosine = sim
@@ -249,6 +291,9 @@ class Engine:
             semantic_floor=r.get("semantic_floor", floor), semantic_ceiling=r.get("semantic_ceiling", ceiling),
             **({"today": self.today} if self.today else {}))
         scored = rank(list(cands.values()), set(portfolios or []), params)
+        if self.reranker is not None and scored:
+            scored = rerank(scored, rerank_query or query, self.reranker, top=int(r.get("rerank_top", 150)),
+                            weight=float(r.get("rerank_weight", 0.6)))
         best_cos = max((c.cosine or 0.0 for c in cands.values()), default=0.0)
         no_records = not scored or (semantic and best_cos < float(r.get("no_records_cosine", 0.0))
                                     and not any(c.bm25 for c in cands.values()))

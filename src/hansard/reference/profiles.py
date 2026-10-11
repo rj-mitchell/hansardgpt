@@ -22,15 +22,22 @@ import pyarrow as pa
 from hansard.reference.build import office_display
 from hansard.reference.portfolios import KIND_CHAIR, KIND_GOV, KIND_SHADOW
 from hansard.sources.demographics import age_band, age_on, assumed_birth
+from hansard.sources.elections import election_label, first_term, general_elections, majority_band
 
-REFERENCE_TABLES = ("persons", "person_ids", "names", "memberships", "offices", "constituencies", "parties")
+REFERENCE_TABLES = ("persons", "person_ids", "names", "memberships", "offices", "constituencies", "parties",
+                    "representations", "election_results")
 
 
 def attach_reference(con: duckdb.DuckDBPyConnection, reference_dir: Path) -> None:
     """Create views over the reference Parquet files."""
+    from hansard.reference.build import _SCHEMAS
+
     for name in REFERENCE_TABLES:
         path = Path(reference_dir) / f"{name}.parquet"
-        con.execute(f"CREATE OR REPLACE VIEW ref_{name} AS SELECT * FROM read_parquet('{path.as_posix()}')")
+        if path.exists():
+            con.execute(f"CREATE OR REPLACE VIEW ref_{name} AS SELECT * FROM read_parquet('{path.as_posix()}')")
+        else:  # a table added after this reference set was built: empty until the next rebuild
+            con.register(f"ref_{name}", _SCHEMAS[name].empty_table())
     # reference sets built before gender and date of birth were added: treat them as not known
     cols = {r[0] for r in con.execute("DESCRIBE ref_persons").fetchall()}
     missing = [f"NULL::{t} AS {c}" for c, t in (("gender", "VARCHAR"), ("birth_date", "DATE"),
@@ -132,6 +139,7 @@ class SpeakerProfile:
     gender: str | None = None             # "F" | "M", as recorded by Parliament
     birth_date: date | None = None
     birth_precision: str | None = None    # day | month | year
+    seat: dict[str, Any] = field(default_factory=dict)  # majority then and now, first term (Commons only)
 
     @property
     def office_titles(self) -> list[str]:
@@ -167,6 +175,7 @@ class SpeakerProfile:
             "age": self.age,
             "age_approximate": self.age_approximate if self.age is not None else None,
             "age_band": age_band(self.age),
+            **self.seat,
         }
 
 
@@ -213,6 +222,63 @@ class ProfileResolver:
         names = self._all_names([p for p in person_ids if p])
         for prof in out.values():
             prof.other_names = [n for n in names.get(prof.person_id, []) if n != prof.name]
+            if prof.house == "commons":
+                prof.seat = self.seat_facts(prof.person_id, prof.on)
+        return out
+
+    # ---- seats, majorities and first terms ---------------------------------------------------------------
+    def _seat_index(self) -> dict[str, Any]:
+        if getattr(self, "_seats", None) is None:
+            reps: dict[str, list[tuple]] = {}
+            for pid, cid, name, start, end in self.con.execute(
+                    'SELECT person_id, constituency_id, constituency_name, start, "end" FROM ref_representations '
+                    "ORDER BY start").fetchall():
+                reps.setdefault(pid, []).append((start, end, cid, name))
+            results: dict[int, list[dict[str, Any]]] = {}
+            for row in self.con.execute(
+                    "SELECT constituency_id, election_date, is_general, majority, votes, party FROM ref_election_results "
+                    "ORDER BY election_date").fetchall():
+                cid, d, general, majority, votes, party = row
+                results.setdefault(cid, []).append({"date": d.isoformat(), "general": general, "majority": majority,
+                                                    "votes": votes, "party": party})
+            first = dict(self.con.execute(
+                "SELECT person_id, min(start) FROM ref_memberships WHERE house = 'commons' GROUP BY person_id").fetchall())
+            self._seats = {"reps": reps, "results": results, "first": first,
+                           "elections": general_elections({str(k): v for k, v in results.items()})}
+        return self._seats
+
+    @staticmethod
+    def _majority(result: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not result or result.get("majority") is None:
+            return None
+        votes = result.get("votes") or 0
+        pct = round(100 * result["majority"] / votes, 1) if votes else None
+        return {"majority": result["majority"], "pct": pct, "band": majority_band(pct),
+                "election": election_label(result), "date": result["date"]}
+
+    def seat_facts(self, person_id: str | None, on: date) -> dict[str, Any]:
+        """Majority at the time (the last election in their seat before ``on``), majority now, and first term."""
+        if not person_id:
+            return {}
+        idx = self._seat_index()
+        out: dict[str, Any] = {}
+        reps = idx["reps"].get(person_id, [])
+        held = next((r for r in reversed(reps) if r[0] <= on <= r[1]), None)  # the seat they held that day
+        first = idx["first"].get(person_id)
+        if held and first is not None and first <= on:
+            out["first_elected"] = first.isoformat()
+            out["first_term"] = first_term(first, on, idx["elections"])
+        if held:
+            past = [r for r in idx["results"].get(held[2], []) if r["date"] <= on.isoformat()]
+            then = self._majority(past[-1] if past else None)
+            if then:
+                out["majority_then"] = then
+                out["majority_band"] = then["band"]
+        if reps and reps[-1][1].year == 9999:  # an MP today: their current seat's latest result
+            latest = idx["results"].get(reps[-1][2], [])
+            now = self._majority(latest[-1] if latest else None)
+            if now:
+                out["majority_now"] = {**now, "constituency": reps[-1][3]}
         return out
 
     def profile(self, xml_person_id: str, on: date) -> SpeakerProfile:

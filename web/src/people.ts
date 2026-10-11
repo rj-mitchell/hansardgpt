@@ -49,6 +49,24 @@ export const AGE_BAND_LABEL: Record<string, string> = {
   unknown: "Not known",
 };
 
+export const TENURE_LABEL: Record<string, string> = {
+  "first-term": "First-term MPs",
+  returning: "Re-elected MPs",
+  unknown: "Not known",
+};
+export const MAJORITY_LABEL: Record<string, string> = {
+  marginal: "Marginal (under 10%)",
+  middle: "10% to 20%",
+  safe: "Safe (over 20%)",
+  unknown: "Not known",
+};
+
+/** e.g. "4,937 (11.8%) at the 2019 general election". */
+export function majorityText(m: { majority: number; pct: number | null; election: string } | null | undefined): string | null {
+  if (!m) return null;
+  return `${m.majority.toLocaleString("en-GB")}${m.pct != null ? ` (${m.pct}% of votes cast)` : ""} at the ${m.election}`;
+}
+
 /** Age on the date of the record: "54", or "about 54" when only the year of birth is known. */
 export function ageLabel(sp: Speaker | null | undefined): string | null {
   if (sp?.age == null) return null;

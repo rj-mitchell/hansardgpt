@@ -20,9 +20,9 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: 
   return e;
 }
 
-async function call<T>(path: string, body?: unknown): Promise<T> {
+async function call<T>(path: string, body?: unknown, method?: string): Promise<T> {
   const resp = await fetch(path, {
-    method: body === undefined ? "GET" : "POST",
+    method: method ?? (body === undefined ? "GET" : "POST"),
     headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -123,14 +123,74 @@ function withdrawButton(b: Briefing): Node {
   return btn;
 }
 
+async function feature(briefing: string, title?: string, blurb?: string) {
+  await call("/api/admin/featured", { briefing, title: title || null, blurb: blurb || null });
+  await load();
+}
+
+function featureButton(b: Briefing, featured: Set<string>): Node {
+  if (b.withdrawn_at) return el("span");
+  if (featured.has(b.id)) return el("span", "Featured", "muted small");
+  const btn = el("button", "Feature", "link small");
+  btn.type = "button";
+  btn.addEventListener("click", () => void feature(b.id).catch((e) => alert(e instanceof Error ? e.message : e)));
+  return btn;
+}
+
+function unfeatureButton(id: string): Node {
+  const btn = el("button", "Remove", "link small");
+  btn.type = "button";
+  btn.addEventListener("click", async () => {
+    if (!confirm("Stop featuring this briefing? It stays at its address.")) return;
+    await call(`/api/admin/featured/${id}`, undefined, "DELETE");
+    await load();
+  });
+  return btn;
+}
+
 async function load() {
-  const [usage, reports, briefings, sync] = await Promise.all([
+  const [usage, reports, briefings, sync, topics] = await Promise.all([
     call<any>("/api/admin/usage"),
     call<{ reports: Report[] }>("/api/admin/reports?status=open"),
     call<{ briefings: Briefing[] }>("/api/admin/briefings?limit=30"),
     call<{ runs: any[] }>("/api/admin/sync"),
+    call<{ topics: any[]; featured: any[] }>("/api/admin/topics"),
   ]);
+  const featured = new Set<string>(topics.featured.map((f: any) => f.id));
+  const link = (href: string, text: string) => {
+    const a = el("a", text);
+    a.href = href;
+    a.target = "_blank";
+    return a;
+  };
+  $("admin-featured").replaceChildren(
+    table(
+      ["Featured", "Briefing", ""],
+      topics.featured.map((f: any) => [when(f.featured_at), link(`/b/${f.id}`, f.title), unfeatureButton(f.id)]),
+    ),
+  );
+  $("admin-topics").replaceChildren(
+    table(
+      ["Topic", "Last written", "Versions", "Last check"],
+      topics.topics.map((t: any) => [
+        link(`/topics/${t.slug}`, t.title),
+        t.current ? when(t.current.prepared_at) : "Not yet",
+        t.versions,
+        t.last_check ? `${when(t.last_check.checked_at)}: ${t.last_check.outcome}` : "",
+      ]),
+    ),
+  );
   const usd = (n: number) => `$${(n ?? 0).toFixed(2)}`;
+  const alertBoxes = (usage.alerts ?? []).map((a: { level: string; text: string }) =>
+    el("p", a.text, a.level === "error" ? "admin-alert error" : "admin-alert"),
+  );
+  $("admin-alerts").replaceChildren(...(alertBoxes.length ? alertBoxes : [el("p", "No alerts.", "admin-alert ok")]));
+  $("admin-popular").replaceChildren(
+    table(["Question", "Times asked", "Last asked"], (usage.popular_questions ?? []).map((q: any) => [q.question, q.times, q.last])),
+  );
+  $("admin-failures").replaceChildren(
+    table(["When", "What", "Question", "Error"], (usage.failures ?? []).map((f: any) => [when(f.at), f.kind, f.question ?? "", f.error])),
+  );
   $("admin-spend").replaceChildren(
     el("p", `Today: ${usd(usage.today_usd)} (${usage.today_calls} calls). This month (${usage.month}): ${usd(usage.total_usd)}.`),
   );
@@ -151,12 +211,12 @@ async function load() {
   );
   $("admin-briefings").replaceChildren(
     table(
-      ["Prepared", "Question", ""],
+      ["Prepared", "Question", "", ""],
       briefings.briefings.map((b) => {
         const a = el("a", b.question);
         a.href = `/b/${b.id}`;
         a.target = "_blank";
-        return [when(b.created_at), a, withdrawButton(b)];
+        return [when(b.created_at), a, featureButton(b, featured), withdrawButton(b)];
       }),
     ),
   );
@@ -185,6 +245,20 @@ async function open() {
     err.hidden = false;
   }
 }
+
+$("feature-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("feature-error");
+  err.hidden = true;
+  const v = (id: string) => ($(id) as HTMLInputElement).value.trim();
+  try {
+    await feature(v("feature-briefing"), v("feature-title"), v("feature-blurb"));
+    (e.target as HTMLFormElement).reset();
+  } catch (ex) {
+    err.textContent = ex instanceof Error ? ex.message : "Could not feature that briefing.";
+    err.hidden = false;
+  }
+});
 
 $("admin-login").addEventListener("submit", (e) => {
   e.preventDefault();

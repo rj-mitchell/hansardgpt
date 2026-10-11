@@ -182,11 +182,15 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 |---|---|
 | See usage, spend, visits and feedback | the admin page, or the `curl` command printed at the end of setup |
 | See the update history | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/sync` |
-| Install a new version of the site | merge the latest changes into `main` on GitHub (step 1), then on the server: `cd /opt/hansardgpt && git pull && cd deploy && docker compose up -d --build` |
+| Install a new version of the site | merge the latest changes into `main` on GitHub (step 1), then on the server: `bash /opt/hansardgpt/deploy/update.sh` (it finishes with the health check) |
 | Restart the site | `cd /opt/hansardgpt/deploy && docker compose restart` |
 | Change the API key | the command below |
 | Change the "Support this site" link (it points to https://ko-fi.com/wheretheystand) | add `HANSARD_DONATE_URL=https://…` to `/opt/hansardgpt/deploy/.env`, then `docker compose up -d` in the same folder |
 | List recent briefings | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/briefings` |
+| Feature a briefing (listed on the Topics page and found by search engines) | the admin page: "Feature" next to a recent briefing, or paste its address under "Featured briefings" |
+| Write the topic briefings now, rather than waiting for the twice-daily update (about 11p each) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard topics refresh` (add `--only cost-of-living` for one) |
+| See each topic's state | the admin page, or `docker compose exec app hansard topics list` |
+| Add, change or remove a topic | edit `config/topics.toml` in the code (ask me), then install it as a new version. Never change a published topic's `slug`: it is its address |
 | Withdraw a briefing (after a complaint, say) | `curl -X POST -H "Authorization: Bearer YOUR_ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"reason": "complaint about attribution"}' https://wheretheystand.uk/api/admin/briefings/THE_ID/withdraw` |
 
 Your admin token is in `/opt/hansardgpt/deploy/.env` (`HANSARD_ADMIN_TOKEN=`).
@@ -231,5 +235,6 @@ docker compose start app
 
 ## Spending limits
 
-The defaults are 15 new briefings per visitor a day, and $10 a day and $150 a month for the whole site. To change
-them, edit the `[usage]` section of `config/settings.toml`, then install it as a new version (see the table).
+Every 10 new briefings in a day, a visitor sees a short note on what the site costs, with your Ko-fi link; if they
+go through to Ko-fi, they are not reminded again that day. As a backstop against automated use, a visitor can have
+at most 40 new briefings a day. The whole site has budgets of $10 a day and $150 a month. To change any of these, edit the `[usage]` section of `config/settings.toml`, then install it as a new version (see the table).

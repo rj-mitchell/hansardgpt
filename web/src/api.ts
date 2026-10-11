@@ -1,4 +1,4 @@
-import type { Meta, Plan, SavedBriefing, Settings, SourceCard } from "./types";
+import type { CompareSide, Meta, Plan, SavedBriefing, Settings, SourceCard, TopicDetail } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -40,6 +40,7 @@ export const api = {
   logout: () => post("/api/auth/logout", {}).then(json),
   meta: () => fetch("/api/meta", { credentials: "same-origin" }).then((r) => json<Meta>(r)),
   briefing: (id: string) => fetch(`/api/briefings/${id}`).then((r) => json<SavedBriefing>(r)),
+  topic: (slug: string) => fetch(`/api/topics/${slug}`).then((r) => json<TopicDetail>(r)),
   feedback: (question: string, useful: boolean, briefingKey?: string) =>
     post("/api/feedback", { question, useful, briefing_key: briefingKey ?? null }).then(json),
   report: (body: ReportInput) => post("/api/report", body).then(json),
@@ -65,9 +66,13 @@ export function askBody(
   settings: Settings,
   plan?: Plan,
   history: { question: string; answer?: string }[] = [],
+  sourcesOnly = false,
+  compare: CompareSide[] = [],
 ) {
   return {
     question,
+    compare: plan ? [] : compare.map(({ kind, id }) => ({ kind, id })),
+    sources_only: sourcesOnly,
     mode: settings.mode,
     recency: settings.recency,
     role_weight: settings.roleWeight,
@@ -80,6 +85,8 @@ export function askBody(
           wants_votes: plan.wants_votes,
           speakers: plan.speakers,
           interpretation: plan.interpretation,
+          group_by: plan.group_by,
+          compare: plan.compare,
         }
       : undefined,
     history,

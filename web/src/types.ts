@@ -24,6 +24,19 @@ export interface Speaker {
   age?: number | null;                // on the date of the record, not today
   age_approximate?: boolean | null;   // only the year of birth is known
   age_band?: string | null;
+  first_elected?: string | null;       // first elected to the Commons
+  first_term?: boolean | null;         // still in the Parliament they were first elected to, on the date
+  majority_band?: string | null;
+  majority_then?: Majority | null;     // from the last election in their seat before the date
+  majority_now?: (Majority & { constituency: string }) | null;
+}
+
+export interface Majority {
+  majority: number;
+  pct: number | null;
+  band: string | null;
+  election: string;
+  date: string;
 }
 
 export interface Ranking {
@@ -89,6 +102,8 @@ export interface Filters {
   record_types: string[];
   genders?: string[];
   age_bands?: string[];
+  tenure?: string[];
+  majority_bands?: string[];
 }
 
 export interface Plan {
@@ -101,7 +116,15 @@ export interface Plan {
   unresolved_speakers: string[];
   interpretation: string;
   parser: string;
-  group_by?: "role" | "gender" | "age";
+  group_by?: "role" | "gender" | "age" | "tenure" | "majority";
+  /** sides compared, each searched separately */
+  compare?: CompareSide[];
+}
+
+export interface CompareSide {
+  kind: "party" | "person" | "nation";
+  id: string;
+  label?: string;
 }
 
 export interface Segment {
@@ -110,6 +133,8 @@ export interface Segment {
   cited: { source: number; cited_text: string }[];
   status: "cited" | "connective" | "unsupported" | "invalid";
   loaded?: { start: number; end: number; word: string }[];
+  /** quotations not found word for word in the sources cited for them */
+  misquotes?: { start: number; end: number; text: string }[];
 }
 
 export interface Answer {
@@ -121,6 +146,8 @@ export interface Answer {
   grounded_ratio: number;
   unsupported_segments: number;
   loaded_words?: number;
+  quotes_total?: number;
+  quotes_unverified?: number;
 }
 
 export interface Scope {
@@ -147,6 +174,9 @@ export interface Evidence {
   seat_types: Record<string, number>;
   genders?: Record<string, number>;
   age_bands?: Record<string, number>;
+  imbalance?: { party: string; count: number; total: number } | null;
+  tenure?: Record<string, number>;
+  majority_bands?: Record<string, number>;
 }
 
 export type TurnStatus = "planning" | "searching" | "answering" | "verifying" | "done" | "error";
@@ -171,6 +201,25 @@ export interface Turn {
   recordsUpTo?: string | null;
   /** loaded from a shared address (/b/<id>) rather than asked in this visit */
   shared?: boolean;
+  /** shown as a topic briefing (/topics/<slug>) */
+  topic?: TopicInfo;
+}
+
+export interface TopicInfo {
+  slug: string;
+  title: string;
+  area: string;
+  question: string;
+  description: string;
+  refresh_days: number;
+  versions?: { briefing_id: string; prepared_at: string; records_up_to: string | null }[];
+}
+
+/** /api/topics/<slug>: the topic, its current briefing (if written yet) and every version. */
+export interface TopicDetail {
+  topic: TopicInfo;
+  briefing: SavedBriefing | null;
+  versions: { briefing_id: string; prepared_at: string; records_up_to: string | null }[];
 }
 
 /** A kept briefing, as returned by /api/briefings/<id>. */

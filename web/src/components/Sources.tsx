@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { aboutRecord } from "../procedure";
-import { ageLabel, attribution, houseOf, reference, roleTitles, seatTypeLabel } from "../people";
+import { ageLabel, attribution, houseOf, majorityText, reference, roleTitles, seatTypeLabel } from "../people";
 import { fmtDate, highlightParts } from "../render";
 import type { Highlight, SourceCard, Speaker } from "../types";
 
@@ -181,6 +181,32 @@ export function SourceDrawer({
               )}
               <dt>Role on {fmtDate(source.date)}</dt>
               <dd>{roleTitles(sp).length ? roleTitles(sp).join("; ") : "Backbencher (no ministerial or committee-chair post)"}</dd>
+              {sp?.house === "commons" && sp.majority_then && (
+                <>
+                  <dt>Majority then</dt>
+                  <dd>{majorityText(sp.majority_then)}</dd>
+                </>
+              )}
+              {sp?.majority_now && sp.majority_now.date !== sp.majority_then?.date && (
+                <>
+                  <dt>Majority now</dt>
+                  <dd>
+                    {majorityText(sp.majority_now)}
+                    {sp.majority_now.constituency !== sp.constituency && ` (${sp.majority_now.constituency})`}
+                  </dd>
+                </>
+              )}
+              {sp?.house === "commons" && sp.first_elected && (
+                <>
+                  <dt>First elected</dt>
+                  <dd>
+                    {fmtDate(sp.first_elected)}
+                    {sp.first_term != null && (
+                      <span className="muted small">{sp.first_term ? " (in their first term on this date)" : " (re-elected since)"}</span>
+                    )}
+                  </dd>
+                </>
+              )}
               {sp?.person_id && (
                 <>
                   <dt>Age on that date</dt>

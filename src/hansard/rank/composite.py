@@ -84,9 +84,11 @@ class Scored:
     authority_m: float
     authority_reason: str
     score: float
+    rerank: float | None = None  # the cross-encoder's score, when re-ranking is on
+    base_relevance: float | None = None  # search relevance before re-ranking (decides which groups are in the pool)
 
     def breakdown(self) -> dict[str, Any]:
-        return {
+        out = {
             "score": round(self.score, 4),
             "relevance": round(self.relevance, 4),
             "keyword": None if self.candidate.bm25 is None else round(self.candidate.bm25, 4),
@@ -95,6 +97,9 @@ class Scored:
             "authority": round(self.authority, 4),
             "authority_reason": self.authority_reason,
         }
+        if self.rerank is not None:
+            out["reranker"] = round(self.rerank, 4)
+        return out
 
 
 def recency_factor(d: date, p: RankParams) -> float:
