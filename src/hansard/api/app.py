@@ -13,6 +13,7 @@ import re
 import secrets
 import threading
 from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -647,6 +648,61 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return Response(page_with_meta(page, title=f"{d['title']}, {fmt_date(d['date'])} — Where They Stand",
                                        description=description, url=url, image=None, noindex=False),
                         media_type="text/html")
+
+    # ---- the week in Parliament ---------------------------------------------------------------
+    def get_weeks():
+        from hansard.week import Weeks
+
+        with lock:
+            if "weeks" not in holder:
+                holder["weeks"] = Weeks(settings)
+        return holder["weeks"]
+
+    def find_week(start: str | None):
+        from hansard.week import monday
+
+        w = get_weeks()
+        if start is None:
+            day = w.latest()
+        else:
+            try:
+                day = date.fromisoformat(start) if _DAY.match(start) else None
+            except ValueError:
+                day = None
+        return w.get(monday(day), state.latest_record_date()) if day else None
+
+    @app.get("/api/week")
+    def week_detail(start: str | None = None):
+        """One sitting week (Monday to Sunday; the latest if no start is given). Free: no AI."""
+        w = find_week(start)
+        if w is None:
+            raise HTTPException(404, "Parliament did not sit that week, or the week is outside the record.")
+        return w
+
+    def week_page(start: str | None, request: Request) -> Response:
+        w = find_week(start)
+        index = dist / "week.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        if w is None:
+            return Response(page_with_meta(page, title="Week not found — Where They Stand",
+                                           description="Parliament did not sit that week.",
+                                           url=f"{base}/weeks/{start}", image=None),
+                            status_code=404, media_type="text/html")
+        url = f"{base}/this-week" if start is None else f"{base}/weeks/{w['start']}"
+        span = f"{fmt_date(w['start'])} to {fmt_date(w['end'])}"
+        return Response(page_with_meta(page, title=f"In Parliament, week of {fmt_date(w['start'])} — Where They Stand",
+                                       description=f"The debates, votes, bills and statements in Parliament, {span}, "
+                                                   "from the official record.", url=url, image=None, noindex=False),
+                        media_type="text/html")
+
+    @app.get("/this-week", include_in_schema=False)
+    def this_week_page(request: Request):
+        return week_page(None, request)
+
+    @app.get("/weeks/{start}", include_in_schema=False)
+    def a_week_page(start: str, request: Request):
+        return week_page(start, request)
 
     # ---- charts --------------------------------------------------------------------------------
     chart_slots = threading.Semaphore(2)  # each chart scans the record for a few seconds; keep the server responsive

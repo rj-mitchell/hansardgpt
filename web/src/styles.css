@@ -2795,3 +2795,46 @@ main:focus {
   padding-block-start: var(--space-s);
   border-block-start: 1px solid var(--rule);
 }
+
+/* ---- the week in Parliament ---------------------------------------------------------------- */
+
+.week-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-s);
+  flex-wrap: wrap;
+  font-family: var(--sans);
+  font-size: var(--step--1);
+}
+
+.week-day {
+  margin-block-start: var(--space-l);
+}
+
+.week-chamber h3 {
+  font-size: var(--step-0);
+  margin-block: var(--space-s) var(--space-2xs);
+}
+
+.week-debates,
+.week-votes {
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.week-debates li,
+.week-votes li {
+  padding-block: var(--space-2xs);
+  border-block-end: 1px solid var(--rule);
+}
+
+.week-kind {
+  display: inline-block;
+  margin-inline-end: var(--space-xs);
+  font-family: var(--sans);
+  font-size: var(--step--2);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}

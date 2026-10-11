@@ -103,7 +103,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | ✓ **Debate pages**: "what was said in this debate", one briefing per debate | S–M | Done: every debate since 2010 readable in full on the site, with each speaker as they were on the day, its votes and an "Ask about this debate" box. Linked from sources, timelines, member and bill pages. A ready-made briefing per debate is still to do |
 | ✓ **"Ask about this"** in the source panel: a follow-up question about one speech or speaker | S | Done |
 | ✓ **Sources only** button: show the balanced evidence set without writing a briefing | S | Done |
-| **Weekly "In Parliament this week"** page, generated automatically | S–M | A few dollars a week; regular fresh content |
+| ✓ **Weekly "In Parliament this week"** page, generated automatically | S–M | Done, free (no AI): each sitting day's debates, statements and questions, every vote with its kind, written statements, and an archive of past weeks. An AI-written summary could be added for a few dollars a week |
 
 **Sharing and reuse**
 | Item | Effort | What it gives |

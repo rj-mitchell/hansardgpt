@@ -78,3 +78,26 @@ def test_feeds(indexed_settings, tmp_path):
             'And more.</li>\n<li>Fixed a bug &amp; another.</li></ul>')
     items = changelog_items(page, "https://example.org")
     assert [i["title"] for i in items] == ["New pages.", "Fixed a bug & another."]
+
+
+def test_the_week_in_parliament(indexed_settings, tmp_path):
+    from hansard.week import monday
+
+    con = duckdb.connect()
+    attach_store(con, indexed_settings.parquet_dir)
+    day = con.execute("SELECT max(date) FROM records WHERE source = 'debates'").fetchone()[0]
+    app, _, _ = make_app(indexed_settings, tmp_path, auth=False)
+    client = TestClient(app)
+    latest = client.get("/api/week").json()
+    assert latest["start"] == monday(day).isoformat(), "the latest week by default"
+    w = client.get("/api/week", params={"start": day.isoformat()}).json()
+    assert w["start"] == monday(day).isoformat() and w["days"]
+    for d in w["days"]:
+        for c in d["chambers"]:
+            for x in c["debates"]:
+                assert x["said"] >= 3 and client.get("/api" + x["path"]).status_code == 200
+    assert client.get("/this-week").status_code == 200
+    assert client.get(f"/weeks/{w['start']}").status_code == 200
+    assert client.get("/api/week", params={"start": "1999-01-04"}).status_code == 404
+    assert client.get("/weeks/1999-01-04").status_code == 404
+    assert client.get("/api/week", params={"start": "not-a-date"}).status_code == 404

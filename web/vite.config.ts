@@ -53,6 +53,7 @@ export default defineConfig({
         bills: here("./bills.html"),
         bill: here("./bill.html"),
         debate: here("./debate.html"),
+        week: here("./week.html"),
         charts: here("./charts.html"),
         compare: here("./compare.html"),
         notfound: here("./404.html"),
