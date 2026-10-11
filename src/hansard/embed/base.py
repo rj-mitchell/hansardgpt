@@ -74,6 +74,12 @@ class HashingEmbedder:
 
 class FastEmbedEmbedder:
     def __init__(self, model: str, cache_dir: Path, threads: int | None = None, batch_size: int = 64):
+        import os
+
+        # Once the model is on disk, never ask Hugging Face about it again: a slow or blocked network would
+        # otherwise hold up the first search after every restart.
+        if any(Path(cache_dir).rglob("*.onnx")):
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
         from fastembed import TextEmbedding  # optional dependency ("embed" extra)
 
         self.name = model

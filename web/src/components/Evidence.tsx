@@ -46,6 +46,12 @@ export function EvidenceBar({ evidence, demographics = false }: { evidence?: Evi
         {years ? `, ${years}` : ""}
         {evidence.divisions ? `, plus ${evidence.divisions} division${evidence.divisions === 1 ? "" : "s"}` : ""}
       </p>
+      {evidence.imbalance && (
+        <p className="evidence-warning">
+          {evidence.imbalance.count} of these {evidence.imbalance.total} contributions are from {evidence.imbalance.party}{" "}
+          members. The record found less from other parties on this question, so the briefing reflects that balance.
+        </p>
+      )}
       <EvidenceRow label="Speakers" counts={evidence.groups} />
       <EvidenceRow label="Parties" counts={evidence.parties} />
       <EvidenceRow

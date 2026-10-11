@@ -108,13 +108,27 @@ def test_ask_streams_plan_sources_text_and_verified_answer(api):
         assert con.execute("SELECT count(*) FROM usage WHERE kind = 'answer'").fetchone()[0] == 1
 
 
+def sources_but_no_briefing(evs, word):
+    """Over a limit, readers still get the (free) sources, with a note saying why there is no briefing."""
+    final = evs[-1]
+    return (final["type"] == "final" and final["answer"] is None and word in final["note"]
+            and any(e["type"] == "sources" and e["sources"] for e in evs))
+
+
+def test_sources_only_needs_no_model(public):
+    client, state, fake = public
+    before = len(fake.calls)
+    evs = events(client.post("/api/ask", json={"question": "trial by jury", "sources_only": True}))
+    assert sources_but_no_briefing(evs, "Sources only") and len(fake.calls) == before
+
+
 def test_daily_question_cap(api):
     client, _ = api
     login(client)
     for _ in range(2):
         assert events(client.post("/api/ask", json={"question": "trial by jury"}))[-1]["type"] == "final"
     last = events(client.post("/api/ask", json={"question": "trial by jury"}))
-    assert last[-1]["type"] == "error" and "limit" in last[-1]["message"]
+    assert sources_but_no_briefing(last, "limit")
 
 
 def test_search_endpoint_needs_no_model(api):
@@ -174,7 +188,7 @@ def test_each_visitor_has_a_daily_limit_but_cached_answers_still_load(public):
     for q in ("trial by jury", "jury trials and courts"):
         assert events(client.post("/api/ask", json={"question": q}))[-1]["type"] == "final"
     blocked = events(client.post("/api/ask", json={"question": "security in Northern Ireland"}))
-    assert blocked[-1]["type"] == "error" and "limit" in blocked[-1]["message"]
+    assert sources_but_no_briefing(blocked, "limit")
     assert events(client.post("/api/ask", json={"question": "trial by jury"}))[-1]["type"] == "final"
     other = TestClient(client.app, client=("203.0.113.9", 50000))
     assert events(other.post("/api/ask", json={"question": "security in Northern Ireland"}))[-1]["type"] == "final"
@@ -184,7 +198,7 @@ def test_site_wide_daily_budget(public):
     client, state, _ = public
     record_usage(state, None, "answer", "claude-opus-5-5", {"input_tokens": 3_000_000}, {})
     evs = events(client.post("/api/ask", json={"question": "trial by jury"}))
-    assert evs[-1]["type"] == "error" and "budget" in evs[-1]["message"]
+    assert sources_but_no_briefing(evs, "budget")
 
 
 def test_requests_per_minute_limit(indexed_settings, tmp_path):

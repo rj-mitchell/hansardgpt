@@ -182,7 +182,7 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 |---|---|
 | See usage, spend, visits and feedback | the admin page, or the `curl` command printed at the end of setup |
 | See the update history | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/sync` |
-| Install a new version of the site | merge the latest changes into `main` on GitHub (step 1), then on the server: `cd /opt/hansardgpt && git pull && cd deploy && docker compose up -d --build` |
+| Install a new version of the site | merge the latest changes into `main` on GitHub (step 1), then on the server: `bash /opt/hansardgpt/deploy/update.sh` (it finishes with the health check) |
 | Restart the site | `cd /opt/hansardgpt/deploy && docker compose restart` |
 | Change the API key | the command below |
 | Change the "Support this site" link (it points to https://ko-fi.com/wheretheystand) | add `HANSARD_DONATE_URL=https://…` to `/opt/hansardgpt/deploy/.env`, then `docker compose up -d` in the same folder |

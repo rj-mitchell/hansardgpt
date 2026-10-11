@@ -32,7 +32,7 @@ Anthropic API unless stated.
       `scp "root@YOUR.SERVER.IP:/opt/hansardgpt/deploy/backups/*.tar.gz" .`
 - [ ] **Read the admin page** weekly: spending, reports from readers, feedback marked "not useful".
 - [ ] **Install updates** when there is a new version: merge it on GitHub, then on the server
-      `cd /opt/hansardgpt && git pull && cd deploy && docker compose up -d --build`.
+      `bash /opt/hansardgpt/deploy/update.sh`.
 
 ### Before telling people about the site
 

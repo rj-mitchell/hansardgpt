@@ -155,4 +155,15 @@ def evidence_summary(records: list[dict[str, Any]], divisions: list[dict[str, An
         "seat_types": dict(settlements.most_common()),
         "genders": dict(genders.most_common()),       # contributions by speakers' gender (F, M, unknown)
         "age_bands": dict(ages.most_common()),        # contributions by speakers' age on the day
+        "imbalance": imbalance(parties, len(records)),
     }
+
+
+def imbalance(parties: Counter[str], total: int, threshold: float = 0.7, minimum: int = 6) -> dict[str, Any] | None:
+    """When most of the evidence comes from one party, say so (the record may simply hold less from others)."""
+    if total < minimum or not parties:
+        return None
+    party, n = parties.most_common(1)[0]
+    if n / total < threshold:
+        return None
+    return {"party": party, "count": n, "total": total}

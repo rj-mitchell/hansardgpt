@@ -142,6 +142,7 @@ class AskBody(BaseModel):
     scope: ScopeBody = ScopeBody()
     plan: dict[str, Any] | None = None
     history: list[dict[str, str]] = Field(default_factory=list, max_length=10)
+    sources_only: bool = False  # find and show the sources, but write no briefing (free)
 
 
 def donate_url(settings: Settings) -> str | None:
@@ -279,8 +280,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                              "model": settings.answer.get("model"), "data": last[0]["run_id"] if last else None,
                              "instructions": INSTRUCTIONS_VERSION})
         count_question(state, body.question)
-        hit = cached_events(state, key, cache_hours) if key else None
-        blocked = check_caps(state, uid, settings.usage, visitor) if model_on and hit is None else None
+        hit = cached_events(state, key, cache_hours) if key and not body.sources_only else None
+        blocked = (check_caps(state, uid, settings.usage, visitor)
+                   if model_on and hit is None and not body.sources_only else None)
 
         def events() -> Iterator[dict[str, Any]]:
             if hit is not None:
@@ -291,8 +293,12 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                     store_events(state, key, hit, cache_hours)
                 yield from hit
                 return
-            if blocked:
-                yield {"type": "error", "message": blocked}
+            if body.sources_only:
+                yield from sources_only_events(body, "Sources only: no briefing was written. Ask again without "
+                                                     "'Sources only' for a written briefing.")
+                return
+            if blocked:  # the sources still help, and cost nothing
+                yield from sources_only_events(body, f"{blocked} The sources found are shown below.")
                 return
             kept: list[dict[str, Any]] = []
             text: list[str] = []
@@ -332,10 +338,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return StreamingResponse(_sse(events()), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-    @app.post("/api/search")
-    def search(body: AskBody, request: Request, user=Depends(current_user)):
-        """Retrieval only (no model call): ranked sources for the question or edited plan."""
-        requester(request, user)
+    def retrieve(body: AskBody) -> dict[str, Any]:
+        """Retrieval only (no model call): the plan and ranked sources for the question or edited plan."""
         p = get_pipeline()
         if body.plan:
             plan = QueryPlan.from_dict({"question": body.question, **body.plan})
@@ -346,11 +350,25 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         limit = int(settings.answer.get("comprehensive_sources" if body.mode == "comprehensive"
                                         else "summary_sources", 12))
         res = p.engine.search(plan.search_text, plan.filters, Scope(**body.scope.model_dump()), plan.portfolios,
-                              body.recency, body.role_weight, limit, diversify=True)
+                              body.recency, body.role_weight, limit, diversify=True, group_by=plan.group_by)
         from hansard.rag.sources import build_sources
 
-        return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [])],
+        demographics = plan.group_by != "role" or bool(plan.filters.genders or plan.filters.age_bands)
+        return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [], demographics,
+                                                                                      plan.group_by)],
                 "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
+
+    def sources_only_events(body: AskBody, note: str) -> Iterator[dict[str, Any]]:
+        r = retrieve(body)
+        yield {"type": "plan", "plan": r["plan"], "usage": None}
+        yield {"type": "sources", **{k: r[k] for k in ("sources", "candidates", "semantic", "evidence")}}
+        yield {"type": "final", "answer": None, "usage": None, "note": note}
+
+    @app.post("/api/search")
+    def search(body: AskBody, request: Request, user=Depends(current_user)):
+        """Retrieval only (no model call): ranked sources for the question or edited plan."""
+        requester(request, user)
+        return retrieve(body)
 
     def keep_briefing(body: AskBody, kept: list[dict[str, Any]], final: dict[str, Any]) -> dict[str, Any]:
         records_up_to = state.latest_record_date()

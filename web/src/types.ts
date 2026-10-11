@@ -147,6 +147,7 @@ export interface Evidence {
   seat_types: Record<string, number>;
   genders?: Record<string, number>;
   age_bands?: Record<string, number>;
+  imbalance?: { party: string; count: number; total: number } | null;
 }
 
 export type TurnStatus = "planning" | "searching" | "answering" | "verifying" | "done" | "error";

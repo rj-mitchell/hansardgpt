@@ -65,9 +65,11 @@ export function askBody(
   settings: Settings,
   plan?: Plan,
   history: { question: string; answer?: string }[] = [],
+  sourcesOnly = false,
 ) {
   return {
     question,
+    sources_only: sourcesOnly,
     mode: settings.mode,
     recency: settings.recency,
     role_weight: settings.roleWeight,
@@ -80,6 +82,7 @@ export function askBody(
           wants_votes: plan.wants_votes,
           speakers: plan.speakers,
           interpretation: plan.interpretation,
+          group_by: plan.group_by,
         }
       : undefined,
     history,

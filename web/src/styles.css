@@ -832,6 +832,13 @@ legend,
 
 /* ---- evidence base ---------------------------------------------------------------------- */
 
+.evidence-warning {
+  margin: 0;
+  padding: var(--space-2xs) var(--space-xs);
+  border-inline-start: 3px solid var(--warn);
+  background: var(--warn-subtle);
+}
+
 .evidence {
   display: flex;
   flex-direction: column;
@@ -1445,9 +1452,21 @@ legend,
   outline-offset: 0;
 }
 
-.composer button {
+.composer-buttons {
+  display: flex;
   flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+
+.composer-buttons .primary {
   padding-block: 0.85em;
+}
+
+.composer-buttons .link {
+  white-space: nowrap;
+  text-align: center;
 }
 
 /* ---- drawer: a page from the report --------------------------------------------------------- */

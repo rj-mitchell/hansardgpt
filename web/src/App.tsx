@@ -155,7 +155,7 @@ export default function App() {
 
   const busy = turns.some((t) => !["done", "error"].includes(t.status));
 
-  async function run(q: string, plan?: Plan, replaceId?: string) {
+  async function run(q: string, plan?: Plan, replaceId?: string, sourcesOnly = false) {
     const id = replaceId ?? crypto.randomUUID();
     const turn: Turn = { id, question: q, settings, sources: [], streamText: "", status: "planning", plan };
     setTurns((ts) => (replaceId ? ts.map((t) => (t.id === id ? turn : t)) : [...ts, turn]));
@@ -167,7 +167,7 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      for await (const ev of askStream(askBody(q, settings, plan, history), ctrl.signal)) {
+      for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly), ctrl.signal)) {
         if (ev.type === "plan") update(id, { plan: ev.plan as Plan, status: "searching" });
         else if (ev.type === "sources")
           update(id, {
@@ -201,12 +201,12 @@ export default function App() {
     }
   }
 
-  function submit(e?: React.FormEvent) {
+  function submit(e?: React.FormEvent, sourcesOnly = false) {
     e?.preventDefault();
     const q = question.trim();
     if (q.length < 3 || busy) return;
     setQuestion("");
-    void run(q);
+    void run(q, undefined, undefined, sourcesOnly);
   }
 
   if (auth === "unknown") return <div className="loading">Loading…</div>;
@@ -234,9 +234,20 @@ export default function App() {
           }
         }}
       />
-      <button type="submit" className="primary" disabled={busy || question.trim().length < 3}>
-        Ask
-      </button>
+      <div className="composer-buttons">
+        <button type="submit" className="primary" disabled={busy || question.trim().length < 3}>
+          Ask
+        </button>
+        <button
+          type="button"
+          className="link small"
+          disabled={busy || question.trim().length < 3}
+          onClick={() => submit(undefined, true)}
+          title="Find and show the sources without writing a briefing"
+        >
+          Sources only
+        </button>
+      </div>
     </form>
   );
 
@@ -403,6 +414,7 @@ export default function App() {
           <a href="/accessibility">Accessibility</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
+          <a href="https://github.com/rj-mitchell/hansardgpt">Source code</a>
           {meta?.donate_url && <a href={meta.donate_url}>Support this site</a>}
         </nav>
         <p className="licence">
