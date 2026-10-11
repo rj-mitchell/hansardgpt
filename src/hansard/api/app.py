@@ -58,7 +58,6 @@ from hansard.api.usage import (
     check_caps,
     count_question,
     mark_supporter,
-    support_reminder_due,
     popular_questions,
     recent_failures,
     record_failure,
@@ -67,6 +66,7 @@ from hansard.api.usage import (
     record_visit,
     store_events,
     summary,
+    support_reminder_due,
     visit_summary,
     visitor_key,
 )
