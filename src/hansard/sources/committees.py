@@ -31,6 +31,7 @@ SITE = "https://committees.parliament.uk"
 REFRESH = timedelta(days=6)
 PAGE = 500
 PAUSE = 0.25
+FIRST_YEAR = 2010  # the start of the site's archive
 REPORT_TYPES = {1: "Report", 2: "Government response", 12: "Special report"}
 
 _SCHEMA = """
@@ -108,6 +109,20 @@ def _get(client: httpx.Client, path: str, params: dict[str, Any] | None, sleep: 
     return None
 
 
+def _previous_purposes(path: Path) -> dict[int, str | None]:
+    """Committee remits from the last copy, so a weekly rebuild need not fetch each committee again."""
+    if not path.exists():
+        return {}
+    try:
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            return {cid: purpose for cid, purpose in con.execute("SELECT id, purpose FROM committees") if purpose}
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+
+
 def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep,
           details: bool = True) -> dict[str, Any]:
     """Fetch everything and write a fresh database (swapped in only when complete)."""
@@ -116,12 +131,16 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
     try:
         committees = _pages(client, "/Committees", {"CommitteeStatus": "All"}, sleep)
         businesses = _pages(client, "/CommitteeBusiness", {}, sleep)
-        pubs = _pages(client, "/Publications", {"PublicationTypeIds": list(REPORT_TYPES)}, sleep)
-        sessions = _pages(client, "/OralEvidence", {}, sleep)
-        purposes: dict[int, str | None] = {}
-        if details:  # the remit of each current committee, from its own record
+        # a year at a time: the service fails when asked to page thousands deep
+        pubs, sessions = [], []
+        for year in range(FIRST_YEAR, datetime.now(UTC).year + 1):
+            window = {"StartDate": f"{year}-01-01", "EndDate": f"{year}-12-31"}
+            pubs += _pages(client, "/Publications", {"PublicationTypeIds": list(REPORT_TYPES), **window}, sleep)
+            sessions += _pages(client, "/OralEvidence", window, sleep)
+        purposes = _previous_purposes(Path(path))
+        if details:  # the remit of each current committee, from its own record (only those not known already)
             for c in committees:
-                if not c.get("endDate") and c.get("id"):
+                if not c.get("endDate") and c.get("id") and not purposes.get(c["id"]):
                     one = _get(client, f"/Committees/{c['id']}", None, sleep) or {}
                     purposes[c["id"]] = _plain(one.get("purpose"))
     finally:
@@ -159,9 +178,11 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
                 if (p.get("committee") or {}).get("id"):
                     con.execute("INSERT OR IGNORE INTO inquiry_committees VALUES (?, ?)", (b["id"], p["committee"]["id"]))
         n_witnesses = 0
+        seen: set[int] = set()
         for s in sessions:
-            if not s.get("id"):
+            if not s.get("id") or s["id"] in seen:
                 continue
+            seen.add(s["id"])
             con.execute("INSERT OR REPLACE INTO sessions VALUES (?, ?)", (s["id"], _day(s.get("meetingDate"))))
             cids = [c["id"] for c in s.get("committees") or [] if c.get("id")]
             for cid in cids:
@@ -187,7 +208,7 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
         con.close()
     tmp.replace(path)
     return {"committees": len(committees), "inquiries": len(businesses), "publications": len(pubs),
-            "sessions": len(sessions), "witnesses": n_witnesses, "built": built}
+            "sessions": len(seen), "witnesses": n_witnesses, "built": built}
 
 
 def _business(con: sqlite3.Connection, b: dict[str, Any]) -> None:

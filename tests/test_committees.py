@@ -37,6 +37,10 @@ def fake_api() -> httpx.Client:
         if path.startswith("/api/Committees/"):
             return httpx.Response(200, json={"purpose": "<p>We scrutinise <b>transport</b>.</p><p>More.</p>"})
         items = DATA.get(path, [])
+        start, end = request.url.params.get("StartDate"), request.url.params.get("EndDate")
+        if start:  # the real service filters by date
+            items = [i for i in items
+                     if start <= (i.get("publicationStartDate") or i.get("meetingDate") or "")[:10] <= end]
         skip, take = int(request.url.params.get("Skip", 0)), int(request.url.params.get("Take", 500))
         return httpx.Response(200, json={"items": items[skip:skip + take], "totalResults": len(items)})
 
