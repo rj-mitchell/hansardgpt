@@ -8,6 +8,10 @@
   <url><loc>https://wheretheystand.uk/status</loc><changefreq>daily</changefreq></url>
   <url><loc>https://wheretheystand.uk/corrections</loc><changefreq>weekly</changefreq></url>
   <url><loc>https://wheretheystand.uk/topics</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://wheretheystand.uk/bills</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://wheretheystand.uk/charts</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://wheretheystand.uk/compare</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://wheretheystand.uk/timeline</loc><changefreq>monthly</changefreq></url>
   <url><loc>https://wheretheystand.uk/resources</loc><changefreq>monthly</changefreq></url>
   <url><loc>https://wheretheystand.uk/accessibility</loc><changefreq>yearly</changefreq></url>
   <url><loc>https://wheretheystand.uk/privacy</loc><changefreq>yearly</changefreq></url>

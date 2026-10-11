@@ -115,7 +115,8 @@ GROUP_BY_INSTRUCTIONS = {
 }
 
 
-def user_instruction(question: str, mode: str, plan_note: str, history_note: str, group_by: str = "role") -> str:
+def user_instruction(question: str, mode: str, plan_note: str, history_note: str, group_by: str = "role",
+                     compare: list[dict[str, str]] | None = None) -> str:
     parts = []
     if history_note:
         parts.append(history_note)
@@ -123,6 +124,10 @@ def user_instruction(question: str, mode: str, plan_note: str, history_note: str
     if plan_note:
         parts.append(f"Search scope applied: {plan_note}")
     parts.append(MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["summary"]))
-    if group_by in GROUP_BY_INSTRUCTIONS:
+    if compare:
+        from hansard.compare import instruction
+
+        parts.append(instruction(compare))
+    elif group_by in GROUP_BY_INSTRUCTIONS:
         parts.append(GROUP_BY_INSTRUCTIONS[group_by])
     return "\n\n".join(parts)

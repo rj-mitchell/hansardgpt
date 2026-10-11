@@ -1,4 +1,4 @@
-import type { Meta, Plan, SavedBriefing, Settings, SourceCard, TopicDetail } from "./types";
+import type { CompareSide, Meta, Plan, SavedBriefing, Settings, SourceCard, TopicDetail } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -67,9 +67,11 @@ export function askBody(
   plan?: Plan,
   history: { question: string; answer?: string }[] = [],
   sourcesOnly = false,
+  compare: CompareSide[] = [],
 ) {
   return {
     question,
+    compare: plan ? [] : compare.map(({ kind, id }) => ({ kind, id })),
     sources_only: sourcesOnly,
     mode: settings.mode,
     recency: settings.recency,
@@ -84,6 +86,7 @@ export function askBody(
           speakers: plan.speakers,
           interpretation: plan.interpretation,
           group_by: plan.group_by,
+          compare: plan.compare,
         }
       : undefined,
     history,

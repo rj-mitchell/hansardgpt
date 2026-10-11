@@ -78,7 +78,7 @@ from hansard.api.usage import (
 from hansard.config import REPO_ROOT, Settings, load_settings
 from hansard.engine import Engine, Scope
 from hansard.rag import prompts
-from hansard.rag.pipeline import AskRequest, Pipeline, rerank_query
+from hansard.rag.pipeline import AskRequest, Pipeline
 from hansard.rag.query_parse import ITL1_REGIONS, QueryPlan, parse_model
 from hansard.reference.portfolios import PORTFOLIOS
 from hansard.store.state import StateDB
@@ -156,6 +156,7 @@ class AskBody(BaseModel):
     plan: dict[str, Any] | None = None
     history: list[dict[str, str]] = Field(default_factory=list, max_length=10)
     sources_only: bool = False  # find and show the sources, but write no briefing (free)
+    compare: list[dict[str, str]] = Field(default_factory=list, max_length=3)  # sides, from the Compare page
 
 
 def donate_url(settings: Settings) -> str | None:
@@ -301,7 +302,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         uid = user["user_id"] if user else None
         req = AskRequest(question=body.question, mode=body.mode, recency=body.recency,
                          role_weight=body.role_weight, scope=Scope(**body.scope.model_dump()), plan=body.plan,
-                         history=body.history)
+                         history=body.history, compare=body.compare)
         model_on = p.has_model()
         key = None
         if model_on and cache_hours > 0:
@@ -384,7 +385,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         if body.plan:
             plan = QueryPlan.from_dict({"question": body.question, **body.plan})
         elif read_with_model and p.has_model():
-            plan, usage = p.make_plan(AskRequest(question=body.question, history=body.history))
+            plan, usage = p.make_plan(AskRequest(question=body.question, history=body.history, compare=body.compare))
             if plan.parse_error:
                 record_failure(state, "question reading", body.question, plan.parse_error)
             if usage:
@@ -393,16 +394,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             from hansard.rag.query_parse import parse_offline
 
             plan = parse_offline(body.question, settings.regions, p.today)
-        limit = int(settings.answer.get("comprehensive_sources" if body.mode == "comprehensive"
-                                        else "summary_sources", 12))
-        res = p.engine.search(plan.search_text, plan.filters, Scope(**body.scope.model_dump()), plan.portfolios,
-                              body.recency, body.role_weight, limit, diversify=True, group_by=plan.group_by,
-                              rerank_query=rerank_query(plan, settings.ranking.get("rerank_query")))
-        from hansard.rag.pipeline import plan_facets
-        from hansard.rag.sources import build_sources
-
-        return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [], plan_facets(plan),
-                                                                                      plan.group_by)],
+            p._set_comparison(plan, AskRequest(question=body.question, compare=body.compare))
+        req = AskRequest(question=body.question, mode=body.mode, recency=body.recency, role_weight=body.role_weight,
+                         scope=Scope(**body.scope.model_dump()))
+        res, _, sources = p.find(plan, req)
+        return {"plan": plan.to_dict(), "sources": [s.card() for s in sources if s.kind == "record"],
                 "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
 
     def sources_only_events(body: AskBody, note: str, uid: int | None = None,

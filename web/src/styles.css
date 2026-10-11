@@ -2663,3 +2663,10 @@ main:focus {
   font-size: var(--step--1);
   color: var(--ink-soft);
 }
+
+.compare-form select,
+.compare-form input:not([type="radio"]) {
+  font: inherit;
+  max-inline-size: 100%;
+  margin-block-end: var(--space-xs);
+}

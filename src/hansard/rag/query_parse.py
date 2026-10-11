@@ -74,6 +74,7 @@ class QueryPlan:
     parser: str = "offline"
     group_by: str = "role"   # how the briefing groups speakers: role (default), gender or age on the day
     parse_error: str | None = None  # set when the model could not be used and offline rules were (not shown to readers)
+    compare: list[dict[str, str]] = field(default_factory=list)  # sides compared: {"kind", "id", "label"}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -87,6 +88,7 @@ class QueryPlan:
             "interpretation": self.interpretation,
             "parser": self.parser,
             "group_by": self.group_by,
+            "compare": self.compare,
         }
 
     @classmethod
@@ -106,7 +108,9 @@ class QueryPlan:
                    filters=filters, portfolios=list(d.get("portfolios") or []),
                    wants_votes=bool(d.get("wants_votes")), speakers=list(d.get("speakers") or []),
                    interpretation=d.get("interpretation", ""), parser=d.get("parser", "edited"),
-                   group_by=d.get("group_by") if d.get("group_by") in GROUP_BY_KEYS else "role")
+                   group_by=d.get("group_by") if d.get("group_by") in GROUP_BY_KEYS else "role",
+                   compare=[{k: str(x.get(k, "")) for k in ("kind", "id", "label")} for x in d.get("compare") or []
+                            if isinstance(x, dict)][:3])
 
 
 def _iso(v: Any) -> date | None:

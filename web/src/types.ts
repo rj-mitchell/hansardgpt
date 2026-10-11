@@ -117,6 +117,14 @@ export interface Plan {
   interpretation: string;
   parser: string;
   group_by?: "role" | "gender" | "age" | "tenure" | "majority";
+  /** sides compared, each searched separately */
+  compare?: CompareSide[];
+}
+
+export interface CompareSide {
+  kind: "party" | "person" | "nation";
+  id: string;
+  label?: string;
 }
 
 export interface Segment {

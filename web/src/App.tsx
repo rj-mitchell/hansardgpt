@@ -12,7 +12,7 @@ import { ATTRIBUTION } from "./attribution";
 import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
-import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
+import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
 const TOPIC = /^\/topics\/([a-z0-9-]+)\/?$/;
@@ -82,6 +82,27 @@ export default function App() {
       return "";
     }
   });
+  // sides to compare, handed over from the Compare page (?compare=party:labour,party:conservative)
+  const [compare, setCompare] = useState<CompareSide[]>(() => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get("compare") ?? "";
+      return raw
+        .split(",")
+        .map((x) => x.split(":"))
+        .filter(([k, id]) => ["party", "person", "nation"].includes(k) && id)
+        .slice(0, 3)
+        .map(([k, id]) => ({ kind: k as CompareSide["kind"], id }));
+    } catch {
+      return [];
+    }
+  });
+  const compareLabels = (() => {
+    try {
+      return (new URLSearchParams(window.location.search).get("sides") ?? "").split("|").filter(Boolean).slice(0, 3);
+    } catch {
+      return [];
+    }
+  })();
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const [drawer, setDrawer] = useState<{ turn: string; h: Highlight } | null>(null);
   const [showControls, setShowControls] = useState(false);
@@ -234,7 +255,9 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly), ctrl.signal)) {
+      const sides = plan ? [] : compare;
+      if (sides.length) setCompare([]); // the comparison applies to the question it came with
+      for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly, sides), ctrl.signal)) {
         if (ev.type === "plan") update(id, { plan: ev.plan as Plan, status: "searching" });
         else if (ev.type === "sources")
           update(id, {
@@ -340,10 +363,11 @@ export default function App() {
             <nav className="page-nav" aria-label="Site">
               <a href="/topics">Topics</a>
               <a href="/people">MPs and peers</a>
+              <a href="/bills">Bills</a>
+              <a href="/charts">Charts</a>
+              <a href="/compare">Compare</a>
+              <a href="/timeline">Timelines</a>
               <a href="/about">About</a>
-              <a href="/methodology">Methodology</a>
-              <a href="/resources">Other resources</a>
-              <a href="/status">Status</a>
             </nav>
             <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
               Settings
@@ -369,6 +393,15 @@ export default function App() {
 
       {supportCount > 0 && meta?.donate_url && (
         <SupportReminder count={supportCount} donateUrl={meta.donate_url} onClose={() => setSupportCount(0)} />
+      )}
+      {compare.length > 0 && (
+        <aside className="banner" aria-label="Comparison">
+          Comparing {compareLabels.length === compare.length ? compareLabels.join(" and ") : "the chosen sides"}: each is
+          searched separately and given an equal share of the sources.{" "}
+          <button type="button" className="link" onClick={() => setCompare([])}>
+            Cancel the comparison
+          </button>
+        </aside>
       )}
       {showControls && (
         <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />
@@ -497,6 +530,10 @@ export default function App() {
         <nav className="footer-nav" aria-label="About this site">
           <a href="/about">About</a>
           <a href="/topics">Topics</a>
+          <a href="/timeline">Timelines</a>
+          <a href="/bills">Bills</a>
+          <a href="/charts">Charts</a>
+          <a href="/compare">Compare</a>
           <a href="/methodology">Methodology</a>
           <a href="/resources">Other resources</a>
           <a href="/changelog">Changelog</a>

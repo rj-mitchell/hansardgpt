@@ -52,6 +52,7 @@ export default defineConfig({
         bills: here("./bills.html"),
         bill: here("./bill.html"),
         charts: here("./charts.html"),
+        compare: here("./compare.html"),
         admin: here("./admin.html"),
       },
     },

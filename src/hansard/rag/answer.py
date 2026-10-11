@@ -89,7 +89,7 @@ class Answerer:
 
     def stream(self, question: str, sources: list[Source], mode: str = "summary", plan_note: str = "",
                history: list[dict[str, str]] | None = None, today: date | None = None,
-               group_by: str = "role") -> Iterator[dict[str, Any]]:
+               group_by: str = "role", compare: list[dict[str, str]] | None = None) -> Iterator[dict[str, Any]]:
         """Yield {"type": "text", "text"}, {"type": "citation", ...} events, then {"type": "final", ...}."""
         cfg = self.settings.answer
         history_note = ""
@@ -97,7 +97,8 @@ class Answerer:
             history_note = "Earlier in this conversation (for context only; cite only the search results below):\n" + \
                 "\n".join(f"Q: {h['question']}\nA (summary): {h.get('answer', '')[:600]}" for h in history[-3:])
         content: list[dict[str, Any]] = [s.search_result() for s in sources]
-        content.append({"type": "text", "text": user_instruction(question, mode, plan_note, history_note, group_by)})
+        content.append({"type": "text", "text": user_instruction(question, mode, plan_note, history_note, group_by,
+                                                                    compare)})
         effort = cfg.get("comprehensive_effort" if mode == "comprehensive" else "summary_effort", "medium")
         kwargs: dict[str, Any] = {
             "model": cfg.get("model", "claude-opus-5-5"),

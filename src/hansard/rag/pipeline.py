@@ -41,6 +41,7 @@ class AskRequest:
     scope: Scope = field(default_factory=Scope)
     plan: dict[str, Any] | None = None        # edited plan from the UI (skips re-parsing)
     history: list[dict[str, str]] = field(default_factory=list)
+    compare: list[dict[str, Any]] = field(default_factory=list)  # sides to compare, from the Compare page
 
 
 def plan_note(plan: QueryPlan, scope: Scope) -> str:
@@ -71,6 +72,8 @@ def plan_note(plan: QueryPlan, scope: Scope) -> str:
         bits.append("written answers/statements excluded")
     if not scope.pbc:
         bits.append("Public Bill Committees excluded")
+    if plan.compare:
+        bits.append("comparing " + " and ".join(s["label"] for s in plan.compare) + ", each searched separately")
     return "; ".join(bits)
 
 
@@ -149,19 +152,73 @@ class Pipeline:
             plan.speakers, plan.unresolved_speakers = resolve_speakers(
                 self.engine.resolver.con, plan.unresolved_speakers, plan.filters)
             plan.filters.person_ids = [s["person_id"] for s in plan.speakers]
+        self._set_comparison(plan, req)
         return plan, usage
+
+    def person_name(self, person_id: str) -> str | None:
+        row = self.engine.resolver.con.execute("SELECT latest_name FROM ref_persons WHERE person_id = ?",
+                                               [person_id]).fetchone()
+        return row[0] if row else None
+
+    def _set_comparison(self, plan: QueryPlan, req: AskRequest) -> None:
+        """Sides from the Compare page, or from a question that asks to compare named members or parties."""
+        from hansard.compare import resolve_sides, sides_from_question
+
+        names = dict(self.parties())
+        sides = (resolve_sides(req.compare, names, self.person_name) if req.compare
+                 else sides_from_question(plan.question, plan.filters, plan.speakers, names))
+        if not sides:
+            return
+        plan.compare = sides
+        kinds = {s["kind"] for s in sides}
+        # each side brings its own filter; the question's other filters (dates, House, roles) still apply to both
+        if "party" in kinds:
+            plan.filters.parties = []
+        if "person" in kinds:
+            plan.filters.person_ids = []
+        if "nation" in kinds:
+            plan.filters.regions = []
+        plan.group_by = "role"
+        plan.interpretation = (plan.interpretation + " " if plan.interpretation else "") + \
+            "Comparing " + " and ".join(s["label"] for s in sides) + ", each searched separately."
 
     def find(self, plan: QueryPlan, req: AskRequest):
         """The evidence for a plan: (search result, divisions, numbered sources). Free: no model call."""
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))
-        result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
-                                    req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by,
-                                    rerank_query=rerank_query(plan, self.settings.ranking.get("rerank_query")))
+        rq = rerank_query(plan, self.settings.ranking.get("rerank_query"))
+        if plan.compare:
+            result = self._compare_search(plan, req, limit, rq)
+        else:
+            result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
+                                        req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by,
+                                        rerank_query=rq)
         divisions = []
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
         return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by)
+
+    def _compare_search(self, plan: QueryPlan, req: AskRequest, limit: int, rq: str):
+        """One search per side, each with an equal share of the sources."""
+        from dataclasses import replace
+
+        from hansard.compare import side_filters
+
+        share = max(4, -(-limit // len(plan.compare)))
+        results = []
+        for side in plan.compare:
+            res = self.engine.search(plan.search_text, side_filters(plan.filters, side), req.scope, plan.portfolios,
+                                     req.recency, req.role_weight, share, diversify=True, group_by="role",
+                                     rerank_query=rq)
+            for r in res.records:
+                r["compare_side"] = side["label"]
+            results.append(res)
+        records = [r for res in results for r in res.records]
+        from hansard.rank.evidence import evidence_summary
+
+        return replace(results[0], records=records, scored=[x for res in results for x in res.scored],
+                       no_records=all(res.no_records for res in results),
+                       candidates=sum(res.candidates for res in results), evidence=evidence_summary(records))
 
     def run(self, req: AskRequest) -> Iterator[dict[str, Any]]:
         plan, parse_usage = self.make_plan(req)
@@ -192,7 +249,7 @@ class Pipeline:
         final = None
         for ev in Answerer(self.settings, self.client).stream(
                 req.question, sources, req.mode, plan_note(plan, req.scope), req.history, self.today,
-                group_by=plan.group_by):
+                group_by=plan.group_by, compare=plan.compare):
             if ev["type"] == "final":
                 final = ev
             else:

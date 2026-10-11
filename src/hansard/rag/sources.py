@@ -117,7 +117,7 @@ def record_source(n: int, r: dict[str, Any], facets: set[str] | bool = False, gr
     heading = r.get("heading") or r.get("minor_heading") or r.get("major_heading") or ""
     kind_label = {"question": "Written question", "answer": "Written answer", "statement": "Written statement"}.get(
         r["record_type"], r["chamber"])
-    title = " — ".join(x for x in (speaker_label(r, facets), f"{kind_label}, {r['chamber']}" if kind_label != r["chamber"]
+    title = " — ".join(x for x in (r.get("compare_side"), speaker_label(r, facets), f"{kind_label}, {r['chamber']}" if kind_label != r["chamber"]
                                    else r["chamber"], _fmt_date(r["date"]), ref, heading) if x)
     blocks = [p for p in r["text"].split("\n\n") if p.strip()]
     if r.get("context"):
@@ -137,7 +137,7 @@ def record_source(n: int, r: dict[str, Any], facets: set[str] | bool = False, gr
         "twfy_url": r["twfy_url"],
         "speaker": r.get("speaker"),
         "speaker_name_raw": r.get("speaker_name_raw"),
-        "group": group_label(r.get("speaker"), group_by),
+        "group": r.get("compare_side") or group_label(r.get("speaker"), group_by),
         "text": r["text"],
         "context": r.get("context"),
         "ranking": r.get("ranking"),
