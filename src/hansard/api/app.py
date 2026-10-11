@@ -709,6 +709,112 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return week_page(start, request)
 
     # ---- early day motions -----------------------------------------------------------------------
+    # ---- the devolved parliaments --------------------------------------------------------------
+    def get_devolved():
+        from hansard.devolved import DevolvedStore, Members
+        from hansard.sync import devolved_path
+
+        with lock:
+            if "devolved" not in holder:
+                holder["devolved"] = (DevolvedStore(devolved_path(settings)),
+                                      Members(settings.parlparse_dir / "members" / "people.json"))
+        return holder["devolved"]
+
+    def devolved_speaker(members, pp, leg: str, row: dict) -> dict:
+        from hansard.devolved import LEGISLATURES
+
+        on = members.on(row.get("person_id"), LEGISLATURES[leg]["org"], row["date"])
+        raw = re.sub(r"^\d+\.\s*", "", row.get("speaker") or "")
+        number = None
+        if row.get("person_id"):
+            from hansard.people import person_number
+
+            number = person_number(row["person_id"])
+        name = on.get("name") or raw or None
+        role = raw.split("(")[0].strip() if raw.lower().startswith(("the ", "deputy ")) else None
+        return {"name": name, "party": on.get("party"), "seat": on.get("seat"), "role": role, "number": number,
+                "slug": re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") if number else None}
+
+    @app.get("/api/devolved")
+    def devolved_index():
+        """The devolved parliaments' recent sitting days. Free: no AI."""
+        from hansard.devolved import LEGISLATURES
+
+        store, _ = get_devolved()
+        counts = store.counts()
+        return {"legislatures": [{"id": k, "name": v["name"], "member": v["member"], "nation": v["nation"],
+                                  **(counts.get(k) or {"speeches": 0}), "days": store.days(k, 12)}
+                                 for k, v in LEGISLATURES.items()]}
+
+    @app.get("/api/devolved/search")
+    def devolved_search(q: str = "", leg: str | None = None, page: int = 1):
+        from hansard.devolved import LEGISLATURES
+
+        if leg and leg not in LEGISLATURES:
+            raise HTTPException(404, "Unknown parliament.")
+        store, members = get_devolved()
+        page = max(1, min(page, 200))
+        total, rows = store.search(q[:200], leg, limit=25, offset=(page - 1) * 25)
+        pp = get_people()
+        return {"total": total, "page": page, "per_page": 25,
+                "items": [{**r, "speaker": devolved_speaker(members, pp, r["legislature"], r),
+                           "body": LEGISLATURES[r["legislature"]]["name"]} for r in rows]}
+
+    @app.get("/api/devolved/{leg}")
+    def devolved_days(leg: str, before: str | None = None):
+        from hansard.devolved import LEGISLATURES
+
+        if leg not in LEGISLATURES or (before and not _DAY.match(before)):
+            raise HTTPException(404, "Unknown parliament.")
+        store, _ = get_devolved()
+        return {"id": leg, **LEGISLATURES[leg], "days": store.days(leg, 40, before)}
+
+    @app.get("/api/devolved/{leg}/{key}")
+    def devolved_day(leg: str, key: str):
+        from hansard.devolved import LEGISLATURES
+
+        if leg not in LEGISLATURES or not _SLUG.match(key.replace("_", "-")):
+            raise HTTPException(404, "Unknown parliament.")
+        store, members = get_devolved()
+        rows = store.day(leg, key)
+        if not rows:
+            raise HTTPException(404, "There is no sitting at this address.")
+        pp = get_people()
+        items, section = [], None
+        for r in rows:
+            head = r["major"] or ""
+            if head and head != section:
+                section = head
+                items.append({"kind": "heading", "text": head, "id": f"h-{r['ord']}"})
+            items.append({"kind": "said" if r["person_id"] else "procedural", "id": f"s{r['ord']}",
+                          "minor": r["minor"], "time": r["time"], "url": r["url"],
+                          "speaker": devolved_speaker(members, pp, leg, r) if r["person_id"] else None,
+                          "paragraphs": [p for p in r["text"].split("\n\n") if p]})
+        return {"id": leg, "body": LEGISLATURES[leg]["name"], "member": LEGISLATURES[leg]["member"],
+                "key": key, "date": rows[0]["date"], "items": items,
+                "speakers": len({r["person_id"] for r in rows if r["person_id"]}),
+                "contributions": sum(1 for r in rows if r["person_id"]),
+                "official_url": next((r["url"] for r in rows if r["url"]), None)}
+
+    @app.get("/devolved/{leg}/{key}", include_in_schema=False)
+    def devolved_day_page(leg: str, key: str, request: Request):
+        from hansard.devolved import LEGISLATURES
+
+        index = dist / "devolvedday.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        rows = get_devolved()[0].day(leg, key) if leg in LEGISLATURES else []
+        if not rows:
+            return Response(page_with_meta(page, title="Not found — Where They Stand", description="Nothing here.",
+                                           url=f"{base}/devolved/{leg}/{key}", image=None),
+                            status_code=404, media_type="text/html")
+        name = LEGISLATURES[leg]["name"]
+        return Response(page_with_meta(page, title=f"{name}, {fmt_date(rows[0]['date'])} — Where They Stand",
+                                       description=f"What was said in the {name} on {fmt_date(rows[0]['date'])}, as "
+                                                   "recorded in its official report, with each member's party and seat.",
+                                       url=f"{base}/devolved/{leg}/{key}", image=None, noindex=False),
+                        media_type="text/html")
+
     def get_committees():
         from hansard.sources.committees import Committees
         from hansard.sync import committees_path
@@ -934,7 +1040,21 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 evidence = get_committees().for_member(int(page["parliament_id"]))
             except (HTTPException, ValueError, OSError):
                 evidence = []
+        devolved = None
+        try:
+            store, members = get_devolved()
+            ms = members.memberships(pid)
+            if ms:
+                devolved = {"memberships": ms, **store.for_person(pid)}
+                now = [m for m in ms if m["end"] is None]
+                if now and not page.get("current"):  # a sitting MSP, MS or MLA (and not an MP or peer)
+                    m = now[-1]
+                    page = {**page, "status": f"{m['member']} for {m['seat']} ({m['body']})"
+                                              + (f", {m['party']}" if m["party"] else "")}
+        except (OSError, ValueError):
+            devolved = None
         return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
+                "devolved": devolved,
                 "interests": get_register().for_person(pid), "committee_evidence": evidence}
 
     @app.get("/api/postcode/{postcode}")

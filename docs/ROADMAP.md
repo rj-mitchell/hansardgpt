@@ -190,9 +190,9 @@ data, which makes this much easier than starting from scratch.
 | Item | Time | Notes |
 |---|---|---|
 | ✓ **Devolution notes**: when a question is about a devolved subject (health, education, most transport, and so on), say so in the briefing, and which nations' policy Westminster decides | 1 day | Done: a hand-kept table (src/hansard/devolution.py) matched to the question's words; the note is shown beside the briefing, not written by AI |
-| **Scottish Parliament** debates, questions and members | 4–6 days | Members, parties and offices from the same mySociety sources |
-| **Senedd** | 4–6 days | Bilingual record; search would cover English and Welsh |
-| **Northern Ireland Assembly** | 3–5 days | Includes the periods when the Assembly was not sitting |
+| ✓ **Scottish Parliament** debates, questions and members | 4–6 days | Done as a first step for all three: /devolved to read each sitting and search the record since 2021, with each member's party and seat on the day, linked to their member pages. Kept apart from Westminster search and briefings for now |
+| ✓ **Senedd** | 4–6 days | Done (English record, including the official translation of Welsh contributions), as above |
+| ✓ **Northern Ireland Assembly** | 3–5 days | Done from 2022, as above |
 | **One common format** for all four, so filters and groupings work the same way | Included above | The site's format is already general; mostly new labels (MSP, MS, MLA) and offices |
 | **Cross-border comparison**: "how did Westminster, Holyrood and the Senedd debate the same issue?" | 2–3 days, after at least one devolved parliament | Builds on the comparisons feature |
 

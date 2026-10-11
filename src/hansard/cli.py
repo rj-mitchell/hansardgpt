@@ -251,6 +251,19 @@ def sync(embed_minutes: float = typer.Option(60.0, help="time budget for embeddi
 
 
 @app.command()
+def devolved(files: int = typer.Option(200, help="files to fetch in this run"),
+             since: str = typer.Option(None, help="first date (default: the start of the current sessions)")):
+    """Fetch the Scottish Parliament, Senedd and Northern Ireland Assembly records (also done by every sync)."""
+    _setup_logging()
+    from hansard.devolved import SINCE, DevolvedStore, sync_devolved
+    from hansard.sync import devolved_path
+
+    stats = sync_devolved(DevolvedStore(devolved_path(_settings())), max_files=files,
+                          since=date.fromisoformat(since) if since else SINCE)
+    typer.echo(json.dumps(stats, indent=2))
+
+
+@app.command()
 def committees(force: bool = typer.Option(True, help="rebuild even if the copy is less than a week old")):
     """Fetch select committees, their reports and evidence sessions (also done weekly by the sync)."""
     _setup_logging()

@@ -58,6 +58,11 @@ interface PersonData {
   } | null;
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
   interests?: Interests | null;
+  devolved?: {
+    memberships: { legislature: string; body: string; member: string; seat: string | null; party: string | null; start: string; end: string | null }[];
+    counts: Record<string, number>;
+    recent: { legislature: string; key: string; date: string; ord: number; major: string | null; excerpt: string }[];
+  } | null;
   committee_evidence?: { id: number; date: string | null; role: string | null; committees: string | null; inquiry: string | null; url: string }[];
 }
 
@@ -231,6 +236,44 @@ function Person({ number }: { number: string }) {
             </>
           )}
           <p className="muted small">{p.voting.method}</p>
+        </section>
+      )}
+
+      {p.devolved && (
+        <section aria-labelledby="h-devolved">
+          <h2 id="h-devolved">In the devolved parliaments</h2>
+          <ul>
+            {p.devolved.memberships.map((m, k) => (
+              <li key={k}>
+                {m.member} for {m.seat ?? "an unknown seat"} ({m.body}){m.party ? `, ${m.party}` : ""}{" "}
+                <span className="muted small">
+                  ({fmtDate(m.start)} – {m.end ? fmtDate(m.end) : "now"})
+                </span>
+              </li>
+            ))}
+          </ul>
+          {p.devolved.recent.length > 0 && (
+            <>
+              <h3>Recent contributions</h3>
+              <ol className="contributions">
+                {p.devolved.recent.map((c) => (
+                  <li key={`${c.key}-${c.ord}`}>
+                    <p className="muted small">
+                      {fmtDate(c.date)}
+                      {c.major ? ` · ${c.major}` : ""}
+                    </p>
+                    <p>{c.excerpt.length >= 320 ? `${c.excerpt.trimEnd()}…` : c.excerpt}</p>
+                    <p className="small">
+                      <a href={`/devolved/${c.legislature}/${c.key}#s${c.ord}`}>Read it in the sitting</a>
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+          <p className="muted small">
+            Collected since 2021; see <a href="/devolved">devolved parliaments</a>.
+          </p>
         </section>
       )}
 

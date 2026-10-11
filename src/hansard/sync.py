@@ -93,6 +93,10 @@ def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[d
     return load_demographics(demographics_path(settings)), status
 
 
+def devolved_path(settings: Settings) -> Path:
+    return settings.data_dir / "devolved.sqlite"
+
+
 def committees_path(settings: Settings) -> Path:
     return settings.data_dir / "committees.sqlite"
 
@@ -240,6 +244,20 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("register of interests not updated: %s", exc)
                 stats["interests"] = {"error": str(exc)[:200]}
+
+        t = time.time()
+        if fetch and settings.section("devolved").get("enabled", True):
+            try:  # the Scottish Parliament, the Senedd and the Northern Ireland Assembly: a few dozen files a run
+                from hansard.devolved import SINCE, DevolvedStore, sync_devolved
+
+                since = settings.section("devolved").get("since")
+                stats["devolved"] = {**sync_devolved(DevolvedStore(devolved_path(settings)),
+                                                     since=date.fromisoformat(since) if since else SINCE,
+                                                     max_files=int(settings.section("devolved").get("files_per_run", 60))),
+                                     "seconds": round(time.time() - t, 1)}
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("devolved parliaments not updated: %s", exc)
+                stats["devolved"] = {"error": str(exc)[:200]}
 
         t = time.time()
         if fetch and settings.section("committees").get("enabled", True):
