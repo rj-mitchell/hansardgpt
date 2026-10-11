@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { api } from "../api";
+import { briefingDocx, downloadName } from "../docx";
 import { briefingWithSources, referencesOnly } from "../export";
 import { fmtDate, renderAnswer, renderPlain, segmentsToMarkdown } from "../render";
 import type { Answer, Highlight, SourceCard } from "../types";
@@ -58,6 +59,16 @@ export function AnswerView({
             {link && <ShareButton url={link} title={question} />}
             <CopyButton label="Copy with sources" text={() => briefingWithSources(question, answer, sources, new Date(), link)} />
             <CopyButton label="Copy references" text={() => referencesOnly(answer, sources)} />
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => downloadWord(question, answer, sources, link ?? window.location.href)}
+            >
+              Download Word
+            </button>
+            <button type="button" className="secondary" onClick={() => window.print()}>
+              Print or save as PDF
+            </button>
             <Feedback question={question} briefingKey={briefingKey} />
           </div>
           <ReportProblem briefingId={briefingId} />
@@ -65,6 +76,20 @@ export function AnswerView({
       )}
     </div>
   );
+}
+
+function downloadWord(question: string, answer: Answer, sources: SourceCard[], link: string) {
+  const blob = new Blob([briefingDocx(question, answer, sources, link).buffer as ArrayBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = downloadName(question);
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /** The phone's share sheet where there is one; otherwise copy the link. */

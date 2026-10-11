@@ -108,7 +108,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 **Sharing and reuse**
 | Item | Effort | What it gives |
 |---|---|---|
-| **Download as PDF or Word** button (print already works) | S | For briefing packs and meetings |
+| ✓ **Download as PDF or Word** button (print already works) | S | Done: Word files are built in the browser, with numbered citations and the full source list |
 | **Embeddable briefing card** for journalists and bloggers | S–M | Spreads the site with a link back |
 | ✓ **RSS feeds** for topic briefings, the changelog and corrections | S | Done, plus a feed for each member and for bills |
 | ✓ **Featured briefings**: a few good briefings chosen by you, indexable by search engines | S | Done: "Feature" on the admin page; listed on /topics |
