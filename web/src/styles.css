@@ -2529,3 +2529,137 @@ main:focus {
   max-inline-size: 100%;
   margin-block-end: var(--space-xs);
 }
+
+/* ---- charts ----------------------------------------------------------------------------- */
+
+:root {
+  --series-0: light-dark(#1f5f8b, #7fb8e0);
+  --series-1: light-dark(#b0451c, #f0a07a);
+  --series-2: light-dark(#2e7d4f, #8fd1a8);
+  --series-3: light-dark(#7a4fa0, #c5a6e3);
+  --series-4: light-dark(#8a6d00, #e0c35a);
+  --series-5: light-dark(#a3245e, #ee9cc3);
+  --series-6: light-dark(#555, #bbb);
+  /* the colours readers associate with each party, darkened or lightened for contrast */
+  --party-labour: light-dark(#c8102e, #ff7a85);
+  --party-conservative: light-dark(#0063a8, #6fb8f0);
+  --party-liberal-democrat: light-dark(#b85f00, #ffb257);
+  --party-scottish-national-party: light-dark(#7d6a00, #f2db4b);
+  --party-reform: light-dark(#007a8a, #5fd6e6);
+  --party-green: light-dark(#2e7d32, #8fd694);
+  --party-other: light-dark(#666, #aaa);
+}
+
+.chart {
+  margin: var(--space-s) 0;
+}
+
+.chart svg {
+  inline-size: 100%;
+  block-size: auto;
+  font-family: var(--sans);
+}
+
+.chart .grid line {
+  stroke: var(--rule);
+}
+
+.chart text {
+  fill: var(--ink-soft);
+  font-size: 12px;
+}
+
+.chart .series polyline {
+  stroke: var(--c);
+  stroke-width: 2.5;
+}
+
+.chart .series :is(circle, rect, polygon) {
+  fill: var(--c);
+}
+
+.chart .series .open {
+  fill: var(--paper);
+  stroke: var(--c);
+  stroke-width: 2;
+}
+
+.chart .series .stroke-only {
+  stroke: var(--c);
+  stroke-width: 2.5;
+  fill: none;
+}
+
+/* each series' colour: a class on the series (s0, s1…), or the party's own colour (g-labour…), which wins */
+.s0 { --c: var(--series-0); }
+.s1 { --c: var(--series-1); }
+.s2 { --c: var(--series-2); }
+.s3 { --c: var(--series-3); }
+.s4 { --c: var(--series-4); }
+.s5 { --c: var(--series-5); }
+.s6 { --c: var(--series-6); }
+.g-labour { --c: var(--party-labour); }
+.g-conservative { --c: var(--party-conservative); }
+.g-liberal-democrat { --c: var(--party-liberal-democrat); }
+.g-scottish-national-party { --c: var(--party-scottish-national-party); }
+.g-reform { --c: var(--party-reform); }
+.g-green { --c: var(--party-green); }
+.g-other { --c: var(--party-other); }
+
+.legend {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-s);
+  font-family: var(--sans);
+  font-size: var(--step--1);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.legend svg {
+  inline-size: 1em;
+  block-size: 1em;
+}
+
+.legend :is(circle, rect, polygon) {
+  fill: var(--c);
+}
+
+.legend .open {
+  fill: var(--paper);
+  stroke: var(--c);
+  stroke-width: 2;
+}
+
+.legend .stroke-only {
+  stroke: var(--c);
+  stroke-width: 2.5;
+  fill: none;
+}
+
+.chart-options {
+  border: 0;
+  padding: 0;
+  margin-block: var(--space-xs);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-s);
+  font-family: var(--sans);
+  font-size: var(--step--1);
+}
+
+.chart-options legend {
+  font-weight: 600;
+  margin-block-end: var(--space-3xs);
+}
+
+.chart-context {
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}

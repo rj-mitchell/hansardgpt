@@ -51,6 +51,7 @@ export default defineConfig({
         timeline: here("./timeline.html"),
         bills: here("./bills.html"),
         bill: here("./bill.html"),
+        charts: here("./charts.html"),
         admin: here("./admin.html"),
       },
     },

@@ -610,6 +610,32 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                         f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
                         media_type="application/xml")
 
+    # ---- charts --------------------------------------------------------------------------------
+    chart_slots = threading.Semaphore(2)  # each chart scans the record for a few seconds; keep the server responsive
+
+    def get_trends():
+        from hansard.trends import Trends
+
+        today = get_pipeline().today  # before taking the lock: get_pipeline takes it too
+        with lock:
+            if "trends" not in holder:
+                holder["trends"] = Trends(settings, today)
+        return holder["trends"]
+
+    @app.get("/api/trends")
+    def trends(request: Request, q: str = "", by: str = "all", user=Depends(current_user)):
+        """How often words were used in Parliament each year, with the context to read the numbers (free)."""
+        requester(request, user)
+        phrases = [p for p in q.split(",") if p.strip()]
+        if not chart_slots.acquire(timeout=30):
+            raise HTTPException(503, "The site is busy drawing other charts. Please try again in a moment.")
+        try:
+            return get_trends().chart(phrases, by, str(state.latest_record_date()))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        finally:
+            chart_slots.release()
+
     # ---- timelines -----------------------------------------------------------------------------
     @app.get("/api/timeline")
     def timeline_api(request: Request, q: str = "", person: int | None = None, party: str | None = None,
