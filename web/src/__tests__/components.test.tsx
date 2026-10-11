@@ -151,6 +151,37 @@ describe("source drawer", () => {
     expect(screen.getByRole("link", { name: /TheyWorkForYou/ })).toHaveAttribute("href", source.twfy_url);
     expect(screen.getByText(/Open Parliament Licence/)).toBeInTheDocument();
   });
+
+  it("shows a speaker's own declaration of an interest", () => {
+    const declared = "I refer the House to my entry in the Register of Members' Financial Interests.";
+    render(<SourceDrawer source={{ ...source, declared }} quotes={[]} onClose={() => {}} />);
+    expect(screen.getByText("Declared an interest")).toBeInTheDocument();
+    expect(screen.getByText(`“${declared}”`, { exact: false })).toBeInTheDocument();
+  });
+
+  it("labels a witness's evidence to a committee as theirs, not Parliament's", () => {
+    const evidence: SourceCard = {
+      n: 3,
+      kind: "evidence",
+      title: "Ann Expert",
+      url: "/evidence/77#t1",
+      date: "2024-03-05",
+      chamber: "Committee evidence",
+      text: "Oral evidence to the Transport Committee...\n\nFares have risen faster than wages.",
+      twfy_url: "",
+      committee: "Transport Committee",
+      inquiry: "Rail fares",
+      inquiry_id: 900,
+      session_id: 77,
+      witness: { name: "Ann Expert", role: "Chief Executive", organisation: "Passenger Watch" },
+    };
+    render(<SourceDrawer source={evidence} quotes={["faster than wages"]} onClose={() => {}} />);
+    expect(screen.getByRole("heading", { name: "Ann Expert" })).toBeInTheDocument();
+    expect(screen.getByText("Chief Executive, Passenger Watch")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Rail fares" })).toHaveAttribute("href", "/inquiries/900");
+    expect(screen.getByText("faster than wages").tagName).toBe("MARK");
+    expect(screen.getByText(/not the committee's view or Parliament's/)).toBeInTheDocument();
+  });
 });
 
 describe("example questions", () => {
