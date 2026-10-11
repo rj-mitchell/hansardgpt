@@ -1233,6 +1233,32 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return feed(request, "/feeds/corrections.xml", "Corrections", "/corrections",
                     "Withdrawn briefings and published corrections.", items)
 
+    @app.get("/feeds/committee-reports.xml", include_in_schema=False)
+    def feed_committee_reports(request: Request):
+        base = str(request.base_url).rstrip("/")
+        try:
+            pubs = get_committees().recent_publications()
+        except HTTPException:
+            pubs = []
+        items = [{"title": f"{p['type']}: {p['title']}", "date": p["date"], "guid": f"committee-publication-{p['id']}",
+                  "link": f"{base}/inquiries/{p['inquiry_id']}" if p["inquiry_id"] else p["url"],
+                  "description": f"{p['type']} from the {p['committee'] or 'committee'}, published "
+                                 f"{fmt_date(p['date'])}. The document: {p['url']}"} for p in pubs]
+        return feed(request, "/feeds/committee-reports.xml", "Committee reports and government responses",
+                    "/committees", "New select committee reports, special reports and government responses.", items)
+
+    @app.get("/feeds/edms.xml", include_in_schema=False)
+    def feed_edms(request: Request):
+        base = str(request.base_url).rstrip("/")
+        _, rows = get_edms().search(limit=40)
+        items = [{"title": r["title"], "date": r["date_tabled"] or "2000-01-01", "guid": f"edm-{r['id']}",
+                  "link": f"{base}/edms/{r['id']}",
+                  "description": f"Early day motion {r['uin'] or ''} tabled by {r['primary_name'] or 'an MP'}"
+                                 f"{' (' + r['primary_party'] + ')' if r['primary_party'] else ''}."}
+                 for r in rows if r["date_tabled"]]
+        return feed(request, "/feeds/edms.xml", "Early day motions", "/edms",
+                    "Early day motions as they are tabled.", items)
+
     @app.get("/feeds/changelog.xml", include_in_schema=False)
     def feed_changelog(request: Request):
         page = dist / "changelog.html"

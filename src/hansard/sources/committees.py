@@ -401,6 +401,17 @@ class Committees:
                 GROUP BY s.id ORDER BY s.date DESC LIMIT ?""", (mnis, limit)).fetchall()
         return [dict(r) | {"url": links("session", r["id"])} for r in rows]
 
+    def recent_publications(self, limit: int = 40) -> list[dict[str, Any]]:
+        """The newest reports, special reports and government responses, with their committee and inquiry."""
+        with self.connect() as con:
+            rows = con.execute("""
+                SELECT p.id, p.type, p.title, p.date, p.document_id, c.id AS committee_id, c.name AS committee,
+                       (SELECT i.id FROM publication_inquiries pi JOIN inquiries i ON i.id = pi.inquiry_id
+                         WHERE pi.publication_id = p.id LIMIT 1) AS inquiry_id
+                FROM publications p LEFT JOIN committees c ON c.id = p.committee_id
+                WHERE p.date IS NOT NULL ORDER BY p.date DESC, p.id DESC LIMIT ?""", (limit,)).fetchall()
+        return [dict(r) | {"url": links("publication", r["id"], r["document_id"])} for r in rows]
+
     def stats(self) -> dict[str, Any]:
         with self.connect() as con:
             built = con.execute("SELECT value FROM meta WHERE key = 'built'").fetchone()

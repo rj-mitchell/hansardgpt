@@ -100,3 +100,27 @@ def test_pages(indexed_settings, tmp_path):
         assert client.get("/api/witnesses", params={"q": "passenger"}).json()["organisations"]
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_reports_feed(indexed_settings, tmp_path):
+    import xml.etree.ElementTree as ET
+
+    from fastapi.testclient import TestClient
+
+    from hansard.sync import committees_path
+
+    from .test_api import make_app
+
+    path = committees_path(indexed_settings)
+    app, _, _ = make_app(indexed_settings, tmp_path, auth=False)
+    client = TestClient(app)
+    try:
+        assert client.get("/feeds/committee-reports.xml").status_code == 200, "an empty feed before collection"
+        build(path, fake_api(), no_wait)
+        items = ET.fromstring(client.get("/feeds/committee-reports.xml").content).findall("channel/item")
+        assert [i.findtext("title") for i in items] == ["Government response: Government response",
+                                                        "Report: Rail fares: first report"]
+        assert items[0].findtext("link").endswith("/inquiries/900")
+        assert client.get("/feeds/edms.xml").status_code == 200
+    finally:
+        path.unlink(missing_ok=True)
