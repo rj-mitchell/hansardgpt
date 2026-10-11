@@ -1,6 +1,6 @@
 # Data sources and attribution
 
-HansardGPT is built entirely on open data. The application shows these
+Where They Stand is built entirely on open data. The application shows these
 attributions in its footer and on its About page.
 
 ## Parliamentary proceedings (Hansard)
@@ -22,6 +22,13 @@ committee memberships come from the `members/` data in
 the UK Parliament Members' Names Information Service (Open Parliament Licence
 v3.0). With thanks to mySociety for maintaining these datasets.
 
+## Gender and date of birth
+
+Members' gender comes from the UK Parliament
+[Members API](https://members-api.parliament.uk/) (Open Parliament Licence v3.0). Dates of birth come
+from [Wikidata](https://www.wikidata.org/) (property P569, matched by UK Parliament ID, P10428), whose
+structured data is available under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+
 ## Constituency boundaries and regions
 
 Contains public sector information licensed under the
@@ -31,4 +38,30 @@ December 2021 names and codes), and mySociety's
 [2025-constituencies](https://github.com/mysociety/2025-constituencies) dataset
 (post-2024 constituencies with regions, and 2010→2024 boundary overlaps),
 itself derived from ONS and Boundary Commission data.
+Seat types use ONS 2011 Built-up Areas, 2011 Census populations (Nomis) and ONS output-area lookups
+(England and Wales); National Records of Scotland Census 2022 settlements, populations and lookups
+(Scotland); and NISRA 2015 settlements, Census 2021 populations and lookups (Northern Ireland). All are
+published under the Open Government Licence v3.0.
 Contains OS data © Crown copyright and database right.
+Contains National Statistics data © Crown copyright and database right.
+Contains NRS data © Crown copyright and database right.
+Contains NISRA data © Crown copyright.
+
+## Typeface
+
+The web app bundles [Source Serif 4](https://github.com/adobe-fonts/source-serif) (Adobe),
+licensed under the [SIL Open Font License 1.1](https://openfontlicense.org), via Fontsource.
+No fonts are loaded from third-party servers.
+
+## Typefaces
+
+Preview cards are drawn with Source Serif 4 and Source Sans 3 by Adobe, licensed under the SIL Open Font
+License 1.1 (`data_static/fonts/LICENSE-*.md`). The web app uses Source Serif 4 via Fontsource under the same
+licence.
+
+## Briefings written by the site
+
+The text of briefings written by Where They Stand is licensed under
+[Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+Credit "Where They Stand" with a link to the briefing. Quotations from Hansard within a briefing remain under the
+Open Parliament Licence v3.0. The name and mark are not covered by the licence.

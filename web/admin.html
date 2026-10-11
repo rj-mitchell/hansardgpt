@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <!--#include head-->
+    <title>Admin — Where They Stand</title>
+    <meta name="robots" content="noindex, nofollow" />
+  </head>
+  <body>
+    <div class="app page">
+      <!--#include header-->
+      <main id="main" tabindex="-1" class="prose admin">
+        <h1>Admin</h1>
+        <form id="admin-login" class="report-form">
+          <label>
+            Admin token
+            <input id="admin-token" type="password" autocomplete="current-password" required />
+          </label>
+          <p class="muted small">
+            The token is in <code>/opt/hansardgpt/deploy/.env</code> on the server (<code>HANSARD_ADMIN_TOKEN</code>).
+            It is kept only in this browser tab and forgotten when the tab closes.
+          </p>
+          <p class="form-error" id="admin-error" role="alert" hidden></p>
+          <div class="form-actions"><button type="submit" class="secondary">Open</button></div>
+        </form>
+        <div id="admin-panel" hidden>
+          <p class="form-actions"><button type="button" class="link small" id="admin-refresh">Refresh</button>
+            <button type="button" class="link small" id="admin-signout">Forget token</button></p>
+          <section aria-labelledby="h-spend"><h2 id="h-spend">Spending</h2><div id="admin-spend"></div></section>
+          <section aria-labelledby="h-reports"><h2 id="h-reports">Open reports</h2><div id="admin-reports"></div></section>
+          <section aria-labelledby="h-feedback"><h2 id="h-feedback">Feedback</h2><div id="admin-feedback"></div></section>
+          <section aria-labelledby="h-visits"><h2 id="h-visits">Visits (last 30 days)</h2><div id="admin-visits"></div></section>
+          <section aria-labelledby="h-briefings"><h2 id="h-briefings">Recent briefings</h2><div id="admin-briefings"></div></section>
+          <section aria-labelledby="h-updates"><h2 id="h-updates">Recent updates</h2><div id="admin-updates"></div></section>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="/src/admin.ts"></script>
+  </body>
+</html>

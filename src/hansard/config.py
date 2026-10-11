@@ -81,7 +81,12 @@ class Settings:
 
     @property
     def state_db(self) -> Path:
-        return self.data_dir / "state.duckdb"
+        # SQLite: shared safely by the web app and the sync job (WAL mode).
+        return self.data_dir / "state.sqlite"
+
+    @property
+    def log_dir(self) -> Path:
+        return self.data_dir / "logs"
 
 
 def _resolve(path: str | Path) -> Path:
@@ -93,11 +98,42 @@ def load_settings(config_path: str | Path | None = None, **overrides: Any) -> Se
     path = _resolve(config_path or os.environ.get("HANSARD_CONFIG") or DEFAULT_CONFIG)
     with open(path, "rb") as fh:
         raw = tomllib.load(fh)
+    data_dir = _resolve(os.environ.get("HANSARD_DATA_DIR") or raw.get("paths", {}).get("data_dir", "data"))
+    # Per-installation overrides written by `hansard bootstrap` (e.g. the offline sample demo).
+    local = data_dir / "settings.local.toml"
+    if local.exists():
+        with open(local, "rb") as fh:
+            for section, values in tomllib.load(fh).items():
+                raw.setdefault(section, {}).update(values)
     for dotted, value in overrides.items():
         section, _, key = dotted.partition(".")
         raw.setdefault(section, {})[key] = value
-    data_dir = os.environ.get("HANSARD_DATA_DIR") or raw.get("paths", {}).get("data_dir", "data")
-    return Settings(raw=raw, data_dir=_resolve(data_dir), config_path=path, overrides=overrides)
+    return Settings(raw=raw, data_dir=data_dir, config_path=path, overrides=overrides)
+
+
+def save_local_settings(data_dir: Path, updates: dict[str, dict[str, Any]]) -> Path:
+    """Merge simple values into <data_dir>/settings.local.toml, so later commands (sync, serve) use them too."""
+    path = data_dir / "settings.local.toml"
+    current: dict[str, dict[str, Any]] = {}
+    if path.exists():
+        with open(path, "rb") as fh:
+            current = tomllib.load(fh)
+    for section, values in updates.items():
+        current.setdefault(section, {}).update(values)
+
+    def lit(v: Any) -> str:
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, (int, float)):
+            return repr(v)
+        return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+    lines = ["# Per-installation settings written by `hansard bootstrap`; they override config/settings.toml."]
+    for section, values in current.items():
+        lines += ["", f"[{section}]", *(f"{k} = {lit(v)}" for k, v in values.items())]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+    return path
 
 
 @lru_cache(maxsize=1)

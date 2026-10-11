@@ -1,4 +1,4 @@
-# HansardGPT settings. Paths are relative to the repository root unless absolute.
+# Where They Stand settings. Paths are relative to the repository root unless absolute.
 # Environment overrides: HANSARD_DATA_DIR, HANSARD_CONFIG, ANTHROPIC_API_KEY.
 
 [paths]
@@ -9,7 +9,7 @@ data_dir = "data"
 # need the 1997/2005 boundary sets and ministers.json; see README.
 start_date = "2010-05-06"
 # TheyWorkForYou scrapedxml directories to ingest.
-record_dirs = ["debates", "lordspages", "westminhall", "wrans", "wms", "standing"]
+record_dirs = ["debates", "westminhall", "lordspages", "wrans", "lordswrans", "wms", "lordswms", "standing"]
 
 [sources]
 twfy_rsync = "data.theyworkforyou.com::parldata/scrapedxml"
@@ -45,32 +45,58 @@ m_chair_match = 1.0
 m_chair_other = 0.5
 # Below this best relevance score the engine answers "no records found".
 no_records_threshold = 0.2
+# Evidence selection for briefings: balance across speaker groups (ministers,
+# opposition, committee chairs, city/town/rural backbenchers, peers).
+max_per_speaker = 2
+min_relevance_ratio = 0.25
 
 [answer]
 model = "claude-opus-5-5"
-summary_sources = 12
+summary_sources = 24
 comprehensive_sources = 40
 summary_effort = "medium"
 comprehensive_effort = "high"
 query_parse_effort = "low"
 max_tokens = 16000
+# Server-side refusal fallback (beta). Disable if your account or platform rejects it.
+use_fallbacks = true
 
 [embedding]
 # "fastembed" (local ONNX model; weights fetched once from Hugging Face and pinned)
 # or "hashing" (deterministic, offline; for tests and the sample demo only).
 backend = "fastembed"
-model = "BAAI/bge-small-en-v1.5"
+# snowflake-arctic-embed-xs: 384 dims, ~2.6x faster than bge-small on CPU with similar
+# retrieval quality (benchmarked on this project; see README).
+model = "snowflake/snowflake-arctic-embed-xs"
 dim = 384
 passage_words = 250
-batch_size = 64
+# Small batches: same CPU throughput as 64, a fifth of the memory (ONNX attention buffers).
+batch_size = 8
 
 [usage]
-per_user_daily_questions = 60
+# The site is public; each new model-written briefing costs money.
+per_visitor_daily_questions = 15   # anonymous visitors (keyed by a salted hash of their IP address)
+per_user_daily_questions = 60      # signed-in users, when invite-only sign-in is on
+requests_per_minute = 20           # questions and searches per visitor
+answer_cache_hours = 24            # identical questions within this window are not re-run
+daily_spend_cap_usd = 10.0
 monthly_spend_cap_usd = 150.0
 # USD per million tokens, used for spend tracking only.
 price_input_per_mtok = 4.0
 price_output_per_mtok = 20.0
+price_cache_read_per_mtok = 0.4
+
+[auth]
+# Public by default. Set required = true for an invite-only site (accounts are
+# created with `hansard user add`). Admin endpoints need HANSARD_ADMIN_TOKEN either way.
+required = false
+session_days = 14
 
 [sync]
 # UK local times the systemd timer runs `hansard sync`.
 times = ["07:15", "19:15"]
+
+[site]
+# The "Support this site" link (a Ko-fi or similar page). Empty: the link is not shown anywhere.
+# HANSARD_DONATE_URL in the server's .env overrides this.
+donate_url = "https://ko-fi.com/wheretheystand"

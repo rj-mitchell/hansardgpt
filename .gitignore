@@ -26,3 +26,7 @@ web/coverage/
 .DS_Store
 .idea/
 .vscode/
+web/*.tsbuildinfo
+
+# server backups (deploy/docker-compose.yml)
+deploy/backups/

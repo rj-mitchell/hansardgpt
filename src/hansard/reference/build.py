@@ -2,7 +2,8 @@
 
 Outputs (Parquet, in ``settings.reference_dir``):
 
-* ``persons``         one row per canonical person (redirects resolved)
+* ``persons``         one row per canonical person (redirects resolved), with gender and date of
+                      birth where known (matched by UK Parliament ID; see ``sources.demographics``)
 * ``person_ids``      every id that can appear in Hansard XML -> canonical person:
                       person ids (incl. redirected ones), Commons member ids and
                       Lords ids (incl. redirected memberships)
@@ -131,6 +132,10 @@ def load_constituencies(csv_path: Path) -> list[dict[str, Any]]:
                 "boundary_set": r["boundary_set"],
                 "valid_from": date.fromisoformat(r["valid_from"]),
                 "valid_to": date.fromisoformat(r["valid_to"]),
+                "settlement": r.get("settlement") or None,
+                "main_area": r.get("main_area") or None,
+                "urban_area": r.get("urban_area") or None,
+                "urban_area_pop": int(r["urban_area_pop"]) if r.get("urban_area_pop") else None,
             })
     return rows
 
@@ -148,7 +153,10 @@ def build_reference(
     members_dir: Path,
     geo_csv: Path,
     overrides_csv: Path | None = None,
+    demographics: dict[str, dict[str, Any]] | None = None,
 ) -> ReferenceData:
+    genders = (demographics or {}).get("genders", {})
+    births = (demographics or {}).get("births", {})
     people = json.loads((members_dir / "people.json").read_text(encoding="utf-8"))
     ref = ReferenceData()
     ref.constituencies = load_constituencies(geo_csv)
@@ -171,11 +179,16 @@ def build_reference(
             })
         mains.sort(key=lambda r: r["start"])
         ref.names.extend(mains)
+        mnis = idents.get("datadotparl_id")
+        birth = births.get(mnis) if mnis else None
         ref.persons.append({
             "person_id": p["id"],
             "latest_name": mains[-1]["name"] if mains else p["id"],
-            "datadotparl_id": idents.get("datadotparl_id"),
+            "datadotparl_id": mnis,
             "wikidata": idents.get("wikidata"),
+            "gender": genders.get(mnis) if mnis else None,
+            "birth_date": date.fromisoformat(birth["date"]) if birth else None,
+            "birth_precision": birth["precision"] if birth else None,
         })
     known = {p["person_id"] for p in ref.persons}
 
@@ -193,15 +206,18 @@ def build_reference(
     posts = {p["id"]: p for p in people["posts"]}
     overrides = load_overrides(overrides_csv)
     by_set: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
-    by_gss = {}
+    # A few unchanged seats (e.g. Orkney and Shetland) keep their GSS code across
+    # boundary sets, so codes map to every entry and the one valid on the date wins.
+    by_gss: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for c in ref.constituencies:
         by_set[c["boundary_set"]][normalise_place(c["name"])] = c
-        by_gss[c["gss_code"]] = c
+        by_gss[c["gss_code"]].append(c)
 
     def seat_for(post: dict[str, Any], on: date) -> dict[str, Any] | None:
         for ident in post.get("identifiers", []):
             if ident["scheme"] == "gss" and ident["identifier"] in by_gss:
-                return by_gss[ident["identifier"]]
+                entries = by_gss[ident["identifier"]]
+                return next((c for c in entries if c["valid_from"] <= on <= c["valid_to"]), entries[-1])
         bset = "2024" if on >= date(2024, 7, 4) else "2010" if on >= date(2010, 5, 6) else None
         if bset is None:
             return None
@@ -248,6 +264,9 @@ def build_reference(
             "gss_code": seat["gss_code"] if seat else None,
             "region": seat["region"] if seat else None,
             "nation": seat["nation"] if seat else None,
+            "settlement": seat.get("settlement") if seat else None,
+            "urban_area": seat.get("urban_area") if seat else None,
+            "urban_area_pop": seat.get("urban_area_pop") if seat else None,
             "party_id": party,
             "party_name": party_names.get(party, party),
             "start": start,
@@ -271,8 +290,13 @@ def build_reference(
     # ---- offices
     ref.offices, office_stats = load_offices(members_dir, person_redirect, known)
 
+    recent = {m["person_id"] for m in ref.memberships if m["end"] >= date(2010, 5, 6)}
+    recent_persons = [p for p in ref.persons if p["person_id"] in recent]
     ref.stats = {
         "persons": len(ref.persons),
+        "members_since_2010": len(recent_persons),
+        "with_gender_since_2010": sum(1 for p in recent_persons if p["gender"]),
+        "with_birth_date_since_2010": sum(1 for p in recent_persons if p["birth_date"]),
         "memberships": len(ref.memberships),
         "names": len(ref.names),
         "unmatched_seats_since_2010": sorted(unmatched_seats),
@@ -369,14 +393,16 @@ def office_display(office: dict[str, Any], on: date | None = None) -> str:
 
 _SCHEMAS = {
     "persons": pa.schema([("person_id", pa.string()), ("latest_name", pa.string()),
-                          ("datadotparl_id", pa.string()), ("wikidata", pa.string())]),
+                          ("datadotparl_id", pa.string()), ("wikidata", pa.string()),
+                          ("gender", pa.string()), ("birth_date", pa.date32()), ("birth_precision", pa.string())]),
     "person_ids": pa.schema([("xml_id", pa.string()), ("person_id", pa.string())]),
     "names": pa.schema([("person_id", pa.string()), ("name", pa.string()),
                         ("start", pa.date32()), ("end", pa.date32())]),
     "memberships": pa.schema([
         ("membership_id", pa.string()), ("person_id", pa.string()), ("house", pa.string()),
         ("constituency", pa.string()), ("gss_code", pa.string()), ("region", pa.string()),
-        ("nation", pa.string()), ("party_id", pa.string()), ("party_name", pa.string()),
+        ("nation", pa.string()), ("settlement", pa.string()), ("urban_area", pa.string()),
+        ("urban_area_pop", pa.int32()), ("party_id", pa.string()), ("party_name", pa.string()),
         ("start", pa.date32()), ("end", pa.date32()), ("start_reason", pa.string()),
         ("end_reason", pa.string())]),
     "offices": pa.schema([
@@ -387,7 +413,8 @@ _SCHEMAS = {
     "constituencies": pa.schema([
         ("gss_code", pa.string()), ("name", pa.string()), ("region", pa.string()),
         ("nation", pa.string()), ("boundary_set", pa.string()), ("valid_from", pa.date32()),
-        ("valid_to", pa.date32())]),
+        ("valid_to", pa.date32()), ("settlement", pa.string()), ("main_area", pa.string()),
+        ("urban_area", pa.string()), ("urban_area_pop", pa.int32())]),
     "parties": pa.schema([("party_id", pa.string()), ("party_name", pa.string()),
                           ("whip_group", pa.string())]),
 }
