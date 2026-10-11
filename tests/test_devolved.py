@@ -109,3 +109,29 @@ def test_yearly_counts_for_the_cross_border_chart(tmp_path):
     assert store.yearly("ferry services") == {"scottish-parliament": {2026: (1, 2)}}, \
         "members' contributions only, matching the words as a phrase"
     assert store.yearly("services ferry")["scottish-parliament"][2026][0] == 0
+
+
+def test_briefings_can_include_the_devolved_parliaments(indexed_settings):
+    from hansard.embed.base import HashingEmbedder
+    from hansard.engine import Engine, Scope
+    from hansard.rag.pipeline import AskRequest, Pipeline
+    from hansard.rag.query_parse import parse_offline
+    from hansard.sync import devolved_path
+
+    long_sp = SP.replace(b"about ferry services to the islands.",
+                         b"about ferry services to the islands. " + b"The ferry timetable matters to islanders. " * 12)
+    path = devolved_path(indexed_settings)
+    try:
+        sync_devolved(DevolvedStore(path), since=date(2026, 6, 1), sleep=lambda _s: None,
+                      client=fake_twfy({"meeting-of-the-parliament/2026-09-17_20233.xml": long_sp}))
+        p = Pipeline(indexed_settings, Engine(indexed_settings, embedder=HashingEmbedder(64)))
+        plan = parse_offline("What has been said about ferry services?", indexed_settings.regions)
+        _, _, off = p.find(plan, AskRequest(question=plan.question))
+        assert not [s for s in off if s.kind == "devolved"], "off unless the reader asks"
+        _, _, on = p.find(plan, AskRequest(question=plan.question, scope=Scope(devolved=True)))
+        dev = [s for s in on if s.kind == "devolved"]
+        assert len(dev) == 1 and dev[0].meta["group"] == "Scottish Parliament"
+        assert "not of the UK Parliament" in dev[0].blocks[0]
+    finally:
+        for suffix in ("", "-wal", "-shm"):
+            path.with_name(path.name + suffix).unlink(missing_ok=True)

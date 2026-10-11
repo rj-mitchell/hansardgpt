@@ -79,6 +79,11 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
           <span className="att">
             <b>Division {s.number}</b> {s.major_heading}
           </span>
+        ) : s.kind === "devolved" ? (
+          <span className="att">
+            <b>{s.member?.name}</b>
+            {s.member && (s.member.party || s.member.seat) ? ` (${[s.member.party, s.member.seat].filter(Boolean).join(", ")})` : ""}
+          </span>
         ) : s.kind === "edm" ? (
           <span className="att">
             <b>{s.uin ? `EDM ${s.uin}` : "Early day motion"}</b> {s.edm_title}
@@ -154,6 +159,8 @@ export function SourceDrawer({
             ? `Division ${source.number}`
             : source.kind === "edm"
               ? `Early day motion${source.uin ? ` ${source.uin}` : ""}`
+              : source.kind === "devolved"
+                ? (source.member?.name ?? "A member")
               : speakerLine(sp, source.speaker_name_raw)}
         </h2>
         <button type="button" className="close" onClick={onClose} aria-label="Close source">
@@ -166,6 +173,8 @@ export function SourceDrawer({
       <div className="drawer-body">
         {source.kind === "edm" ? (
           <EdmDetail source={source} quotes={quotes} />
+        ) : source.kind === "devolved" ? (
+          <DevolvedDetail source={source} quotes={quotes} />
         ) : (
           <>
         <dl className="facts">
@@ -463,6 +472,48 @@ function EdmDetail({ source, quotes }: { source: SourceCard; quotes: string[] })
       <AboutRecord source={source} />
       <section className="verbatim" aria-label="Text of the motion">
         {(source.motion_text ?? "").split("\n\n").map((para, i) => (
+          <p key={i}>
+            {highlightParts(para, quotes).map((part, j) =>
+              part.hit ? <mark key={j}>{part.text}</mark> : <span key={j}>{part.text}</span>,
+            )}
+          </p>
+        ))}
+      </section>
+    </>
+  );
+}
+
+/** A contribution in a devolved parliament: who, their party and seat on the day, and their words. */
+function DevolvedDetail({ source, quotes }: { source: SourceCard; quotes: string[] }) {
+  const m = source.member;
+  const words = source.text.split("\n\n").slice(1);
+  return (
+    <>
+      <dl className="facts">
+        <dt>Member</dt>
+        <dd>{m?.number && m.slug ? <a href={`/people/${m.number}/${m.slug}`}>{m.name}</a> : (m?.name ?? "—")}</dd>
+        <dt>Party</dt>
+        <dd>{m?.party ?? "—"}</dd>
+        <dt>Seat</dt>
+        <dd>{m?.seat ?? "—"}</dd>
+        <dt>Where</dt>
+        <dd>
+          {source.chamber}, {fmtDate(source.date)}
+          {source.heading ? ` — ${source.heading}` : ""}
+        </dd>
+        <dt>Links</dt>
+        <dd className="links">
+          <a href={source.url}>The whole sitting on this site</a>
+          {source.official_url && (
+            <a href={source.official_url} target="_blank" rel="noreferrer">
+              The official report
+            </a>
+          )}
+        </dd>
+      </dl>
+      <AboutRecord source={source} />
+      <section className="verbatim" aria-label="Verbatim text">
+        {words.map((para, i) => (
           <p key={i}>
             {highlightParts(para, quotes).map((part, j) =>
               part.hit ? <mark key={j}>{part.text}</mark> : <span key={j}>{part.text}</span>,

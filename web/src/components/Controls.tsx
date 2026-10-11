@@ -99,6 +99,14 @@ export function Controls({ settings, onChange, answersEnabled }: Props) {
           />
           Early day motions
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.scope.devolved ?? false}
+            onChange={(e) => scope({ devolved: e.target.checked })}
+          />
+          Devolved parliaments (Holyrood, the Senedd, the NI Assembly)
+        </label>
       </fieldset>
     </section>
   );

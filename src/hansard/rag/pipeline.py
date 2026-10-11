@@ -12,6 +12,7 @@ Events (all JSON-serialisable) are yielded so the API can stream them:
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date
@@ -106,6 +107,7 @@ class Pipeline:
         self._client = client
         self.today = today
         self._edms = None
+        self._devolved = None
 
     @property
     def client(self):
@@ -198,7 +200,42 @@ class Pipeline:
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
         edms = self.find_edms(plan, req) if getattr(req.scope, "edms", True) else []
-        return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by, edms)
+        devolved = self.find_devolved(plan, req) if getattr(req.scope, "devolved", False) else []
+        return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by, edms,
+                                                devolved)
+
+    def find_devolved(self, plan: QueryPlan, req: AskRequest) -> list[dict[str, Any]]:
+        """A few contributions from each devolved parliament on the subject (when the reader asks for them)."""
+        if plan.speakers or plan.filters.person_ids or plan.compare:
+            return []
+        from hansard.devolved import LEGISLATURES, DevolvedStore, Members
+        from hansard.people import person_number
+        from hansard.sync import devolved_path
+        from hansard.votes import keywords
+
+        path = devolved_path(self.settings)
+        if not path.exists():
+            return []
+        try:
+            if self._devolved is None:
+                self._devolved = (DevolvedStore(path), Members(self.settings.parlparse_dir / "members" / "people.json"))
+            store, members = self._devolved
+            found = store.relevant(keywords(plan.search_text),
+                                   date_from=plan.filters.date_from and plan.filters.date_from.isoformat(),
+                                   date_to=plan.filters.date_to and plan.filters.date_to.isoformat(),
+                                   per_body=3 if req.mode == "comprehensive" else 2)
+        except Exception:  # never let the devolved record break a briefing
+            log.exception("devolved parliaments unavailable")
+            return []
+        for d in found:
+            cfg = LEGISLATURES[d["legislature"]]
+            on = members.on(d["person_id"], cfg["org"], d["date"])
+            number = person_number(d["person_id"]) if d["person_id"] else None
+            name = on.get("name") or d["speaker"]
+            d["body"] = cfg["name"]
+            d["member"] = {**on, "name": name, "number": number,
+                           "slug": re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") if number else None}
+        return found
 
     def find_edms(self, plan: QueryPlan, req: AskRequest) -> list[dict[str, Any]]:
         """A few early day motions on the subject, with signatures counted by party on the day (when collected)."""
@@ -273,7 +310,8 @@ class Pipeline:
         yield {"type": "sources", "sources": [s.card() for s in sources], "candidates": result.candidates,
                "semantic": result.semantic_available,
                "evidence": {**evidence_summary(result.records, divisions), "devolution": notes_for(plan.question),
-                            "edms": sum(1 for s in sources if s.kind == "edm")}}
+                            "edms": sum(1 for s in sources if s.kind == "edm"),
+                            "devolved": sum(1 for s in sources if s.kind == "devolved")}}
 
         if not sources or (result.no_records and not divisions):
             yield {"type": "final", "answer": {"segments": [{"text": NO_RECORDS + " The archive contains no "

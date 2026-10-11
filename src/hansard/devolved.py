@@ -166,6 +166,39 @@ class DevolvedStore:
                 ORDER BY s.date DESC, s.ord LIMIT ? OFFSET ?""", [*params, limit, offset]).fetchall()
         return total, [dict(r) for r in rows]
 
+    def relevant(self, keywords: list[str], *, date_from: str | None = None, date_to: str | None = None,
+                 per_body: int = 2, min_words: int = 60) -> list[dict[str, Any]]:
+        """The best-matching members' contributions in each parliament (all the words, ranked by relevance)."""
+        words = [w for w in keywords if re.fullmatch(r"[\w'’-]+", w)][:5]
+        if not words:
+            return []
+        match = " ".join(f'"{w}"' for w in words)
+        out = []
+        with self.connect() as con:
+            for leg in LEGISLATURES:
+                where = ["speech_text MATCH ?", "s.legislature = ?", "s.person_id IS NOT NULL",
+                         "length(s.text) >= ?"]
+                params: list[Any] = [match, leg, min_words * 5]
+                if date_from:
+                    where.append("s.date >= ?")
+                    params.append(str(date_from))
+                if date_to:
+                    where.append("s.date <= ?")
+                    params.append(str(date_to))
+                rows = con.execute(f"""
+                    SELECT s.* FROM speech_text JOIN speeches s ON s.id = speech_text.rowid
+                    WHERE {' AND '.join(where)} ORDER BY bm25(speech_text, 1.0, 3.0, 2.0, 0.0) LIMIT ?""",
+                                   [*params, per_body * 4]).fetchall()
+                seen: set[str] = set()
+                for r in rows:  # one contribution per member, so a few speakers do not fill the evidence
+                    if r["person_id"] in seen:
+                        continue
+                    seen.add(r["person_id"])
+                    out.append(dict(r))
+                    if len(seen) >= per_body:
+                        break
+        return out
+
     def yearly(self, phrase: str) -> dict[str, dict[int, tuple[int, int]]]:
         """{body: {year: (contributions using the phrase, all contributions)}}, members' contributions only."""
         words = re.findall(r"[\w'’-]+", phrase)[:8]

@@ -39,6 +39,9 @@ What a good briefing does
   amendment, a timetable motion, an amendment to decline a second reading and so on), it names that kind and the
   question put, and does not present a vote on an amendment or a procedural motion as a vote for or against the
   whole bill or policy.
+- If contributions from the Scottish Parliament, the Senedd or the Northern Ireland Assembly are supplied, it reports
+  them in their own section, by parliament, never as views of the UK Parliament, and notes that those parliaments
+  decide many subjects for their own nations.
 - If early day motion records are supplied, it reports them separately from speeches: what the motion said, who
   tabled it and how many members of each party signed. It treats signing as support for the motion's wording only,
   and never treats a member's not signing as a view, since ministers and whips do not sign.

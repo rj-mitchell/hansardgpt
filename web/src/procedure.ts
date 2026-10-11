@@ -38,6 +38,13 @@ const NOTES: Record<string, { title: string; text: string }> = {
       "After a bill's second reading in the Commons, a committee of MPs goes through it line by line and may first " +
       "hear from expert witnesses. Its debates are reported in their own Hansard.",
   },
+  devolved: {
+    title: "The devolved parliaments",
+    text:
+      "The Scottish Parliament, the Senedd and the Northern Ireland Assembly make laws for their own nations on " +
+      "devolved subjects such as health, education and housing. Their members are not members of the UK Parliament, " +
+      "and what they say is recorded in each parliament's own official report.",
+  },
   edm: {
     title: "Early day motions",
     text:
@@ -57,6 +64,7 @@ const NOTES: Record<string, { title: string; text: string }> = {
 export function aboutRecord(s: Pick<SourceCard, "kind" | "chamber" | "record_type">): { title: string; text: string } {
   if (s.kind === "division") return NOTES.division;
   if (s.kind === "edm") return NOTES.edm;
+  if (s.kind === "devolved") return NOTES.devolved;
   if (s.record_type === "question" || s.record_type === "answer" || /written answers/i.test(s.chamber)) {
     return NOTES.writtenAnswer;
   }

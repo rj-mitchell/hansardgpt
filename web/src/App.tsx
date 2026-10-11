@@ -64,7 +64,7 @@ function loadSettings(defaults?: Meta["defaults"]): Settings {
     mode: "summary",
     recency: defaults?.recency ?? 0.5,
     roleWeight: defaults?.role_weight ?? 1.5,
-    scope: { written: true, pbc: true, votes: true, edms: true },
+    scope: { written: true, pbc: true, votes: true, edms: true, devolved: false },
   };
 }
 
@@ -361,6 +361,7 @@ export default function App() {
           </span>
           <span className="masthead-actions">
             <nav className="page-nav" aria-label="Site">
+              <a href="/this-week">This week</a>
               <a href="/topics">Topics</a>
               <a href="/people">MPs and peers</a>
               <a href="/bills">Bills</a>

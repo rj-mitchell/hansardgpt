@@ -188,10 +188,30 @@ def edm_source(n: int, e: dict[str, Any]) -> Source:
     return Source(n, "edm", title, f"/edms/{e['id']}", blocks, meta)
 
 
+def devolved_source(n: int, d: dict[str, Any]) -> Source:
+    """A contribution in a devolved parliament: kept apart from Westminster, labelled with its parliament."""
+    sp = d.get("member") or {}
+    who = sp.get("name") or d.get("speaker") or "A member"
+    about = ", ".join(x for x in (sp.get("party"), sp.get("seat")) if x)
+    heading = " — ".join(x for x in (d.get("major"), d.get("minor")) if x)
+    title = " — ".join(x for x in (f"{who} ({about})" if about else who, d["body"], _fmt_date(d["date"]), heading) if x)
+    blocks = [f"{d['body']}, {_fmt_date(d['date'])}{f' — {heading}' if heading else ''}. {who}"
+              f"{f' ({about})' if about else ''}, a member of the {d['body']} (not of the UK Parliament):",
+              *[p for p in d["text"].split("\n\n") if p.strip()]]
+    meta = {"date": d["date"], "chamber": d["body"], "legislature": d["legislature"], "heading": heading,
+            "member": {"name": who, "party": sp.get("party"), "seat": sp.get("seat"),
+                       "number": sp.get("number"), "slug": sp.get("slug")},
+            "text": "\n\n".join(blocks), "group": d["body"], "official_url": d.get("url"),
+            "speaker_name_raw": d.get("speaker")}
+    return Source(n, "devolved", title, f"/devolved/{d['legislature']}/{d['key']}#s{d['ord']}", blocks, meta)
+
+
 def build_sources(records: list[dict[str, Any]], divisions: list[dict[str, Any]],
                   facets: set[str] | bool = False, group_by: str = "role",
-                  edms: list[dict[str, Any]] | None = None) -> list[Source]:
+                  edms: list[dict[str, Any]] | None = None,
+                  devolved: list[dict[str, Any]] | None = None) -> list[Source]:
     out = [record_source(i, r, facets, group_by) for i, r in enumerate(records, 1)]
     out += [division_source(len(out) + i, d) for i, d in enumerate(divisions, 1)]
     out += [edm_source(len(out) + i, e) for i, e in enumerate(edms or [], 1)]
+    out += [devolved_source(len(out) + i, d) for i, d in enumerate(devolved or [], 1)]
     return out
