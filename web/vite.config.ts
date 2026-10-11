@@ -47,6 +47,7 @@ export default defineConfig({
         terms: here("./terms.html"),
         person: here("./person.html"),
         people: here("./people.html"),
+        topics: here("./topics.html"),
         admin: here("./admin.html"),
       },
     },

@@ -17,6 +17,8 @@ from hansard.config import STATIC_DIR, Settings, load_settings
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="Where They Stand: sourced briefings on the record of the UK Parliament.")
 user_app = typer.Typer(no_args_is_help=True, help="Manage invite-only user accounts.")
 app.add_typer(user_app, name="user")
+topics_app = typer.Typer(no_args_is_help=True, help="Topic briefings (config/topics.toml).")
+app.add_typer(topics_app, name="topics")
 eval_app = typer.Typer(no_args_is_help=True, help="Score the site against the test set (eval/questions.toml).")
 app.add_typer(eval_app, name="eval")
 
@@ -363,6 +365,38 @@ def user_disable(email: str):
         con.execute("UPDATE users SET disabled = 1 WHERE email = ?", (email,))
         con.execute("DELETE FROM sessions WHERE user_id IN (SELECT user_id FROM users WHERE email = ?)", (email,))
     typer.echo(f"disabled {email}")
+
+
+# ---- topic briefings ----------------------------------------------------------------------------------------------
+
+
+@topics_app.command("list")
+def topics_list():
+    """Each topic, its current version and when it was last checked."""
+    from hansard.store.state import StateDB
+    from hansard.topics import topic_listing
+
+    for t in topic_listing(_settings(), StateDB(_settings().state_db)):
+        cur = t["current"]
+        chk = t["last_check"]
+        typer.echo(f"{t['slug']:32} {('written ' + cur['prepared_at'][:10]) if cur else 'not written yet':22} "
+                   f"{t['versions']} version(s)  {('last check: ' + chk['outcome']) if chk else ''}")
+
+
+@topics_app.command("refresh")
+def topics_refresh(only: list[str] = typer.Option(None, help="just these topics (slugs)"),
+                   force: bool = typer.Option(False, help="rewrite even if not due or the evidence is unchanged"),
+                   limit: int = typer.Option(None, help="at most this many rewrites (default: max_per_run)")):
+    """Rewrite the topic briefings that are due. Each rewrite costs about 11p."""
+    from hansard.rag.pipeline import Pipeline
+    from hansard.store.state import StateDB
+    from hansard.topics import refresh_topics
+
+    settings = _settings()
+    _setup_logging()
+    res = refresh_topics(settings, StateDB(settings.state_db), Pipeline(settings), only=only or None, force=force,
+                         limit=limit, progress=typer.echo)
+    typer.echo(f"{sum(1 for r in res if r['outcome'].startswith('rewritten'))} rewritten")
 
 
 # ---- the test set ------------------------------------------------------------------------------------------------

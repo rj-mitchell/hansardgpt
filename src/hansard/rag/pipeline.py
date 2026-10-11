@@ -151,13 +151,8 @@ class Pipeline:
             plan.filters.person_ids = [s["person_id"] for s in plan.speakers]
         return plan, usage
 
-    def run(self, req: AskRequest) -> Iterator[dict[str, Any]]:
-        plan, parse_usage = self.make_plan(req)
-        ev: dict[str, Any] = {"type": "plan", "plan": plan.to_dict(), "usage": parse_usage}
-        if plan.parse_error:
-            ev["parse_error"] = plan.parse_error  # for the operator's failure log; removed before reaching readers
-        yield ev
-
+    def find(self, plan: QueryPlan, req: AskRequest):
+        """The evidence for a plan: (search result, divisions, numbered sources). Free: no model call."""
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))
         result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
@@ -166,7 +161,16 @@ class Pipeline:
         divisions = []
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
-        sources = build_sources(result.records, divisions, plan_facets(plan), plan.group_by)
+        return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by)
+
+    def run(self, req: AskRequest) -> Iterator[dict[str, Any]]:
+        plan, parse_usage = self.make_plan(req)
+        ev: dict[str, Any] = {"type": "plan", "plan": plan.to_dict(), "usage": parse_usage}
+        if plan.parse_error:
+            ev["parse_error"] = plan.parse_error  # for the operator's failure log; removed before reaching readers
+        yield ev
+
+        result, divisions, sources = self.find(plan, req)
         from hansard.rank.evidence import evidence_summary
 
         yield {"type": "sources", "sources": [s.card() for s in sources], "candidates": result.candidates,

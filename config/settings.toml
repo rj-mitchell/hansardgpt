@@ -128,3 +128,10 @@ times = ["07:15", "19:15"]
 # The "Support this site" link (a Ko-fi or similar page). Empty: the link is not shown anywhere.
 # HANSARD_DONATE_URL in the server's .env overrides this.
 donate_url = "https://ko-fi.com/wheretheystand"
+
+[topics]
+# Topic briefings (/topics): standing questions listed in config/topics.toml, refreshed by the sync.
+enabled = true
+file = "topics.toml"
+max_per_run = 4             # at most this many rewrites per sync (the sync runs twice a day)
+unchanged_overlap = 0.8     # not rewritten when this share of the sources is the same as last time

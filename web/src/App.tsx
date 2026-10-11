@@ -7,6 +7,7 @@ import { PlanChips } from "./components/PlanChips";
 import { EvidenceBar } from "./components/Evidence";
 import { SourceDrawer, SourceList } from "./components/Sources";
 import { SupportReminder } from "./components/SupportReminder";
+import { TopicHeader } from "./components/TopicHeader";
 import { ATTRIBUTION } from "./attribution";
 import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
@@ -14,6 +15,7 @@ import { fmtDate } from "./render";
 import type { Answer, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
+const TOPIC = /^\/topics\/([a-z0-9-]+)\/?$/;
 
 /**
  * Example questions, one set a day. Each set spans parties, both Houses, the nations and kinds of seat, and
@@ -103,6 +105,62 @@ export default function App() {
     void refresh();
     void api.hit(window.location.pathname, document.referrer); // cookie-free page count
   }, [refresh]);
+
+  // a topic address (/topics/<slug>) opens that topic's current briefing
+  useEffect(() => {
+    const m = window.location.pathname.match(TOPIC);
+    if (!m) return;
+    const slug = m[1];
+    api
+      .topic(slug)
+      .then(({ topic, briefing: b, versions }) => {
+        document.title = `${topic.title}: where MPs and peers stand — Where They Stand`;
+        setTurns([
+          b
+            ? {
+                id: b.id,
+                question: b.question,
+                settings,
+                plan: b.plan ?? undefined,
+                sources: b.sources,
+                candidates: b.candidates,
+                semantic: b.semantic,
+                evidence: b.evidence,
+                streamText: "",
+                answer: b.answer,
+                status: "done",
+                briefingId: b.id,
+                preparedAt: b.created_at,
+                recordsUpTo: b.records_up_to,
+                topic: { ...topic, versions },
+              }
+            : {
+                id: slug,
+                question: topic.question,
+                settings,
+                sources: [],
+                streamText: "",
+                status: "error",
+                error: "This topic briefing has not been written yet. It will appear here after a coming update.",
+                topic: { ...topic, versions },
+              },
+        ]);
+      })
+      .catch(() =>
+        setTurns([
+          {
+            id: slug,
+            question: "Topic not found",
+            settings,
+            sources: [],
+            streamText: "",
+            status: "error",
+            error: "There is no topic at this address. The list of topics is at /topics.",
+          },
+        ]),
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, []);
 
   // a shared address (/b/<id>) opens that briefing, exactly as it was prepared
   useEffect(() => {
@@ -280,6 +338,7 @@ export default function App() {
           </span>
           <span className="masthead-actions">
             <nav className="page-nav" aria-label="Site">
+              <a href="/topics">Topics</a>
               <a href="/people">MPs and peers</a>
               <a href="/about">About</a>
               <a href="/methodology">Methodology</a>
@@ -357,6 +416,7 @@ export default function App() {
         )}
         {turns.map((t) => (
           <article key={t.id} className="turn">
+            {t.topic && <TopicHeader topic={t.topic} preparedAt={t.preparedAt} recordsUpTo={t.recordsUpTo} />}
             <h2 className="question">{t.question}</h2>
             {t.shared && t.preparedAt && (
               <p className="shared-note">
@@ -436,6 +496,7 @@ export default function App() {
         </p>
         <nav className="footer-nav" aria-label="About this site">
           <a href="/about">About</a>
+          <a href="/topics">Topics</a>
           <a href="/methodology">Methodology</a>
           <a href="/resources">Other resources</a>
           <a href="/changelog">Changelog</a>

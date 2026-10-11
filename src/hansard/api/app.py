@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 from collections.abc import Iterator
@@ -31,13 +32,17 @@ from hansard.api.auth import (
 )
 from hansard.api.briefings import (
     ID_PATTERN,
+    feature,
+    featured_list,
     fmt_date,
     get_briefing,
+    is_featured,
+    keep,
     page_with_meta,
     public_view,
     recent_briefings,
-    store_briefing,
     summary_text,
+    unfeature,
     withdraw_briefing,
 )
 from hansard.api.cards import card_png
@@ -129,6 +134,12 @@ class CloseReportBody(BaseModel):
 
 class WithdrawBody(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
+
+
+class FeatureBody(BaseModel):
+    briefing: str = Field(min_length=10, max_length=300, description="the briefing's id or full address")
+    title: str | None = Field(default=None, max_length=200)
+    blurb: str | None = Field(default=None, max_length=600)
 
 
 class HitBody(BaseModel):
@@ -409,12 +420,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return retrieve(body)
 
     def keep_briefing(body: AskBody, kept: list[dict[str, Any]], final: dict[str, Any]) -> dict[str, Any]:
-        records_up_to = state.latest_record_date()
-        events = [e for e in kept if e["type"] in ("plan", "sources")] + [
-            {k: v for k, v in final.items() if k not in ("usage", "briefing_key")}]
-        meta = store_briefing(state, body.question, body.model_dump(exclude={"question", "history"}), events,
-                              records_up_to, final.get("model"))
-        return {"briefing_id": meta["id"], "prepared_at": meta["created_at"], "records_up_to": records_up_to}
+        return keep(state, body.question, body.model_dump(exclude={"question", "history"}), kept, final)
 
     # ---- shared briefings ---------------------------------------------------------------
     def _briefing_or_error(bid: str) -> dict[str, Any]:
@@ -457,7 +463,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         html_page = page_with_meta(
             page, title=f"{b['question']} — Where They Stand", description=description, url=f"{base}/b/{bid}",
             image=f"{base}/b/{bid}/card.png",
-            image_alt=f"Where They Stand briefing: {b['question']} Prepared {prepared}.")
+            image_alt=f"Where They Stand briefing: {b['question']} Prepared {prepared}.",
+            noindex=not is_featured(state, bid))  # featured briefings are for search engines to find
         return Response(html_page, media_type="text/html")
 
     @app.post("/api/admin/briefings/{bid}/withdraw")
@@ -470,6 +477,86 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     @app.get("/api/admin/briefings")
     def briefings_list(limit: int = 50, user=Depends(admin_user)):
         return {"briefings": recent_briefings(state, min(max(limit, 1), 500))}
+
+    # ---- topic briefings and featured briefings ------------------------------------------------
+    def _topic(slug: str):
+        from hansard.topics import load_topics, topics_file
+
+        t = next((t for t in load_topics(topics_file(settings)) if t.slug == slug), None)
+        if t is None:
+            raise HTTPException(404, "There is no topic at this address.")
+        return t
+
+    @app.get("/api/topics")
+    def topics_index():
+        from hansard.topics import topic_listing
+
+        topics = [{k: v for k, v in t.items() if k != "last_check"} for t in topic_listing(settings, state)]
+        return {"topics": topics, "featured": featured_list(state)}
+
+    @app.get("/api/topics/{slug}")
+    def topic_detail(slug: str):
+        from hansard.topics import versions
+
+        t = _topic(slug)
+        vs = versions(state, slug)
+        b = get_briefing(state, vs[0]["briefing_id"]) if vs else None
+        return {"topic": {"slug": t.slug, "title": t.title, "area": t.area, "question": t.question,
+                          "description": t.description, "refresh_days": t.refresh_days},
+                "briefing": public_view(b) if b else None, "versions": vs}
+
+    @app.get("/topics/{slug}", include_in_schema=False)
+    def topic_page(slug: str, request: Request):
+        """The app, showing the topic's current briefing, with its title and preview card in the page head."""
+        from hansard.topics import current
+
+        t = _topic(slug)
+        index = dist / "index.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        cur = current(state, slug)
+        b = get_briefing(state, cur["briefing_id"]) if cur else None
+        description = (summary_text(public_view(b)["answer"]) if b else "") or t.description or t.question
+        html_page = page_with_meta(
+            page, title=f"{t.title}: where MPs and peers stand — Where They Stand", description=description,
+            url=f"{base}/topics/{slug}", image=f"{base}/b/{b['id']}/card.png" if b else None,
+            image_alt=f"Where They Stand topic briefing: {t.title}", noindex=False)
+        return Response(html_page, media_type="text/html")
+
+    @app.get("/sitemap-briefings.xml", include_in_schema=False)
+    def sitemap_briefings(request: Request):
+        from hansard.topics import topic_listing
+
+        base = str(request.base_url).rstrip("/")
+        urls = [f"<url><loc>{base}/topics</loc><changefreq>weekly</changefreq></url>"]
+        for t in topic_listing(settings, state):
+            if t["current"]:
+                urls.append(f"<url><loc>{base}/topics/{t['slug']}</loc>"
+                            f"<lastmod>{t['current']['prepared_at'][:10]}</lastmod></url>")
+        urls += [f"<url><loc>{base}/b/{f['id']}</loc><lastmod>{f['prepared_at'][:10]}</lastmod></url>"
+                 for f in featured_list(state)]
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
+                        f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{"".join(urls)}</urlset>',
+                        media_type="application/xml")
+
+    @app.get("/api/admin/topics")
+    def admin_topics(user=Depends(admin_user)):
+        from hansard.topics import topic_listing
+
+        return {"topics": topic_listing(settings, state), "featured": featured_list(state)}
+
+    @app.post("/api/admin/featured")
+    def admin_feature(body: FeatureBody, user=Depends(admin_user)):
+        m = re.search(r"([a-km-z2-9]{10})/?$", body.briefing.strip())
+        if not m or not feature(state, m.group(1), body.title, body.blurb):
+            raise HTTPException(404, "There is no briefing at that address (or it has been withdrawn).")
+        return {"ok": True, "id": m.group(1)}
+
+    @app.delete("/api/admin/featured/{bid}")
+    def admin_unfeature(bid: str, user=Depends(admin_user)):
+        if not unfeature(state, bid):
+            raise HTTPException(404, "That briefing is not featured.")
+        return {"ok": True}
 
     # ---- MPs and peers -----------------------------------------------------------------------
     @app.get("/api/people")

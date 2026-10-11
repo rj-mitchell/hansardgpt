@@ -162,6 +162,18 @@ def install_reference(settings: Settings, state: StateDB, ref: ReferenceData, sh
     return people
 
 
+def refresh_topics_safely(settings: Settings, state: StateDB) -> list[dict[str, Any]] | str:
+    """Refresh the topic briefings that are due; a failure here never fails the sync."""
+    try:
+        from hansard.rag.pipeline import Pipeline
+        from hansard.topics import refresh_topics
+
+        return refresh_topics(settings, state, Pipeline(settings))
+    except Exception as exc:
+        log.warning("topic briefings were not refreshed: %s", exc)
+        return f"error: {type(exc).__name__}: {exc}"
+
+
 def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | None = 60.0,
              members_dir: Path | None = None, embedder=None, workers: int = 3,
              today: date | None = None) -> dict[str, Any]:
@@ -212,6 +224,11 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                               max_seconds=embed_minutes * 60 if embed_minutes else None)
             stats["embed"] = {"passages_embedded": n, "files_remaining": len(state.unembedded()),
                               "seconds": round(time.time() - t, 1)}
+
+        if settings.section("topics").get("enabled", True) and fetch:
+            t = time.time()
+            stats["topics"] = refresh_topics_safely(settings, state)
+            stats["topics_seconds"] = round(time.time() - t, 1)
 
         t = time.time()
         cutoff = ((today or date.today()) - timedelta(days=COMPACT_AFTER_DAYS)).isoformat()

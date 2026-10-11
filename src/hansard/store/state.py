@@ -110,6 +110,27 @@ CREATE TABLE IF NOT EXISTS question_counts (
     n         INTEGER NOT NULL,
     PRIMARY KEY (day, question)
 );
+-- topic briefings: each version written for a standing question (config/topics.toml); the newest is current
+CREATE TABLE IF NOT EXISTS topic_versions (
+    slug          TEXT NOT NULL,
+    briefing_id   TEXT NOT NULL,
+    prepared_at   TEXT NOT NULL,
+    records_up_to TEXT,
+    PRIMARY KEY (slug, briefing_id)
+);
+-- when each topic was last checked, and why it was or was not rewritten
+CREATE TABLE IF NOT EXISTS topic_checks (
+    slug        TEXT PRIMARY KEY,
+    checked_at  TEXT NOT NULL,
+    outcome     TEXT NOT NULL
+);
+-- briefings chosen by the editor to be listed on /topics and found by search engines
+CREATE TABLE IF NOT EXISTS featured (
+    briefing_id  TEXT PRIMARY KEY,
+    title        TEXT,
+    blurb        TEXT,
+    featured_at  TEXT NOT NULL
+);
 -- briefings that failed (bad API key, refusals, errors), shown as alerts on the admin page
 CREATE TABLE IF NOT EXISTS failures (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,

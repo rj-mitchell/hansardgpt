@@ -189,6 +189,25 @@ export interface Turn {
   recordsUpTo?: string | null;
   /** loaded from a shared address (/b/<id>) rather than asked in this visit */
   shared?: boolean;
+  /** shown as a topic briefing (/topics/<slug>) */
+  topic?: TopicInfo;
+}
+
+export interface TopicInfo {
+  slug: string;
+  title: string;
+  area: string;
+  question: string;
+  description: string;
+  refresh_days: number;
+  versions?: { briefing_id: string; prepared_at: string; records_up_to: string | null }[];
+}
+
+/** /api/topics/<slug>: the topic, its current briefing (if written yet) and every version. */
+export interface TopicDetail {
+  topic: TopicInfo;
+  briefing: SavedBriefing | null;
+  versions: { briefing_id: string; prepared_at: string; records_up_to: string | null }[];
 }
 
 /** A kept briefing, as returned by /api/briefings/<id>. */
