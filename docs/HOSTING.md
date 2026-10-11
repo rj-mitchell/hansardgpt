@@ -184,12 +184,21 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 | See the update history | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/sync` |
 | Install a new version of the site | merge the latest changes into `main` on GitHub (step 1), then on the server: `cd /opt/hansardgpt && git pull && cd deploy && docker compose up -d --build` |
 | Restart the site | `cd /opt/hansardgpt/deploy && docker compose restart` |
-| Change the API key | edit `/opt/hansardgpt/deploy/.env`, then `docker compose up -d` in the same folder |
+| Change the API key | the command below |
 | Change the "Support this site" link (it points to https://ko-fi.com/wheretheystand) | add `HANSARD_DONATE_URL=https://…` to `/opt/hansardgpt/deploy/.env`, then `docker compose up -d` in the same folder |
 | List recent briefings | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/briefings` |
 | Withdraw a briefing (after a complaint, say) | `curl -X POST -H "Authorization: Bearer YOUR_ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"reason": "complaint about attribution"}' https://wheretheystand.uk/api/admin/briefings/THE_ID/withdraw` |
 
 Your admin token is in `/opt/hansardgpt/deploy/.env` (`HANSARD_ADMIN_TOKEN=`).
+
+**To change the API key**, run this on the server. It asks for the key without showing it (paste it and press
+Return), saves it and restarts the site:
+
+```
+cd /opt/hansardgpt/deploy && read -rsp "Anthropic API key: " K && echo && sed -i "s|^HANSARD_ANTHROPIC_API_KEY=.*|HANSARD_ANTHROPIC_API_KEY=$K|" .env && unset K && docker compose up -d
+```
+
+Then run `bash /opt/hansardgpt/deploy/check.sh`: it should say "Anthropic accepts the API key".
 
 ## Backups
 

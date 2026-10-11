@@ -43,6 +43,27 @@ for svc in app caddy; do
     bad "$svc is not running" "cd $DIR/deploy && docker compose up -d   (then docker compose logs $svc to see why)"
   fi
 done
+key_result="$(docker compose exec -T app python -c "
+import anthropic
+from hansard.rag.answer import api_key, make_client
+if not api_key():
+    print('none')
+else:
+    try:
+        make_client().models.list(limit=1)
+        print('ok')
+    except anthropic.AuthenticationError:
+        print('rejected')
+    except Exception as e:
+        print('unreachable ' + type(e).__name__)
+" 2>/dev/null | tail -n 1)"
+case "$key_result" in
+  ok) ok "Anthropic accepts the API key (briefings can be written)";;
+  none) ;;  # already reported above
+  rejected) bad "Anthropic rejected the API key: briefings will fail" \
+      "put in a working key: see 'Change the API key' in the guide's Day to day table";;
+  *) bad "could not check the API key with Anthropic (${key_result:-no answer})" "try again in a minute; if it persists, docker compose logs --tail 50 app";;
+esac
 if docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=10)" >/dev/null 2>&1; then
   ok "the app answers inside the server"
 else
@@ -104,7 +125,13 @@ last_backup="$(ls -1t backups/where-they-stand-*.tar.gz 2>/dev/null | head -1)"
 [[ -n "$last_backup" ]] && ok "latest backup: $last_backup" || note "no backups yet (the first runs at 3.30am)"
 ufw status 2>/dev/null | grep -q "Status: active" && ok "firewall is on" || bad "firewall is off" "ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable"
 systemctl is-active --quiet fail2ban 2>/dev/null && ok "fail2ban is on" || bad "fail2ban is off" "apt-get install -y fail2ban && systemctl enable --now fail2ban"
-systemctl is-enabled --quiet unattended-upgrades 2>/dev/null && ok "automatic security updates are on" || bad "automatic security updates are off" "dpkg-reconfigure -f noninteractive unattended-upgrades"
+# what matters is apt's daily setting and timer, not the unattended-upgrades service itself
+if apt-config dump 2>/dev/null | grep -q 'APT::Periodic::Unattended-Upgrade "1"' \
+   && systemctl is-enabled --quiet apt-daily-upgrade.timer 2>/dev/null; then
+  ok "automatic security updates are on"
+else
+  bad "automatic security updates are off" "dpkg-reconfigure -f noninteractive unattended-upgrades"
+fi
 if sshd -T 2>/dev/null | grep -qi "^passwordauthentication no"; then
   ok "password logins are off (key only)"
 else
