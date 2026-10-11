@@ -558,6 +558,26 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             raise HTTPException(404, "That briefing is not featured.")
         return {"ok": True}
 
+    # ---- timelines -----------------------------------------------------------------------------
+    @app.get("/api/timeline")
+    def timeline_api(request: Request, q: str = "", person: int | None = None, party: str | None = None,
+                     user=Depends(current_user)):
+        """What a member or a party said on a topic, and how they voted, in date order (free: no AI)."""
+        from hansard.timeline import timeline
+
+        requester(request, user)
+        q = " ".join(q.split())
+        if len(q) < 3:
+            raise HTTPException(400, "Give a topic of at least three letters.")
+        pid = get_people().resolve(person) if person is not None else None
+        if person is not None and pid is None:
+            raise HTTPException(404, "There is no member with that number.")
+        if (pid is None) == (not party):
+            raise HTTPException(400, "Choose a member or a party.")
+        if party and party not in {p for p, _ in get_pipeline().parties()}:
+            raise HTTPException(404, "There is no party with that name.")
+        return timeline(get_pipeline().engine, get_people(), q, person_id=pid, party_id=party)
+
     # ---- MPs and peers -----------------------------------------------------------------------
     @app.get("/api/people")
     def people_list(q: str = "", everyone: bool = False):

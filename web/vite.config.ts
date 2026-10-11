@@ -48,6 +48,7 @@ export default defineConfig({
         person: here("./person.html"),
         people: here("./people.html"),
         topics: here("./topics.html"),
+        timeline: here("./timeline.html"),
         admin: here("./admin.html"),
       },
     },

@@ -2,6 +2,7 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./pages";
+import { Timeline } from "./components/Timeline";
 import { fmtDate } from "./render";
 
 interface Result {
@@ -56,6 +57,7 @@ const KIND: Record<string, string> = {
 const span = (start: string, end: string | null) => `${fmtDate(start)} – ${end ? fmtDate(end) : "now"}`;
 
 function Person({ number }: { number: string }) {
+  const [shown, setShown] = useState("");
   const [p, setP] = useState<PersonData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [topic, setTopic] = useState("");
@@ -101,8 +103,20 @@ function Person({ number }: { number: string }) {
           <button type="submit" className="primary" disabled={!topic.trim()}>
             Ask
           </button>
+          <button type="button" className="secondary" disabled={!topic.trim()} onClick={() => setShown(topic.trim())}>
+            Timeline
+          </button>
         </div>
+        <p className="muted small">
+          Ask writes a sourced briefing. Timeline lists what they said and how they voted on it, in date order.
+        </p>
       </form>
+      {shown && (
+        <>
+          <h2 id="h-timeline">Timeline: {shown}</h2>
+          <Timeline query={`person=${number}&q=${encodeURIComponent(shown)}`} showSpeaker={false} />
+        </>
+      )}
 
       {p.seats.length > 0 && (
         <section aria-labelledby="h-seats">

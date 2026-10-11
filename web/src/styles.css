@@ -2463,3 +2463,69 @@ main:focus {
 .topic-versions summary {
   cursor: pointer;
 }
+
+/* ---- timelines ------------------------------------------------------------------------ */
+
+.timeline-list {
+  list-style: none;
+  padding: 0;
+  border-inline-start: 2px solid var(--rule);
+  margin-inline-start: var(--space-2xs);
+}
+
+.timeline-item {
+  position: relative;
+  padding-inline-start: var(--space-m);
+  padding-block-end: var(--space-m);
+}
+
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(-0.4rem - 1px);
+  inset-block-start: 0.35rem;
+  inline-size: 0.8rem;
+  block-size: 0.8rem;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--accent);
+}
+
+.timeline-item.voted::before {
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.timeline-date {
+  font-family: var(--sans);
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.timeline-head {
+  margin-block: var(--space-3xs);
+}
+
+.timeline-excerpt {
+  color: var(--ink-soft);
+  margin-block-end: var(--space-3xs);
+}
+
+.vote-badge {
+  font-family: var(--sans);
+  font-size: var(--step--2);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-accent);
+  background: var(--accent);
+  padding: 0.05em 0.45em;
+  border-radius: var(--radius);
+}
+
+.ask-about select {
+  font: inherit;
+  max-inline-size: 100%;
+  margin-block-end: var(--space-xs);
+}
