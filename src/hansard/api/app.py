@@ -709,6 +709,15 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return week_page(start, request)
 
     # ---- early day motions -----------------------------------------------------------------------
+    def get_register():
+        from hansard.sources.regmem import Register
+        from hansard.sync import regmem_path
+
+        with lock:
+            if "register" not in holder:
+                holder["register"] = Register(regmem_path(settings))
+        return holder["register"]
+
     def get_edms():
         from hansard.sources.edms import EdmStore
         from hansard.sync import edms_path
@@ -851,7 +860,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 edms["recent"] = edm_rows(edms["recent"])
             except (ValueError, OSError):
                 edms = None
-        return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms}
+        return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
+                "interests": get_register().for_person(pid)}
 
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):

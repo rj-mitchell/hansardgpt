@@ -93,6 +93,10 @@ def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[d
     return load_demographics(demographics_path(settings)), status
 
 
+def regmem_path(settings: Settings) -> Path:
+    return settings.data_dir / "regmem.json"
+
+
 def edms_path(settings: Settings) -> Path:
     return settings.data_dir / "edms.sqlite"
 
@@ -213,6 +217,16 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
             idx.optimize()  # merges new rows into the BM25 and scalar indices incrementally
         stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
+
+        t = time.time()
+        if fetch and settings.section("interests").get("enabled", True):
+            try:  # the Register of Members' Financial Interests: a new edition every two weeks or so
+                from hansard.sources.regmem import refresh
+
+                stats["interests"] = {**refresh(regmem_path(settings)), "seconds": round(time.time() - t, 1)}
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("register of interests not updated: %s", exc)
+                stats["interests"] = {"error": str(exc)[:200]}
 
         t = time.time()
         if fetch and settings.section("edms").get("enabled", True):

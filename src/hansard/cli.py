@@ -251,6 +251,16 @@ def sync(embed_minutes: float = typer.Option(60.0, help="time budget for embeddi
 
 
 @app.command()
+def interests():
+    """Fetch the newest edition of the Register of Members' Financial Interests (also done by every sync)."""
+    _setup_logging()
+    from hansard.sources.regmem import refresh
+    from hansard.sync import regmem_path
+
+    typer.echo(json.dumps(refresh(regmem_path(_settings())), indent=2))
+
+
+@app.command()
 def edms(check: bool = typer.Option(False, help="show what the API returns now, to confirm the fields read"),
          months: int = typer.Option(12, help="older months to fetch in this run"),
          signatures: int = typer.Option(2000, help="motions whose signatures to fetch in this run")):

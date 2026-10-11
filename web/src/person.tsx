@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import "./pages";
 import { Timeline } from "./components/Timeline";
 import { EdmList, type EdmRow } from "./components/EdmList";
+import { type Interests, InterestsSection } from "./components/Interests";
 import { VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
 import type { VoteType } from "./types";
@@ -56,6 +57,7 @@ interface PersonData {
     }[];
   } | null;
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
+  interests?: Interests | null;
 }
 
 const BAND: Record<string, string> = { marginal: "marginal seat", middle: "majority 10% to 20%", safe: "safe seat" };
@@ -229,6 +231,10 @@ function Person({ number }: { number: string }) {
           )}
           <p className="muted small">{p.voting.method}</p>
         </section>
+      )}
+
+      {p.interests && (
+        <InterestsSection interests={p.interests} name={p.name} isMP={p.current?.house === "commons"} />
       )}
 
       {p.edms && p.edms.tabled + p.edms.signed > 0 && (

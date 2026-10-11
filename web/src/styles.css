@@ -2879,3 +2879,68 @@ main:focus {
   border-inline-start: 3px solid var(--accent);
   background: color-mix(in oklch, var(--accent) 6%, transparent);
 }
+
+/* ---- registered interests ------------------------------------------------------------------ */
+
+.interest-category {
+  margin-block: var(--space-2xs);
+  border-block-end: 1px solid var(--rule);
+  padding-block: var(--space-2xs);
+}
+
+.interest-category > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.prose .interests,
+.prose .interest-children ul {
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.interest {
+  padding-block: var(--space-xs);
+  border-block-start: 1px solid var(--rule);
+}
+
+.interest p {
+  margin-block: 0 var(--space-2xs);
+}
+
+.interest-summary {
+  font-weight: 600;
+}
+
+.interest-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0 var(--space-s);
+  margin: 0 0 var(--space-2xs);
+}
+
+.interest-details div {
+  display: contents;
+}
+
+.interest-details dt {
+  color: var(--ink-soft);
+}
+
+.interest-details dd {
+  margin: 0;
+}
+
+.interest-children {
+  margin-inline-start: var(--space-s);
+}
+
+@media (width < 40rem) {
+  .interest-details {
+    grid-template-columns: 1fr;
+  }
+
+  .interest-details dd {
+    margin-block-end: var(--space-2xs);
+  }
+}
