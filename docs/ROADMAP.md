@@ -75,7 +75,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 |---|---|---|
 | ✓ **MP and peer pages**: roles over time, seats, recent contributions, voting record, briefings asked about them | M | Done 11 October, with seats and majorities. Still to add: briefings asked about them |
 | ✓ **Recent-activity feed** on each MP page ("spoke in…", "voted against their party on…") | S, after MP pages | Done |
-| **Voting record summaries** per member and topic, with the method shown in full | M | Per member done (votes and rebellions on MP pages); per topic still to do |
+| ✓ **Voting record summaries** per member and topic, with the method shown in full | M | Per member done (votes and rebellions on MP pages); per topic done in member timelines (aye, no, against party, and how many were procedural) |
 | ✓ **Test set of 50–100 questions with scoring** | M | About $3–5 per run. The foundation for the next two items; Done: see docs/EVALUATION.md |
 | ✓ **Cheaper models where they are just as good** (for example, a smaller model for reading the question) | S, after the test set | Lowers running costs; Done: a smaller model reads the question |
 | ✓ **Re-ranking step** for sharper choice of sources | M | Judged with the test set; Done |

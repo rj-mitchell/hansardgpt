@@ -32,6 +32,7 @@ export interface TimelineItem {
 interface TimelineData {
   topic: string;
   items: TimelineItem[];
+  vote_summary?: { aye: number; no: number; against_party: number; procedural: number } | null;
   said: number;
   votes: number;
   note: string;
@@ -65,6 +66,17 @@ export function Timeline({ query, showSpeaker }: { query: string; showSpeaker: b
         {data.said} contribution{data.said === 1 ? "" : "s"} and {data.votes} vote{data.votes === 1 ? "" : "s"}.{" "}
         {data.note} Votes are matched by the titles of divisions, so some relevant votes may not appear.
       </p>
+      {data.vote_summary && (
+        <p className="timeline-summary">
+          On the {data.votes} vote{data.votes === 1 ? "" : "s"} found: {data.vote_summary.aye} aye, {data.vote_summary.no} no
+          {data.vote_summary.against_party > 0
+            ? `, ${data.vote_summary.against_party} against the majority of their party`
+            : ", none against the majority of their party"}
+          .{data.vote_summary.procedural > 0 &&
+            ` ${data.vote_summary.procedural} ${data.vote_summary.procedural === 1 ? "was" : "were"} on the timetable or procedure rather than the substance.`}{" "}
+          Many votes are on amendments: see what each was on below.
+        </p>
+      )}
       <ol className="timeline-list">
         {data.items.map((i, k) => (
           <li key={i.record_id ?? `${i.date}-${i.number}-${k}`} className={`timeline-item ${i.kind}`}>

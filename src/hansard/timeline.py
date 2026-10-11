@@ -43,6 +43,10 @@ def _division_filter(topic: str) -> tuple[str, list[str], int]:
     return score, [f"%{k}%" for k in kws], need
 
 
+# votes on the process (timetable, closure, money) rather than the substance
+PROCEDURAL = {"programme", "closure", "money", "ways_and_means"}
+
+
 def member_votes(people: People, person_id: str, topic: str, limit: int = 20) -> list[dict[str, Any]]:
     if not keywords(topic) or not people._ensure_votes():
         return []
@@ -97,6 +101,12 @@ def timeline(engine: Engine, people: People, topic: str, *, person_id: str | Non
     votes = member_votes(people, person_id, topic) if person_id else party_votes(people, party_id, topic)
     vote_types(people.settings).annotate(votes)
     items = sorted(said + votes, key=lambda x: (x["date"], x["kind"] == "voted"))
-    return {"topic": topic, "items": items, "said": len(said), "votes": len(votes),
+    summary = None
+    if person_id and votes:  # a member's votes on the topic, in brief (procedural votes counted separately)
+        summary = {"aye": sum(1 for v in votes if v.get("vote") == "aye"),
+                   "no": sum(1 for v in votes if v.get("vote") == "no"),
+                   "against_party": sum(1 for v in votes if v.get("against_party")),
+                   "procedural": sum(1 for v in votes if (v.get("vote_type") or {}).get("kind") in PROCEDURAL)}
+    return {"topic": topic, "items": items, "said": len(said), "votes": len(votes), "vote_summary": summary,
             "note": "The most relevant contributions found, and the votes whose titles match the topic, in date "
                     "order. Each is shown as recorded; read them in full before drawing conclusions."}
