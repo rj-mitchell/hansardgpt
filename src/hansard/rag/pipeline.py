@@ -115,6 +115,7 @@ class Pipeline:
             except Exception as exc:
                 log.warning("model query parsing failed (%s); using offline rules", exc)
                 plan = parse_offline(req.question, self.settings.regions, self.today)
+                plan.parse_error = f"{type(exc).__name__}: {exc}"
         else:
             plan = parse_offline(req.question, self.settings.regions, self.today)
         if plan.unresolved_speakers:
@@ -125,7 +126,10 @@ class Pipeline:
 
     def run(self, req: AskRequest) -> Iterator[dict[str, Any]]:
         plan, parse_usage = self.make_plan(req)
-        yield {"type": "plan", "plan": plan.to_dict(), "usage": parse_usage}
+        ev: dict[str, Any] = {"type": "plan", "plan": plan.to_dict(), "usage": parse_usage}
+        if plan.parse_error:
+            ev["parse_error"] = plan.parse_error  # for the operator's failure log; removed before reaching readers
+        yield ev
 
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))

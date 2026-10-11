@@ -1110,6 +1110,23 @@ legend,
   color: var(--danger);
 }
 
+.admin-alert {
+  margin-block: var(--space-2xs);
+  padding: var(--space-xs) var(--space-s);
+  border-inline-start: 3px solid var(--warn);
+  background: var(--warn-subtle);
+  font-family: var(--sans);
+}
+
+.admin-alert.error {
+  border-color: var(--danger);
+}
+
+.admin-alert.ok {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
 .admin section {
   margin-block-start: var(--space-l);
 }

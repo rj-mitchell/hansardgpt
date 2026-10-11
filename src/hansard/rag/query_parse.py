@@ -66,6 +66,7 @@ class QueryPlan:
     interpretation: str = ""
     parser: str = "offline"
     group_by: str = "role"   # how the briefing groups speakers: role (default), gender or age on the day
+    parse_error: str | None = None  # set when the model could not be used and offline rules were (not shown to readers)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -267,6 +268,8 @@ Rules:
 
 def parse_with_model(client, settings, question: str, history: list[dict[str, str]] | None,
                      parties: list[tuple[str, str]], today: date | None = None) -> tuple[QueryPlan, Any]:
+    from hansard.rag.answer import cached_system
+
     today = today or date.today()
     convo = ""
     if history:
@@ -275,7 +278,7 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
     resp = client.messages.parse(
         model=settings.answer.get("model", "claude-opus-5-5"),
         max_tokens=2000,
-        system=system_prompt(settings.regions, parties, today),
+        system=cached_system(system_prompt(settings.regions, parties, today)),
         messages=[{"role": "user", "content": f"{convo}Question: {question}"}],
         output_config={"effort": settings.answer.get("query_parse_effort", "low")},
         output_format=ParsedQuery,

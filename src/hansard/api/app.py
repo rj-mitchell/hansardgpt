@@ -52,9 +52,14 @@ from hansard.api.reports import (
 )
 from hansard.api.usage import (
     RateLimiter,
+    alerts,
     cache_key,
     cached_events,
     check_caps,
+    count_question,
+    popular_questions,
+    recent_failures,
+    record_failure,
     record_feedback,
     record_usage,
     record_visit,
@@ -273,6 +278,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             key = cache_key({"q": " ".join(body.question.lower().split()), **body.model_dump(exclude={"question"}),
                              "model": settings.answer.get("model"), "data": last[0]["run_id"] if last else None,
                              "instructions": INSTRUCTIONS_VERSION})
+        count_question(state, body.question)
         hit = cached_events(state, key, cache_hours) if key else None
         blocked = check_caps(state, uid, settings.usage, visitor) if model_on and hit is None else None
 
@@ -292,6 +298,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             text: list[str] = []
             try:
                 for ev in p.run(req):
+                    if ev["type"] == "plan" and ev.get("parse_error"):
+                        # the model could not read the question (a bad API key, say); offline rules were used
+                        record_failure(state, "question reading", body.question, ev.pop("parse_error"))
+                    if ev["type"] == "error":
+                        record_failure(state, "briefing", body.question, ev.get("message", ""))
                     if ev["type"] == "plan" and ev.get("usage"):
                         record_usage(state, uid, "parse", settings.answer.get("model"), ev["usage"], settings.usage,
                                      visitor)
@@ -308,7 +319,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                     yield ev
             except Exception as exc:  # never leave the client hanging
                 log.exception("ask failed")
-                yield {"type": "error", "message": f"Something went wrong: {type(exc).__name__}"}
+                record_failure(state, "briefing", body.question, f"{type(exc).__name__}: {exc}")
+                yield {"type": "error", "message": "The briefing could not be written just now. The sources found are "
+                                                   "shown above; please try again later."}
                 return
             final = kept[-1] if kept else {}
             if key and final.get("type") == "final" and final.get("answer"):
@@ -462,7 +475,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
 
     @app.get("/api/admin/usage")
     def usage(user=Depends(admin_user)):
-        return {**summary(state), "visits": visit_summary(state)}
+        return {**summary(state), "visits": visit_summary(state), "alerts": alerts(state, settings.usage),
+                "failures": recent_failures(state), "popular_questions": popular_questions(state)}
 
     @app.get("/api/admin/sync")
     def sync_log(user=Depends(admin_user)):

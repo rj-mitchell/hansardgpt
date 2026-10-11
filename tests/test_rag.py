@@ -160,7 +160,9 @@ def test_pipeline_end_to_end_is_grounded(indexed_settings):
     call = client.calls[0]
     blocks = call["messages"][0]["content"]
     assert [b["type"] for b in blocks[:-1]] == ["search_result"] * len(cards)
-    assert "ONLY" in call["system"] and NO_RECORDS in call["system"]
+    system = call["system"][0]
+    assert "ONLY" in system["text"] and NO_RECORDS in system["text"]
+    assert system["cache_control"] == {"type": "ephemeral"}  # the shared instructions are cached
     assert call["fallbacks"] == "default" and call["model"] == "claude-opus-5-5"
 
 

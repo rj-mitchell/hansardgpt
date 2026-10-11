@@ -131,6 +131,16 @@ async function load() {
     call<{ runs: any[] }>("/api/admin/sync"),
   ]);
   const usd = (n: number) => `$${(n ?? 0).toFixed(2)}`;
+  const alertBoxes = (usage.alerts ?? []).map((a: { level: string; text: string }) =>
+    el("p", a.text, a.level === "error" ? "admin-alert error" : "admin-alert"),
+  );
+  $("admin-alerts").replaceChildren(...(alertBoxes.length ? alertBoxes : [el("p", "No alerts.", "admin-alert ok")]));
+  $("admin-popular").replaceChildren(
+    table(["Question", "Times asked", "Last asked"], (usage.popular_questions ?? []).map((q: any) => [q.question, q.times, q.last])),
+  );
+  $("admin-failures").replaceChildren(
+    table(["When", "What", "Question", "Error"], (usage.failures ?? []).map((f: any) => [when(f.at), f.kind, f.question ?? "", f.error])),
+  );
   $("admin-spend").replaceChildren(
     el("p", `Today: ${usd(usage.today_usd)} (${usage.today_calls} calls). This month (${usage.month}): ${usd(usage.total_usd)}.`),
   );

@@ -103,6 +103,21 @@ CREATE TABLE IF NOT EXISTS reports (
     public_note  TEXT
 );
 CREATE INDEX IF NOT EXISTS reports_status ON reports(status, at);
+-- how often each question is asked, per day (the text and a count only; nothing about who asked)
+CREATE TABLE IF NOT EXISTS question_counts (
+    day       TEXT NOT NULL,
+    question  TEXT NOT NULL,
+    n         INTEGER NOT NULL,
+    PRIMARY KEY (day, question)
+);
+-- briefings that failed (bad API key, refusals, errors), shown as alerts on the admin page
+CREATE TABLE IF NOT EXISTS failures (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    at        TEXT NOT NULL,
+    kind      TEXT NOT NULL,
+    question  TEXT,
+    error     TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS feedback (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     at           TEXT NOT NULL,

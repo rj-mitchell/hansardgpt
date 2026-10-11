@@ -19,12 +19,16 @@ from hansard.store.state import StateDB, utcnow
 
 
 def cost_usd(usage: dict[str, int] | None, prices: dict[str, Any]) -> float:
+    """Cost of one call. Cache writes cost 1.25x the input price; cache reads are priced separately."""
     if not usage:
         return 0.0
+    price_in = float(prices.get("price_input_per_mtok", 4.0))
+    writes = usage.get("cache_write_tokens", 0)
     return round(
-        usage.get("input_tokens", 0) / 1e6 * float(prices.get("price_input_per_mtok", 4.0))
+        (usage.get("input_tokens", 0) - writes) / 1e6 * price_in
+        + writes / 1e6 * price_in * float(prices.get("cache_write_multiplier", 1.25))
         + usage.get("output_tokens", 0) / 1e6 * float(prices.get("price_output_per_mtok", 20.0))
-        + usage.get("cache_read_tokens", 0) / 1e6 * float(prices.get("price_cache_read_per_mtok", 0.4)),
+        + usage.get("cache_read_tokens", 0) / 1e6 * float(prices.get("price_cache_read_per_mtok", 0.2)),
         6,
     )
 
@@ -137,6 +141,61 @@ def record_feedback(state: StateDB, briefing_key: str | None, question: str, use
     with state.connect() as con:
         con.execute("INSERT INTO feedback (at, briefing_key, question, useful, visitor) VALUES (?, ?, ?, ?, ?)",
                     (utcnow(), briefing_key, question[:500], int(useful), visitor))
+
+
+def record_failure(state: StateDB, kind: str, question: str | None, error: str) -> None:
+    with state.connect() as con:
+        con.execute("INSERT INTO failures (at, kind, question, error) VALUES (?, ?, ?, ?)",
+                    (utcnow(), kind, (question or "")[:500], error[:500]))
+        # keep the table small: the latest 500 are plenty to diagnose anything
+        con.execute("DELETE FROM failures WHERE id NOT IN (SELECT id FROM failures ORDER BY id DESC LIMIT 500)")
+
+
+def alerts(state: StateDB, usage_settings: dict[str, Any]) -> list[dict[str, str]]:
+    """Things the operator should know about now: recent failures and spending close to the caps."""
+    out: list[dict[str, str]] = []
+    since = (datetime.now(UTC) - timedelta(hours=24)).isoformat(timespec="seconds")
+    with state.connect() as con:
+        n, latest = con.execute("SELECT count(*), max(at) FROM failures WHERE at >= ?", (since,)).fetchone()
+        last_error = con.execute("SELECT kind, error FROM failures ORDER BY id DESC LIMIT 1").fetchone()
+    if n:
+        out.append({"level": "error" if n >= 3 else "warning",
+                    "text": f"{n} briefing{'s' if n != 1 else ''} failed in the last 24 hours "
+                            f"(latest: {last_error[0]}, {last_error[1]}). See Recent failures."})
+    s = summary(state)
+    for label, spent, cap in (("today", s["today_usd"], float(usage_settings.get("daily_spend_cap_usd", 0) or 0)),
+                              ("this month", s["total_usd"],
+                               float(usage_settings.get("monthly_spend_cap_usd", 0) or 0))):
+        if cap and spent >= 0.8 * cap:
+            out.append({"level": "error", "text": f"Spending {label} is ${spent:.2f}, {spent / cap:.0%} of the "
+                                                  f"${cap:.0f} cap. New briefings pause at the cap."})
+        elif cap and spent >= 0.5 * cap:
+            out.append({"level": "warning", "text": f"Spending {label} is ${spent:.2f}, {spent / cap:.0%} of the "
+                                                    f"${cap:.0f} cap."})
+    return out
+
+
+def recent_failures(state: StateDB, limit: int = 20) -> list[dict[str, Any]]:
+    with state.connect() as con:
+        rows = con.execute("SELECT at, kind, question, error FROM failures ORDER BY id DESC LIMIT ?",
+                           (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def count_question(state: StateDB, question: str) -> None:
+    q = " ".join(question.lower().split())[:300]
+    with state.connect() as con:
+        con.execute("INSERT INTO question_counts (day, question, n) VALUES (?, ?, 1) "
+                    "ON CONFLICT(day, question) DO UPDATE SET n = n + 1", (datetime.now(UTC).strftime("%Y-%m-%d"), q))
+
+
+def popular_questions(state: StateDB, days: int = 30, limit: int = 20) -> list[dict[str, Any]]:
+    """The questions asked most often (counts only, nothing about who asked)."""
+    since = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
+    with state.connect() as con:
+        rows = con.execute("SELECT question, sum(n) total, max(day) last FROM question_counts WHERE day >= ? "
+                           "GROUP BY question ORDER BY total DESC, last DESC LIMIT ?", (since, limit)).fetchall()
+    return [{"question": q, "times": n, "last": last} for q, n, last in rows]
 
 
 def record_visit(state: StateDB, path: str, referrer_host: str | None, visitor: str | None) -> None:

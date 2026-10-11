@@ -407,3 +407,43 @@ def test_visitor_codes_change_daily_and_old_secrets_are_deleted(tmp_path):
     with state.connect() as con:
         keys = [r[0] for r in con.execute("SELECT key FROM kv WHERE key LIKE 'visitor_salt%'")]
     assert keys == ["visitor_salt:2026-10-13"]
+
+
+def test_failures_and_spending_show_as_alerts(tmp_path):
+    from hansard.api.usage import alerts, recent_failures, record_failure
+
+    state = StateDB(tmp_path / "state.sqlite")
+    caps = {"daily_spend_cap_usd": 10, "monthly_spend_cap_usd": 150, "price_input_per_mtok": 4.0}
+    assert alerts(state, caps) == []
+    record_failure(state, "question reading", "Q?", "AuthenticationError: invalid x-api-key")
+    a = alerts(state, caps)
+    assert len(a) == 1 and "1 briefing failed" in a[0]["text"] and "invalid x-api-key" in a[0]["text"]
+    assert recent_failures(state)[0]["kind"] == "question reading"
+    record_usage(state, None, "answer", "m", {"input_tokens": 2_000_000}, caps, "v")  # $8 of a $10 day
+    texts = " ".join(x["text"] for x in alerts(state, caps))
+    assert "80% of the $10 cap" in texts
+
+
+def test_failed_briefing_is_logged_and_readers_see_plain_words(indexed_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("HANSARD_ADMIN_TOKEN", "s3cret-token")
+    app, state, client = make_app(indexed_settings, tmp_path, auth=False)
+
+    def broken(*a, **k):
+        raise RuntimeError("upstream is down")
+
+    monkeypatch.setattr(client.messages, "stream", broken)
+    monkeypatch.setattr(client.beta.messages, "stream", broken)
+    tc = TestClient(app)
+    evs = events(tc.post("/api/ask", json={"question": "What has been said about trial by jury?"}))
+    err = evs[-1]
+    assert err["type"] == "error" and "could not be written" in err["message"] and "RuntimeError" not in err["message"]
+    usage = tc.get("/api/admin/usage", headers={"Authorization": "Bearer s3cret-token"}).json()
+    assert usage["failures"][0]["error"].startswith("RuntimeError") and usage["alerts"]
+    assert usage["popular_questions"][0] == {"question": "what has been said about trial by jury?", "times": 1,
+                                              "last": usage["popular_questions"][0]["last"]}
+
+
+def test_cache_writes_and_reads_are_priced(tmp_path):
+    prices = {"price_input_per_mtok": 4.0, "price_output_per_mtok": 20.0, "price_cache_read_per_mtok": 0.2}
+    assert cost_usd({"input_tokens": 1_000_000, "cache_write_tokens": 1_000_000}, prices) == 5.0
+    assert cost_usd({"input_tokens": 0, "cache_read_tokens": 1_000_000}, prices) == 0.2

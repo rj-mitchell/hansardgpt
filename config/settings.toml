@@ -78,13 +78,14 @@ batch_size = 8
 per_visitor_daily_questions = 15   # anonymous visitors (keyed by a salted hash of their IP address)
 per_user_daily_questions = 60      # signed-in users, when invite-only sign-in is on
 requests_per_minute = 20           # questions and searches per visitor
-answer_cache_hours = 24            # identical questions within this window are not re-run
+answer_cache_hours = 168           # identical questions are not re-run until new records arrive (or a week)
 daily_spend_cap_usd = 10.0
 monthly_spend_cap_usd = 150.0
 # USD per million tokens, used for spend tracking only.
 price_input_per_mtok = 4.0
 price_output_per_mtok = 20.0
-price_cache_read_per_mtok = 0.4
+price_cache_read_per_mtok = 0.2
+cache_write_multiplier = 1.25
 
 [auth]
 # Public by default. Set required = true for an invite-only site (accounts are

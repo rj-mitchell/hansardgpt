@@ -45,14 +45,25 @@ def make_client():
     return anthropic.Anthropic(api_key=key, base_url=base_url) if key else anthropic.Anthropic(base_url=base_url)
 
 
+def cached_system(text: str) -> list[dict[str, Any]]:
+    """The system prompt as one cacheable block.
+
+    It is the same for every request (apart from the date), so repeat requests within five minutes read it from
+    Anthropic's cache at a twentieth of the price. Search results and the question come after it and are not cached.
+    """
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
 def usage_dict(usage: Any) -> dict[str, int]:
+    """Token counts; input_tokens includes cache writes (cache_write_tokens says how many, for pricing)."""
     if usage is None:
-        return {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0}
+        return {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0}
+    writes = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
     return {
-        "input_tokens": int(getattr(usage, "input_tokens", 0) or 0)
-        + int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
+        "input_tokens": int(getattr(usage, "input_tokens", 0) or 0) + writes,
         "output_tokens": int(getattr(usage, "output_tokens", 0) or 0),
         "cache_read_tokens": int(getattr(usage, "cache_read_input_tokens", 0) or 0),
+        "cache_write_tokens": writes,
     }
 
 
@@ -91,7 +102,7 @@ class Answerer:
         kwargs: dict[str, Any] = {
             "model": cfg.get("model", "claude-opus-5-5"),
             "max_tokens": int(cfg.get("max_tokens", 16000)),
-            "system": system_prompt(today or date.today()),
+            "system": cached_system(system_prompt(today or date.today())),
             "messages": [{"role": "user", "content": content}],
             "output_config": {"effort": effort},
         }
