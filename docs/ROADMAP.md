@@ -67,7 +67,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | **1997–2010** records | M–L | Needs the older boundary sets; disk use roughly doubles |
 | ✓ **Early Day Motions**: who signed which motions | M | Done: /edms to search and read motions and see who signed (with party on the day), and a section on each MP's page. Collected by the sync, working back to 2010 a year at a time. Briefings also use the two or three motions most relevant to a question, with signatures by party, as their own kind of source |
 | ✓ **Select committee evidence and reports** | L | Different source and format; Committee pages, reports, government responses and the witness index done (/committees, /witnesses); transcripts in search and (opt-in) briefings done |
-| ✓ **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data; Done: /devolved (reading and search, since 2021); not yet in briefings |
+| ✓ **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data; Done: /devolved (reading and search, since 2021), and in briefings as an opt-in setting |
 
 ### B. Discussed earlier, not yet built
 
@@ -99,7 +99,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | Item | Effort | What it gives |
 |---|---|---|
 | ✓ **Timeline view**: one person's or party's statements on a topic in date order, with votes in between | M | Shows how positions developed, without the site judging consistency; Done: /timeline |
-| ✓ **Bill pages**: each bill's debates by stage (second reading, committee, report, Lords) with a briefing per stage | M | The data already includes bill names and committee debates; Done: /bills, with every vote's kind and the debates in full; a briefing per stage still to do |
+| ✓ **Bill pages**: each bill's debates by stage (second reading, committee, report, Lords) with a briefing per stage | M | The data already includes bill names and committee debates; Done: /bills, with every vote's kind, the debates in full and an "Ask about this stage" link on each sitting (a ready-made briefing per stage is not stored, to keep costs down) |
 | ✓ **Debate pages**: "what was said in this debate", one briefing per debate | S–M | Done: every debate since 2010 readable in full on the site, with each speaker as they were on the day, its votes and an "Ask about this debate" box. Linked from sources, timelines, member and bill pages. A ready-made briefing per debate is still to do |
 | ✓ **"Ask about this"** in the source panel: a follow-up question about one speech or speaker | S | Done |
 | ✓ **Sources only** button: show the balanced evidence set without writing a briefing | S | Done |
