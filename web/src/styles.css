@@ -2433,7 +2433,7 @@ main:focus {
 }
 
 .topic-summary {
-  margin-block: var(--space-3xs);
+  margin-block: var(--space-2xs);
   color: var(--ink-soft);
 }
 
@@ -2504,12 +2504,12 @@ main:focus {
 }
 
 .timeline-head {
-  margin-block: var(--space-3xs);
+  margin-block: var(--space-2xs);
 }
 
 .timeline-excerpt {
   color: var(--ink-soft);
-  margin-block-end: var(--space-3xs);
+  margin-block-end: var(--space-2xs);
 }
 
 .vote-badge {
@@ -2661,7 +2661,7 @@ main:focus {
 
 .chart-options legend {
   font-weight: 600;
-  margin-block-end: var(--space-3xs);
+  margin-block-end: var(--space-2xs);
 }
 
 .chart-context {
@@ -2674,4 +2674,54 @@ main:focus {
   font: inherit;
   max-inline-size: 100%;
   margin-block-end: var(--space-xs);
+}
+
+/* ---- kinds of vote and the glossary ------------------------------------------------------ */
+
+.vote-kind-note,
+.vote-kind-question,
+.vote-kind-outcome {
+  color: var(--ink-soft);
+}
+
+.vote-kind-key {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) 1fr;
+  gap: var(--space-2xs) var(--space-m);
+  margin: 0;
+}
+
+.vote-kind-key dt {
+  font-weight: 600;
+}
+
+.vote-kind-key dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.glossary {
+  grid-template-columns: minmax(10rem, 16rem) 1fr;
+}
+
+.glossary dt {
+  font-weight: 600;
+  scroll-margin-block-start: var(--space-l);
+}
+
+.glossary dt:target,
+.glossary dt:target + dd {
+  background: var(--mark);
+  color: var(--ink);
+}
+
+@media (width < 40rem) {
+  .vote-kind-key,
+  .glossary {
+    grid-template-columns: 1fr;
+  }
+
+  .vote-kind-key dd {
+    margin-block-end: var(--space-2xs);
+  }
 }

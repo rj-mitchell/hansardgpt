@@ -89,6 +89,16 @@ export interface SourceCard {
   party_votes?: Record<string, { aye: number; no: number }>;
   rebels?: Rebel[];
   scope_note?: string;
+  vote_type?: VoteType;
+}
+
+/** What a division was on, read from the motion and outcome recorded around it. */
+export interface VoteType {
+  kind: string;
+  label: string;
+  note: string;
+  question: string;
+  outcome: string;
 }
 
 export interface Filters {

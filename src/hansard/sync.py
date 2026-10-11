@@ -211,6 +211,14 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
 
         t = time.time()
+        try:  # what each vote was on (amendment, second reading and so on), used across the site
+            from hansard.vote_types import vote_types
+
+            stats["vote_types"] = {"divisions": len(vote_types(settings).all()), "seconds": round(time.time() - t, 1)}
+        except Exception as exc:
+            log.warning("vote types not rebuilt: %s", exc)
+
+        t = time.time()
         try:  # the bill pages' index, ready before anyone asks for it
             from hansard.bills import Bills
 

@@ -19,6 +19,7 @@ from hansard.config import Settings
 from hansard.engine import Filters
 from hansard.reference.profiles import attach_reference
 from hansard.store.parquet import attach_store
+from hansard.vote_types import vote_types
 
 _STOP = set(["a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does", "for", "from", "had", "has", "have", "how", "i", "in", "into", "is", "it", "its", "me", "mps", "mp", "members", "member", "lords", "lord", "of", "on", "or", "our", "over", "parliament", "said", "say", "says", "the", "their", "them", "they", "this", "to", "vote", "voted", "votes", "voting", "was", "were", "what", "when", "where", "which", "who", "why", "will", "with", "between", "since", "during", "about", "against", "dissent", "dissented", "rebel", "rebels", "rebelled", "rebellion", "bill", "bills", "northern", "southern", "government", "ministers", "minister", "debate", "debates"])
 _WORD = re.compile(r"[a-z][a-z0-9-]{2,}")
@@ -31,6 +32,7 @@ def keywords(text: str) -> list[str]:
 
 class VoteFinder:
     def __init__(self, settings: Settings, con: duckdb.DuckDBPyConnection | None = None):
+        self.settings = settings
         self.con = con or duckdb.connect()
         attach_reference(self.con, settings.reference_dir)
         self.available = {"divisions", "votes"} <= set(attach_store(self.con, settings.parquet_dir))
@@ -58,7 +60,7 @@ class VoteFinder:
             [*params[:len(kws)], *params[len(kws):]]).fetchall()
         cols = [d[0] for d in self.con.description]
         divisions = [dict(zip(cols, r, strict=True)) for r in rows]
-        return [self.summarise(d, filters) for d in divisions]
+        return vote_types(self.settings).annotate([self.summarise(d, filters) for d in divisions])
 
     def summarise(self, div: dict[str, Any], filters: Filters) -> dict[str, Any]:
         rows = self.con.execute(
@@ -126,6 +128,14 @@ def division_text(d: dict[str, Any]) -> list[str]:
     house = "House of Commons" if d["house"] == "commons" else "House of Lords"
     blocks = [f"{house} division {d['number']} on {d['date']}: {title}. "
               f"Result: Ayes {d['ayes']}, Noes {d['noes']}."]
+    vt = d.get("vote_type")
+    if vt and vt["kind"] != "other":
+        what = f"Kind of vote: {vt['label']}. {vt['note']}"
+        if vt.get("question"):
+            what += f" The question put was: {vt['question']}."
+        if vt.get("outcome"):
+            what += f" Recorded outcome: {vt['outcome']}"
+        blocks.append(what)
     pv = "; ".join(f"{p}: {c['aye']} aye, {c['no']} no" for p, c in sorted(d["party_votes"].items()))
     if pv:
         blocks.append(f"Votes by party ({d['scope_note']}): {pv}.")

@@ -3,7 +3,9 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./pages";
 import { Timeline } from "./components/Timeline";
+import { VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
+import type { VoteType } from "./types";
 
 interface Result {
   election: string;
@@ -42,7 +44,14 @@ interface PersonData {
     since: string | null;
     until: string | null;
     method: string;
-    recent_rebellions: { date: string; title: string; vote: string; party_majority: string; twfy_url: string }[];
+    recent_rebellions: {
+      date: string;
+      title: string;
+      vote: string;
+      party_majority: string;
+      twfy_url: string;
+      vote_type?: VoteType;
+    }[];
   } | null;
 }
 
@@ -199,8 +208,14 @@ function Person({ number }: { number: string }) {
               <ul>
                 {p.voting.recent_rebellions.map((r) => (
                   <li key={r.date + r.title}>
-                    {fmtDate(r.date)}: <a href={r.twfy_url}>{r.title || "Division"}</a>. Voted {r.vote}; most of their party
-                    voted {r.party_majority}.
+                    {fmtDate(r.date)}: <a href={r.twfy_url}>{r.title || "Division"}</a>
+                    {r.vote_type && r.vote_type.kind !== "other" && (
+                      <>
+                        {" "}
+                        (<VoteKind vt={r.vote_type} />)
+                      </>
+                    )}
+                    . Voted {r.vote}; most of their party voted {r.party_majority}.
                   </li>
                 ))}
               </ul>

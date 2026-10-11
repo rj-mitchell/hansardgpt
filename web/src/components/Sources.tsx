@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { aboutRecord } from "../procedure";
+import { VoteKind } from "./VoteKind";
 import { ageLabel, attribution, houseOf, majorityText, reference, roleTitles, seatTypeLabel } from "../people";
 import { fmtDate, highlightParts } from "../render";
 import type { Highlight, SourceCard, Speaker } from "../types";
@@ -308,6 +309,11 @@ function DivisionDetail({ source }: { source: SourceCard }) {
       <p>
         <strong>{[source.major_heading, source.minor_heading].filter(Boolean).join(" — ")}</strong>
       </p>
+      {source.vote_type && source.vote_type.kind !== "other" && (
+        <p className="small">
+          <VoteKind vt={source.vote_type} detail />
+        </p>
+      )}
       <p className="tally">
         <span>
           Ayes <b>{source.ayes}</b>

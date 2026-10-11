@@ -118,7 +118,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 |---|---|---|
 | ✓ **Balance warning**: a note when the evidence is dominated by one party or group | S | Done |
 | **Fill in missing dates of birth** (about 5% of members since 2010) from other sources, with a small corrections file | S | More complete age groupings |
-| **Glossary page** of parliamentary terms (division, Westminster Hall, urgent question and so on), linked from the source panel | S | |
+| ✓ **Glossary page** of parliamentary terms (division, Westminster Hall, urgent question and so on), linked from the source panel | S | Done: /glossary, linked from every vote label and the footer |
 | **Accessibility testing with real users** (screen reader and keyboard users) | M | Automated checks only catch some problems |
 | **Automatic accessibility check in CI**, so new pages stay accessible | S | |
 
@@ -145,9 +145,9 @@ briefing should not imply that it does.
 
 | Item | Time | Notes |
 |---|---|---|
-| **Name the type of each vote** from its title: second or third reading, reasoned amendment, programme motion, Lords amendments ("ping-pong"), opposition day motion, ten minute rule bill, closure, statutory instrument, money resolution | 1 day | No AI cost. Shown on each division and given to the briefing |
-| **Plain-English note for each type** in the source panel, for example "a reasoned amendment sets out reasons to decline a bill's second reading; voting against it usually means supporting the bill going forward" | Half a day | Written once, reviewed for neutrality |
-| **Briefing rule**: report what a procedural vote was about, never present it as a view on the policy itself; describe free votes as free votes | 2 hours | Prompt change, checked with the test set |
+| ✓ **Name the type of each vote** from its title: second or third reading, reasoned amendment, programme motion, Lords amendments ("ping-pong"), opposition day motion, ten minute rule bill, closure, statutory instrument, money resolution | 1 day | Done: read from the motion before each division and the outcome after it; about 91% of divisions since 2010 get a kind. Shown on bill pages, member pages, timelines and in the source panel, and given to the briefing |
+| ✓ **Plain-English note for each type** in the source panel, for example "a reasoned amendment sets out reasons to decline a bill's second reading; voting against it usually means supporting the bill going forward" | Half a day | Done: shown with each vote and listed in the glossary |
+| ✓ **Briefing rule**: report what a procedural vote was about, never present it as a view on the policy itself; describe free votes as free votes | 2 hours | Done for procedural votes. Free votes cannot yet be told apart in the record (see whipping information) |
 | **Whipping information** (whether a vote was whipped, and how) where TheyWorkForYou Votes records it | 1–2 days | Their coverage is partial; shown only where recorded, with the source named |
 | **Wrecking amendments** and similar labels | Not recommended | Calling an amendment "wrecking" is a political judgement. The site would only report it when a speaker in the debate says so, with the citation |
 

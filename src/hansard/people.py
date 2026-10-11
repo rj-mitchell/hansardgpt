@@ -22,6 +22,7 @@ from hansard.reference.profiles import ProfileResolver, attach_reference
 from hansard.sources.demographics import USER_AGENT, age_on, assumed_birth
 from hansard.sources.elections import election_label, majority_band
 from hansard.store.parquet import attach_store
+from hansard.vote_types import vote_types
 
 log = logging.getLogger(__name__)
 
@@ -197,7 +198,7 @@ class People:
             WHERE pv.person_id = ?""", [person_id]).fetchone()
         rows = self.con.execute("""
             SELECT d.date, d.house, d.number, d.major_heading, d.minor_heading, pv.vote, pm.majority, d.twfy_url,
-                   d.official_url
+                   d.official_url, d.division_id
             FROM party_votes pv JOIN party_majorities pm USING (division_id, whip_group)
             JOIN divisions d ON d.division_id = pv.division_id
             WHERE pv.person_id = ? AND pm.n >= 2 AND pv.vote <> pm.majority
@@ -205,7 +206,8 @@ class People:
         recent_rebellions = [{
             "date": r[0].isoformat(), "house": r[1], "number": r[2],
             "title": " — ".join(x for x in (r[3], r[4]) if x), "vote": r[5], "party_majority": r[6],
-            "twfy_url": r[7], "official_url": r[8]} for r in rows]
+            "twfy_url": r[7], "official_url": r[8], "division_id": r[9]} for r in rows]
+        vote_types(self.settings).annotate(recent_rebellions)
         return {"votes": total, "rebellions": rebellions, "since": first.isoformat() if first else None,
                 "until": last.isoformat() if last else None, "recent_rebellions": recent_rebellions,
                 "method": "A rebellion is a vote against the majority of the member's own party in that division, "

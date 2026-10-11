@@ -24,9 +24,11 @@ import duckdb
 
 from hansard.config import Settings
 from hansard.store.parquet import attach_store
+from hansard.vote_types import vote_types
 
 log = logging.getLogger(__name__)
 
+FORMAT = 2  # raise when the shape of a bill changes, so a cached index is rebuilt (2: kinds of vote)
 GAP = timedelta(days=200)  # sittings further apart than this belong to different bills of the same name
 _HEADING = re.compile(r"^(?P<name>.*?\bBill\b(?:\s*\[(?:HL|Lords)\])?)\s*(?P<tail>.*)$", re.I)
 _MOTIONS = [("programme", "Programme motion"), ("money", "Money resolution"),
@@ -191,14 +193,14 @@ def _bill(key: str, names: Counter, group: list[dict[str, Any]]) -> dict[str, An
 def _divisions(con: duckdb.DuckDBPyConnection, bills: list[dict[str, Any]]) -> None:
     try:
         rows = con.execute("SELECT date, house, number, major_heading, minor_heading, ayes, noes, "
-                           "coalesce(official_url, twfy_url) FROM divisions WHERE regexp_matches(major_heading, "
+                           "coalesce(official_url, twfy_url), division_id FROM divisions WHERE regexp_matches(major_heading, "
                            "'(?i)\\bbill\\b') ORDER BY date, number").fetchall()
     except duckdb.Error:
         return
     index: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for b in bills:
         index[b["key"]].append(b)
-    for d, house, number, major, minor, ayes, noes, url in rows:
+    for d, house, number, major, minor, ayes, noes, url, division_id in rows:
         parsed = parse_heading(major or "")
         if not parsed:
             continue
@@ -207,7 +209,7 @@ def _divisions(con: duckdb.DuckDBPyConnection, bills: list[dict[str, Any]]) -> N
             if lo <= d <= hi:
                 b["divisions"].append({"date": d.isoformat(), "house": house, "number": number,
                                        "title": minor or _motion(parsed[1]) or parsed[1] or major,
-                                       "ayes": ayes, "noes": noes, "url": url})
+                                       "ayes": ayes, "noes": noes, "url": url, "division_id": division_id})
                 break
 
 
@@ -225,7 +227,7 @@ class Bills:
         with self._lock:
             if self._bills is not None and version == self._version:
                 return self._bills
-            stamp = str(version)
+            stamp = f"{version}|{FORMAT}"
             if self.path.exists():
                 try:
                     cached = json.loads(self.path.read_text())
@@ -250,6 +252,16 @@ def rebuild(settings: Settings, stamp: str) -> list[dict[str, Any]]:
     if "records" not in attach_store(con, settings.parquet_dir):
         return []
     bills = build_bills(con)
+    try:
+        types = vote_types(settings).all()
+    except (OSError, duckdb.Error):
+        log.exception("vote types unavailable")
+        types = {}
+    for b in bills:
+        for d in b["divisions"]:
+            vt = types.get(d["division_id"])
+            if vt:  # kept small: the bill page shows the label, note, motion and outcome
+                d["vote_type"] = vt
     path = Path(settings.data_dir) / "bills.json"
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps({"version": stamp, "bills": bills}))
