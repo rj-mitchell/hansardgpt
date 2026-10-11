@@ -101,7 +101,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | **Timeline view**: one person's or party's statements on a topic in date order, with votes in between | M | Shows how positions developed, without the site judging consistency |
 | **Bill pages**: each bill's debates by stage (second reading, committee, report, Lords) with a briefing per stage | M | The data already includes bill names and committee debates |
 | ✓ **Debate pages**: "what was said in this debate", one briefing per debate | S–M | Done: every debate since 2010 readable in full on the site, with each speaker as they were on the day, its votes and an "Ask about this debate" box. Linked from sources, timelines, member and bill pages. A ready-made briefing per debate is still to do |
-| **"Ask about this"** in the source panel: a follow-up question about one speech or speaker | S | |
+| ✓ **"Ask about this"** in the source panel: a follow-up question about one speech or speaker | S | Done |
 | ✓ **Sources only** button: show the balanced evidence set without writing a briefing | S | Done |
 | **Weekly "In Parliament this week"** page, generated automatically | S–M | A few dollars a week; regular fresh content |
 

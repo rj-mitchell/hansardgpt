@@ -278,6 +278,8 @@ export function SourceDrawer({
           </section>
         )}
 
+        {source.kind === "record" && <AskAbout source={source} />}
+
         {source.ranking && (
           <details className="ranking">
             <summary>Why this source ranked here</summary>
@@ -301,6 +303,50 @@ export function SourceDrawer({
         <p className="muted small licence">Contains Parliamentary information licensed under the Open Parliament Licence v3.0.</p>
       </div>
     </aside>
+  );
+}
+
+// headings that name a kind of business rather than a subject
+const GENERIC_HEADING =
+  /^(business of the house|oral answers to questions|engagements|topical questions|points? of order|prime minister|business without debate|petitions?|prayers|speaker's statement|deferred divisions?|adjournment|bill presented|bills presented)$/i;
+
+/** Follow-up questions about this speech's speaker and subject, opened on the main page to edit and ask. */
+function AskAbout({ source }: { source: SourceCard }) {
+  const name = source.speaker?.name ?? source.speaker_name_raw;
+  const parts = (source.heading ?? "")
+    .replace(/\s*[—-]\s*\[[^\]]*\]\s*$/, "") // "— [Sir Gary Streeter in the Chair]"
+    .split(" — ");
+  // written questions are headed "Department — Subject: detail"; debates by their subject first
+  const written = ["question", "answer", "statement"].includes(source.record_type ?? "");
+  const candidates = (written ? [parts[parts.length - 1].split(":")[0]] : parts).map((p) =>
+    p.replace(/\s+-\s+(Question|Motion|Statement)$/i, "").trim(),
+  );
+  const subject = candidates.find((c) => c && !GENERIC_HEADING.test(c));
+  if (!subject) return null;
+  const party = source.speaker?.party;
+  const options = [
+    name && `What else has ${name} said about ${subject}?`,
+    `What have other MPs and peers said about ${subject}?`,
+    party && party !== "Speaker" && `What have ${party} members said about ${subject}?`,
+  ].filter((o): o is string => Boolean(o));
+  const id = `ask-about-${source.n}`;
+  return (
+    <form className="ask-about drawer-ask" action="/" method="get">
+      <label htmlFor={id}>Ask about this</label>
+      <div className="ask-row">
+        <select id={id} name="q" defaultValue={options[0]}>
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className="primary">
+          Ask
+        </button>
+      </div>
+      <p className="muted small">Opens the question on the main page, where you can change it before asking.</p>
+    </form>
   );
 }
 

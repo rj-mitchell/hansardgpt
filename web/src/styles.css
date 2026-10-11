@@ -2784,3 +2784,14 @@ main:focus {
 .same-day {
   margin-block-start: var(--space-l);
 }
+
+.ask-row select {
+  flex: 1;
+  min-inline-size: 0;
+  margin-block-end: 0;
+}
+
+.drawer-ask {
+  padding-block-start: var(--space-s);
+  border-block-start: 1px solid var(--rule);
+}
