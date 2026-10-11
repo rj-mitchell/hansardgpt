@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { aboutRecord } from "../procedure";
+import { VoteKind } from "./VoteKind";
 import { ageLabel, attribution, houseOf, majorityText, reference, roleTitles, seatTypeLabel } from "../people";
 import { fmtDate, highlightParts } from "../render";
 import type { Highlight, SourceCard, Speaker } from "../types";
@@ -69,7 +70,7 @@ export function SourceList({
 function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Highlight) => void }) {
   const roles = roleTitles(s.speaker);
   const seat = seatTypeLabel(s.speaker);
-  const ref = reference(s);
+  const ref = s.kind === "edm" ? null : reference(s);
   return (
     <button type="button" className="source-card" data-house={houseOf(s)} onClick={() => onOpen({ source: s.n, quotes: [] })}>
       <span className="badge">{s.n}</span>
@@ -77,6 +78,10 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
         {s.kind === "division" ? (
           <span className="att">
             <b>Division {s.number}</b> {s.major_heading}
+          </span>
+        ) : s.kind === "edm" ? (
+          <span className="att">
+            <b>{s.uin ? `EDM ${s.uin}` : "Early day motion"}</b> {s.edm_title}
           </span>
         ) : (
           <Attribution sp={s.speaker} raw={s.speaker_name_raw} />
@@ -144,7 +149,13 @@ export function SourceDrawer({
     >
       <header className="drawer-head">
         <span className="badge">{source.n}</span>
-        <h2>{source.kind === "division" ? `Division ${source.number}` : speakerLine(sp, source.speaker_name_raw)}</h2>
+        <h2>
+          {source.kind === "division"
+            ? `Division ${source.number}`
+            : source.kind === "edm"
+              ? `Early day motion${source.uin ? ` ${source.uin}` : ""}`
+              : speakerLine(sp, source.speaker_name_raw)}
+        </h2>
         <button type="button" className="close" onClick={onClose} aria-label="Close source">
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M3 3l10 10M13 3L3 13" />
@@ -153,6 +164,10 @@ export function SourceDrawer({
       </header>
 
       <div className="drawer-body">
+        {source.kind === "edm" ? (
+          <EdmDetail source={source} quotes={quotes} />
+        ) : (
+          <>
         <dl className="facts">
           {source.kind === "record" && (
             <>
@@ -233,6 +248,7 @@ export function SourceDrawer({
           <dd className="num">{source.colnum ?? source.uin ?? "Not given in the source data"}</dd>
           <dt>Links</dt>
           <dd className="links">
+            {source.debate_path && <a href={source.debate_path}>The whole debate on this site</a>}
             {source.official_url && (
               <a href={source.official_url} target="_blank" rel="noreferrer">
                 {source.url_kind === "sitting" ? "Official Hansard (sitting day)" : "Official Parliament record"}
@@ -276,6 +292,11 @@ export function SourceDrawer({
           </section>
         )}
 
+          </>
+        )}
+
+        {source.kind === "record" && <AskAbout source={source} />}
+
         {source.ranking && (
           <details className="ranking">
             <summary>Why this source ranked here</summary>
@@ -302,12 +323,61 @@ export function SourceDrawer({
   );
 }
 
+// headings that name a kind of business rather than a subject
+const GENERIC_HEADING =
+  /^(business of the house|oral answers to questions|engagements|topical questions|points? of order|prime minister|business without debate|petitions?|prayers|speaker's statement|deferred divisions?|adjournment|bill presented|bills presented)$/i;
+
+/** Follow-up questions about this speech's speaker and subject, opened on the main page to edit and ask. */
+function AskAbout({ source }: { source: SourceCard }) {
+  const name = source.speaker?.name ?? source.speaker_name_raw;
+  const parts = (source.heading ?? "")
+    .replace(/\s*[—-]\s*\[[^\]]*\]\s*$/, "") // "— [Sir Gary Streeter in the Chair]"
+    .split(" — ");
+  // written questions are headed "Department — Subject: detail"; debates by their subject first
+  const written = ["question", "answer", "statement"].includes(source.record_type ?? "");
+  const candidates = (written ? [parts[parts.length - 1].split(":")[0]] : parts).map((p) =>
+    p.replace(/\s+-\s+(Question|Motion|Statement)$/i, "").trim(),
+  );
+  const subject = candidates.find((c) => c && !GENERIC_HEADING.test(c));
+  if (!subject) return null;
+  const party = source.speaker?.party;
+  const options = [
+    name && `What else has ${name} said about ${subject}?`,
+    `What have other MPs and peers said about ${subject}?`,
+    party && party !== "Speaker" && `What have ${party} members said about ${subject}?`,
+  ].filter((o): o is string => Boolean(o));
+  const id = `ask-about-${source.n}`;
+  return (
+    <form className="ask-about drawer-ask" action="/" method="get">
+      <label htmlFor={id}>Ask about this</label>
+      <div className="ask-row">
+        <select id={id} name="q" defaultValue={options[0]}>
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className="primary">
+          Ask
+        </button>
+      </div>
+      <p className="muted small">Opens the question on the main page, where you can change it before asking.</p>
+    </form>
+  );
+}
+
 function DivisionDetail({ source }: { source: SourceCard }) {
   return (
     <section className="division">
       <p>
         <strong>{[source.major_heading, source.minor_heading].filter(Boolean).join(" — ")}</strong>
       </p>
+      {source.vote_type && source.vote_type.kind !== "other" && (
+        <p className="small">
+          <VoteKind vt={source.vote_type} detail />
+        </p>
+      )}
       <p className="tally">
         <span>
           Ayes <b>{source.ayes}</b>
@@ -351,6 +421,56 @@ function DivisionDetail({ source }: { source: SourceCard }) {
         <p className="muted">Nobody in scope.</p>
       )}
     </section>
+  );
+}
+
+/** An early day motion: who tabled it, its words and who signed, by party on the day they signed. */
+function EdmDetail({ source, quotes }: { source: SourceCard; quotes: string[] }) {
+  const sp = source.sponsor;
+  const signed = (source.party_counts ?? []).reduce((n, [, k]) => n + k, 0);
+  return (
+    <>
+      <dl className="facts">
+        <dt>Motion</dt>
+        <dd>{source.edm_title}</dd>
+        <dt>Tabled by</dt>
+        <dd>
+          {sp?.number && sp.slug ? <a href={`/people/${sp.number}/${sp.slug}`}>{sp.name}</a> : (sp?.name ?? "—")}
+          {sp?.party ? ` (${sp.party})` : ""}
+        </dd>
+        <dt>Tabled on</dt>
+        <dd>{source.date ? fmtDate(source.date) : "—"}</dd>
+        <dt>Signatures</dt>
+        <dd>
+          {signed || source.sponsors_count || 0}
+          {source.party_counts && source.party_counts.length > 0 && (
+            <span className="muted small">
+              {" "}
+              ({source.party_counts.map(([p, k]) => `${p} ${k}`).join("; ")}, by party on the day they signed)
+            </span>
+          )}
+        </dd>
+        <dt>Links</dt>
+        <dd className="links">
+          <a href={source.url}>Who signed, on this site</a>
+          {source.official_url && (
+            <a href={source.official_url} target="_blank" rel="noreferrer">
+              Parliament's early day motions site
+            </a>
+          )}
+        </dd>
+      </dl>
+      <AboutRecord source={source} />
+      <section className="verbatim" aria-label="Text of the motion">
+        {(source.motion_text ?? "").split("\n\n").map((para, i) => (
+          <p key={i}>
+            {highlightParts(para, quotes).map((part, j) =>
+              part.hit ? <mark key={j}>{part.text}</mark> : <span key={j}>{part.text}</span>,
+            )}
+          </p>
+        ))}
+      </section>
+    </>
   );
 }
 

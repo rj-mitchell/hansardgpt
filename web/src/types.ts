@@ -60,7 +60,7 @@ export interface Rebel {
 
 export interface SourceCard {
   n: number;
-  kind: "record" | "division";
+  kind: "record" | "division" | "edm";
   title: string;
   url: string;
   date: string;
@@ -74,6 +74,7 @@ export interface SourceCard {
   uin?: string | null;
   time?: string | null;
   official_url?: string | null;
+  debate_path?: string | null;
   url_kind?: string | null;
   speaker?: Speaker | null;
   speaker_name_raw?: string | null;
@@ -89,6 +90,23 @@ export interface SourceCard {
   party_votes?: Record<string, { aye: number; no: number }>;
   rebels?: Rebel[];
   scope_note?: string;
+  vote_type?: VoteType;
+  // early day motions
+  edm_id?: number;
+  edm_title?: string;
+  motion_text?: string | null;
+  sponsor?: { name: string | null; party: string | null; number?: number | null; slug?: string | null };
+  party_counts?: [string, number][];
+  sponsors_count?: number | null;
+}
+
+/** What a division was on, read from the motion and outcome recorded around it. */
+export interface VoteType {
+  kind: string;
+  label: string;
+  note: string;
+  question: string;
+  outcome: string;
 }
 
 export interface Filters {
@@ -154,6 +172,7 @@ export interface Scope {
   written: boolean;
   pbc: boolean;
   votes: boolean;
+  edms?: boolean;
 }
 
 export interface Settings {
@@ -175,6 +194,8 @@ export interface Evidence {
   genders?: Record<string, number>;
   age_bands?: Record<string, number>;
   imbalance?: { party: string; count: number; total: number } | null;
+  devolution?: { subject: string; name: string; text: string }[];
+  edms?: number;
   tenure?: Record<string, number>;
   majority_bands?: Record<string, number>;
 }

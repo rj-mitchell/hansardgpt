@@ -91,6 +91,14 @@ export function Controls({ settings, onChange, answersEnabled }: Props) {
           <input type="checkbox" checked={settings.scope.votes} onChange={(e) => scope({ votes: e.target.checked })} />
           Votes (divisions)
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.scope.edms ?? true}
+            onChange={(e) => scope({ edms: e.target.checked })}
+          />
+          Early day motions
+        </label>
       </fieldset>
     </section>
   );

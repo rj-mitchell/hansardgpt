@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { fmtDate } from "../render";
+import type { VoteType } from "../types";
+import { VoteKind } from "./VoteKind";
 
 export interface TimelineItem {
   kind: "said" | "voted";
@@ -23,6 +25,8 @@ export interface TimelineItem {
   party_ayes?: number;
   party_noes?: number;
   url?: string | null;
+  debate_path?: string | null;
+  vote_type?: VoteType;
 }
 
 interface TimelineData {
@@ -75,10 +79,16 @@ export function Timeline({ query, showSpeaker }: { query: string; showSpeaker: b
                   {i.heading}
                 </p>
                 <p className="timeline-excerpt">{i.excerpt}</p>
-                {i.url && (
-                  <a className="small" href={i.url} target="_blank" rel="noreferrer">
-                    Read it in full
+                {i.debate_path ? (
+                  <a className="small" href={i.debate_path}>
+                    Read it in the debate
                   </a>
+                ) : (
+                  i.url && (
+                    <a className="small" href={i.url} target="_blank" rel="noreferrer">
+                      Read it in full
+                    </a>
+                  )
                 )}
               </div>
             ) : (
@@ -92,6 +102,11 @@ export function Timeline({ query, showSpeaker }: { query: string; showSpeaker: b
                     : `The party's members: ${i.party_ayes ?? 0} Aye, ${i.party_noes ?? 0} No.`}{" "}
                   Result: Ayes {i.ayes}, Noes {i.noes} ({i.house === "lords" ? "Lords" : "Commons"} division {i.number}).
                 </p>
+                {i.vote_type && i.vote_type.kind !== "other" && (
+                  <p className="small">
+                    <VoteKind vt={i.vote_type} detail />
+                  </p>
+                )}
                 {i.url && (
                   <a className="small" href={i.url} target="_blank" rel="noreferrer">
                     The division

@@ -267,8 +267,14 @@ def test_static_pages_are_served_at_clean_addresses(indexed_settings, tmp_path):
     client = TestClient(app)
     assert client.get("/methodology").text == "method"
     assert client.get("/robots.txt").text == "robots"
-    assert client.get("/some/briefing/route").text == "app"  # anything else is the app
+    assert client.get("/").text == "app"
+    missing = client.get("/no/such/page")  # not a page: a real 404, so search engines do not index it
+    assert missing.status_code == 404 and missing.text == "app"  # (no 404.html in this build: the app)
+    (dist / "404.html").write_text("not found")
+    assert client.get("/no-such-page").text == "not found" and client.get("/404").status_code == 404
     assert client.get("/api/nope").status_code == 404
+    head = client.head("/methodology")  # link checkers and search engines ask with HEAD
+    assert head.status_code == 200 and head.text == ""
 
 
 def test_public_endpoints_show_only_when_and_whether_updates_ran(public):

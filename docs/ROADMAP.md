@@ -65,7 +65,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | **Charts**: how much a subject was debated over time, by party, House and nation | M | No AI cost. Must show context with every number (the lesson from the NZ site's expenses) |
 | ✓ **Topic briefings**: regularly refreshed briefings on the issues in the news, on permanent pages | S–M | Done 11 October: 16 topics in `config/topics.toml`. Rewritten only when due and the evidence has changed: about £2 to start, then roughly £2–6 a month |
 | **1997–2010** records | M–L | Needs the older boundary sets; disk use roughly doubles |
-| **Early Day Motions**: who signed which motions | M | Good cross-party evidence of support |
+| ✓ **Early Day Motions**: who signed which motions | M | Done: /edms to search and read motions and see who signed (with party on the day), and a section on each MP's page. Collected by the sync, working back to 2010 a year at a time. Briefings also use the two or three motions most relevant to a question, with signatures by party, as their own kind of source |
 | **Select committee evidence and reports** | L | Different source and format |
 | **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data |
 
@@ -100,17 +100,17 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 |---|---|---|
 | **Timeline view**: one person's or party's statements on a topic in date order, with votes in between | M | Shows how positions developed, without the site judging consistency |
 | **Bill pages**: each bill's debates by stage (second reading, committee, report, Lords) with a briefing per stage | M | The data already includes bill names and committee debates |
-| **Debate pages**: "what was said in this debate", one briefing per debate | S–M | Useful for "what happened yesterday" questions |
-| **"Ask about this"** in the source panel: a follow-up question about one speech or speaker | S | |
+| ✓ **Debate pages**: "what was said in this debate", one briefing per debate | S–M | Done: every debate since 2010 readable in full on the site, with each speaker as they were on the day, its votes and an "Ask about this debate" box. Linked from sources, timelines, member and bill pages. A ready-made briefing per debate is still to do |
+| ✓ **"Ask about this"** in the source panel: a follow-up question about one speech or speaker | S | Done |
 | ✓ **Sources only** button: show the balanced evidence set without writing a briefing | S | Done |
-| **Weekly "In Parliament this week"** page, generated automatically | S–M | A few dollars a week; regular fresh content |
+| ✓ **Weekly "In Parliament this week"** page, generated automatically | S–M | Done, free (no AI): each sitting day's debates, statements and questions, every vote with its kind, written statements, and an archive of past weeks. An AI-written summary could be added for a few dollars a week |
 
 **Sharing and reuse**
 | Item | Effort | What it gives |
 |---|---|---|
-| **Download as PDF or Word** button (print already works) | S | For briefing packs and meetings |
-| **Embeddable briefing card** for journalists and bloggers | S–M | Spreads the site with a link back |
-| **RSS feeds** for topic briefings, the changelog and corrections | S | |
+| ✓ **Download as PDF or Word** button (print already works) | S | Done: Word files are built in the browser, with numbered citations and the full source list |
+| ✓ **Embeddable briefing card** for journalists and bloggers | S–M | Done: "Copy embed code" gives the briefing's preview card linked back to it (an image and link, so the site's protection against being framed stays in place) |
+| ✓ **RSS feeds** for topic briefings, the changelog and corrections | S | Done, plus a feed for each member and for bills |
 | ✓ **Featured briefings**: a few good briefings chosen by you, indexable by search engines | S | Done: "Feature" on the admin page; listed on /topics |
 
 **Quality and trust**
@@ -118,7 +118,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 |---|---|---|
 | ✓ **Balance warning**: a note when the evidence is dominated by one party or group | S | Done |
 | **Fill in missing dates of birth** (about 5% of members since 2010) from other sources, with a small corrections file | S | More complete age groupings |
-| **Glossary page** of parliamentary terms (division, Westminster Hall, urgent question and so on), linked from the source panel | S | |
+| ✓ **Glossary page** of parliamentary terms (division, Westminster Hall, urgent question and so on), linked from the source panel | S | Done: /glossary, linked from every vote label and the footer |
 | **Accessibility testing with real users** (screen reader and keyboard users) | M | Automated checks only catch some problems |
 | **Automatic accessibility check in CI**, so new pages stay accessible | S | |
 
@@ -145,9 +145,9 @@ briefing should not imply that it does.
 
 | Item | Time | Notes |
 |---|---|---|
-| **Name the type of each vote** from its title: second or third reading, reasoned amendment, programme motion, Lords amendments ("ping-pong"), opposition day motion, ten minute rule bill, closure, statutory instrument, money resolution | 1 day | No AI cost. Shown on each division and given to the briefing |
-| **Plain-English note for each type** in the source panel, for example "a reasoned amendment sets out reasons to decline a bill's second reading; voting against it usually means supporting the bill going forward" | Half a day | Written once, reviewed for neutrality |
-| **Briefing rule**: report what a procedural vote was about, never present it as a view on the policy itself; describe free votes as free votes | 2 hours | Prompt change, checked with the test set |
+| ✓ **Name the type of each vote** from its title: second or third reading, reasoned amendment, programme motion, Lords amendments ("ping-pong"), opposition day motion, ten minute rule bill, closure, statutory instrument, money resolution | 1 day | Done: read from the motion before each division and the outcome after it; about 91% of divisions since 2010 get a kind. Shown on bill pages, member pages, timelines and in the source panel, and given to the briefing |
+| ✓ **Plain-English note for each type** in the source panel, for example "a reasoned amendment sets out reasons to decline a bill's second reading; voting against it usually means supporting the bill going forward" | Half a day | Done: shown with each vote and listed in the glossary |
+| ✓ **Briefing rule**: report what a procedural vote was about, never present it as a view on the policy itself; describe free votes as free votes | 2 hours | Done for procedural votes. Free votes cannot yet be told apart in the record (see whipping information) |
 | **Whipping information** (whether a vote was whipped, and how) where TheyWorkForYou Votes records it | 1–2 days | Their coverage is partial; shown only where recorded, with the source named |
 | **Wrecking amendments** and similar labels | Not recommended | Calling an amendment "wrecking" is a political judgement. The site would only report it when a speaker in the debate says so, with the citation |
 
@@ -161,7 +161,7 @@ review before launch is advised.
 
 | Item | Time | Notes |
 |---|---|---|
-| **Register of Members' Financial Interests** on MP pages: declared jobs, gifts, donations, shareholdings, with dates | 2–3 days | Parliament publishes it as open data (Open Parliament Licence), linked by member ID. No AI cost |
+| ✓ **Register of Members' Financial Interests** on MP pages: declared jobs, gifts, donations, shareholdings, with dates | 2–3 days | Done for the latest edition (current MPs), from TheyWorkForYou's copy, matched by member ID, with a plain note that a declaration is not wrongdoing. Earlier editions (former MPs, changes over time) still to do |
 | **Declared interests next to speeches**: flag where the speaker had a relevant declared interest on the day | 2 days, after the above | Deciding "relevant" needs care; start with exact category matches and show the register entry, not a judgement |
 | **Electoral Commission donations** to MPs and their local parties | 2–3 days | Donations to individual MPs match by name and constituency, so each match needs a confidence check; ambiguous ones are left out |
 | **All-Party Parliamentary Groups**: which groups a member belongs to and who funds the secretariat | 1–2 days | The register is published per edition; needs a small scraper |
@@ -189,7 +189,7 @@ data, which makes this much easier than starting from scratch.
 
 | Item | Time | Notes |
 |---|---|---|
-| **Devolution notes**: when a question is about a devolved subject (health, education, most transport, and so on), say so in the briefing, and which nations' policy Westminster decides | 1 day | Curated table of reserved and devolved matters for each nation, kept up to date by hand. Useful now, before any devolved data is added |
+| ✓ **Devolution notes**: when a question is about a devolved subject (health, education, most transport, and so on), say so in the briefing, and which nations' policy Westminster decides | 1 day | Done: a hand-kept table (src/hansard/devolution.py) matched to the question's words; the note is shown beside the briefing, not written by AI |
 | **Scottish Parliament** debates, questions and members | 4–6 days | Members, parties and offices from the same mySociety sources |
 | **Senedd** | 4–6 days | Bilingual record; search would cover English and Welsh |
 | **Northern Ireland Assembly** | 3–5 days | Includes the periods when the Assembly was not sitting |

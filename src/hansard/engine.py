@@ -63,6 +63,7 @@ class Scope:
     written: bool = True   # written answers and written ministerial statements
     pbc: bool = True       # Public Bill Committee debates
     votes: bool = True     # division (voting) records
+    edms: bool = True      # early day motions and who signed them
 
     def sources(self) -> list[str]:
         s = set(ORAL_SOURCES)

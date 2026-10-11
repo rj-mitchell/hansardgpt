@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { api } from "../api";
+import { briefingDocx, downloadName } from "../docx";
 import { briefingWithSources, referencesOnly } from "../export";
 import { fmtDate, renderAnswer, renderPlain, segmentsToMarkdown } from "../render";
 import type { Answer, Highlight, SourceCard } from "../types";
@@ -58,6 +59,17 @@ export function AnswerView({
             {link && <ShareButton url={link} title={question} />}
             <CopyButton label="Copy with sources" text={() => briefingWithSources(question, answer, sources, new Date(), link)} />
             <CopyButton label="Copy references" text={() => referencesOnly(answer, sources)} />
+            {link && <CopyButton label="Copy embed code" text={() => embedCode(link, question)} />}
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => downloadWord(question, answer, sources, link ?? window.location.href)}
+            >
+              Download Word
+            </button>
+            <button type="button" className="secondary" onClick={() => window.print()}>
+              Print or save as PDF
+            </button>
             <Feedback question={question} briefingKey={briefingKey} />
           </div>
           <ReportProblem briefingId={briefingId} />
@@ -65,6 +77,32 @@ export function AnswerView({
       )}
     </div>
   );
+}
+
+/** A snippet for a website or blog: the briefing's preview card, linking back to the briefing. */
+export function embedCode(link: string, question: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return (
+    `<a href="${esc(link)}" style="display:inline-block;max-width:600px">` +
+    `<img src="${esc(link)}/card.png" alt="${esc(`Where They Stand briefing: ${question}`)}" ` +
+    `width="600" style="width:100%;height:auto;border:1px solid #ccc"></a>\n` +
+    `<p style="font-size:0.9em">From <a href="${esc(link)}">Where They Stand</a>, a briefing on the UK ` +
+    `Parliament written by AI from the Hansard record (CC BY 4.0).</p>`
+  );
+}
+
+function downloadWord(question: string, answer: Answer, sources: SourceCard[], link: string) {
+  const blob = new Blob([briefingDocx(question, answer, sources, link).buffer as ArrayBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = downloadName(question);
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /** The phone's share sheet where there is one; otherwise copy the link. */

@@ -2,7 +2,9 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./pages";
+import { VoteKind, VoteKindKey } from "./components/VoteKind";
 import { fmtDate } from "./render";
+import type { VoteType } from "./types";
 
 interface Sitting {
   date: string;
@@ -11,6 +13,7 @@ interface Sitting {
   stages: string[];
   contributions: number;
   url: string | null;
+  path?: string | null;
 }
 interface Division {
   date: string;
@@ -20,6 +23,7 @@ interface Division {
   ayes: number;
   noes: number;
   url: string | null;
+  vote_type?: VoteType;
 }
 interface BillData {
   slug: string;
@@ -85,13 +89,20 @@ function Bill({ slug }: { slug: string }) {
             <p className="timeline-head">{s.stages.join("; ")}</p>
             <p className="timeline-excerpt small">
               {s.contributions} contribution{s.contributions === 1 ? "" : "s"}
-              {s.url && (
+              {s.path ? (
                 <>
                   {" · "}
-                  <a href={s.url} target="_blank" rel="noreferrer">
-                    Read the record
-                  </a>
+                  <a href={s.path}>Read the debate</a>
                 </>
+              ) : (
+                s.url && (
+                  <>
+                    {" · "}
+                    <a href={s.url} target="_blank" rel="noreferrer">
+                      Read the record
+                    </a>
+                  </>
+                )
               )}
             </p>
           </li>
@@ -107,8 +118,8 @@ function Bill({ slug }: { slug: string }) {
         <section aria-labelledby="h-divisions">
           <h2 id="h-divisions">Votes</h2>
           <p className="muted small">
-            Titles are as recorded. A vote at second reading may be on an amendment to decline the bill rather than on
-            the bill itself, and many votes are on single clauses or amendments: open the record to see what each was on.
+            Many votes are on single clauses, amendments or the timetable rather than on the bill as a whole. The kind of
+            each vote is read from the motion recorded just before it; open the record to see exactly what was decided.
           </p>
           <div className="table-wrap">
             <table className="admin-table">
@@ -116,6 +127,7 @@ function Bill({ slug }: { slug: string }) {
                 <tr>
                   <th scope="col">Date</th>
                   <th scope="col">House</th>
+                  <th scope="col">Kind of vote</th>
                   <th scope="col">On</th>
                   <th scope="col">Ayes</th>
                   <th scope="col">Noes</th>
@@ -126,6 +138,7 @@ function Bill({ slug }: { slug: string }) {
                   <tr key={`${d.date}-${d.house}-${d.number}`}>
                     <td>{fmtDate(d.date)}</td>
                     <td>{HOUSE[d.house] ?? d.house}</td>
+                    <td>{d.vote_type && d.vote_type.kind !== "other" ? <VoteKind vt={d.vote_type} /> : "Not stated"}</td>
                     <td>{d.url ? <a href={d.url} target="_blank" rel="noreferrer">{d.title}</a> : d.title}</td>
                     <td>{d.ayes}</td>
                     <td>{d.noes}</td>
@@ -134,6 +147,8 @@ function Bill({ slug }: { slug: string }) {
               </tbody>
             </table>
           </div>
+          <h3>What these kinds of vote mean</h3>
+          <VoteKindKey types={b.divisions.map((d) => d.vote_type)} />
         </section>
       )}
     </article>

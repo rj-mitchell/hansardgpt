@@ -3,7 +3,11 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./pages";
 import { Timeline } from "./components/Timeline";
+import { EdmList, type EdmRow } from "./components/EdmList";
+import { type Interests, InterestsSection } from "./components/Interests";
+import { VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
+import type { VoteType } from "./types";
 
 interface Result {
   election: string;
@@ -35,6 +39,7 @@ interface PersonData {
     excerpt: string;
     twfy_url: string;
     official_url: string | null;
+    debate_path: string | null;
   }[];
   voting: {
     votes: number;
@@ -42,8 +47,17 @@ interface PersonData {
     since: string | null;
     until: string | null;
     method: string;
-    recent_rebellions: { date: string; title: string; vote: string; party_majority: string; twfy_url: string }[];
+    recent_rebellions: {
+      date: string;
+      title: string;
+      vote: string;
+      party_majority: string;
+      twfy_url: string;
+      vote_type?: VoteType;
+    }[];
   } | null;
+  edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
+  interests?: Interests | null;
 }
 
 const BAND: Record<string, string> = { marginal: "marginal seat", middle: "majority 10% to 20%", safe: "safe seat" };
@@ -159,6 +173,9 @@ function Person({ number }: { number: string }) {
 
       <section aria-labelledby="h-recent">
         <h2 id="h-recent">Recent contributions</h2>
+        <p className="small feed-link">
+          <a href={`/feeds/people/${p.number}.xml`}>Follow what {p.name} says in a feed reader (RSS)</a>
+        </p>
         {p.contributions.length === 0 ? (
           <p className="muted">No contributions in the record since 2010.</p>
         ) : (
@@ -171,7 +188,7 @@ function Person({ number }: { number: string }) {
                 </p>
                 <p>{c.excerpt.length >= 320 ? `${c.excerpt.trimEnd()}…` : c.excerpt}</p>
                 <p className="small">
-                  <a href={c.twfy_url}>Read in full</a>
+                  <a href={c.debate_path ?? c.twfy_url}>Read in full</a>
                   {c.official_url && (
                     <>
                       {" · "}
@@ -199,14 +216,37 @@ function Person({ number }: { number: string }) {
               <ul>
                 {p.voting.recent_rebellions.map((r) => (
                   <li key={r.date + r.title}>
-                    {fmtDate(r.date)}: <a href={r.twfy_url}>{r.title || "Division"}</a>. Voted {r.vote}; most of their party
-                    voted {r.party_majority}.
+                    {fmtDate(r.date)}: <a href={r.twfy_url}>{r.title || "Division"}</a>
+                    {r.vote_type && r.vote_type.kind !== "other" && (
+                      <>
+                        {" "}
+                        (<VoteKind vt={r.vote_type} />)
+                      </>
+                    )}
+                    . Voted {r.vote}; most of their party voted {r.party_majority}.
                   </li>
                 ))}
               </ul>
             </>
           )}
           <p className="muted small">{p.voting.method}</p>
+        </section>
+      )}
+
+      {p.interests && (
+        <InterestsSection interests={p.interests} name={p.name} isMP={p.current?.house === "commons"} />
+      )}
+
+      {p.edms && p.edms.tabled + p.edms.signed > 0 && (
+        <section aria-labelledby="h-edms">
+          <h2 id="h-edms">Early day motions</h2>
+          <p>
+            Tabled {p.edms.tabled.toLocaleString("en-GB")} and signed {p.edms.signed.toLocaleString("en-GB")} early
+            day motion{p.edms.signed === 1 ? "" : "s"} since 2010.{" "}
+            <a href={`/edms?person=${p.number}`}>See them all</a>
+          </p>
+          <h3>Most recent</h3>
+          <EdmList items={p.edms.recent} />
         </section>
       )}
 

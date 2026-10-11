@@ -105,6 +105,7 @@ class Pipeline:
         self.votes = VoteFinder(settings, self.engine.con)
         self._client = client
         self.today = today
+        self._edms = None
 
     @property
     def client(self):
@@ -196,7 +197,45 @@ class Pipeline:
         divisions = []
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
-        return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by)
+        edms = self.find_edms(plan, req) if getattr(req.scope, "edms", True) else []
+        return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by, edms)
+
+    def find_edms(self, plan: QueryPlan, req: AskRequest) -> list[dict[str, Any]]:
+        """A few early day motions on the subject, with signatures counted by party on the day (when collected)."""
+        if plan.speakers or plan.filters.person_ids or plan.compare:
+            return []  # questions about particular members or sides: their own words and votes come first
+        from hansard.people import members_by_parliament_id
+        from hansard.sources.edms import EdmStore
+        from hansard.sync import edms_path
+        from hansard.votes import keywords
+
+        path = edms_path(self.settings)
+        if not path.exists():
+            return []
+        try:
+            if self._edms is None:
+                self._edms = EdmStore(path)
+            found = self._edms.relevant(keywords(plan.search_text),
+                                        date_from=plan.filters.date_from and plan.filters.date_from.isoformat(),
+                                        date_to=plan.filters.date_to and plan.filters.date_to.isoformat(),
+                                        limit=3 if req.mode == "comprehensive" else 2)
+            pairs = [(s["mnis"], s["signed"]) for e in found for s in e["sponsors"]]
+            pairs += [(e["primary_mnis"], e["date_tabled"]) for e in found if e["primary_mnis"]]
+            members = members_by_parliament_id(self.engine.con, pairs)
+        except Exception:  # never let motions break a briefing
+            log.exception("early day motions unavailable")
+            return []
+        for e in found:
+            counts: dict[str, int] = {}
+            for s in e["sponsors"]:
+                if not s["withdrawn"]:
+                    party = (members.get((s["mnis"], s["signed"])) or {}).get("party") or s["party"] or "Unknown"
+                    counts[party] = counts.get(party, 0) + 1
+            e["party_counts"] = sorted(counts.items(), key=lambda x: (-x[1], x[0]))
+            m = members.get((e["primary_mnis"], e["date_tabled"])) or {}
+            e["sponsor"] = {"name": m.get("name") or e["primary_name"], "party": m.get("party") or e["primary_party"],
+                            "number": m.get("number"), "slug": m.get("slug")}
+        return found
 
     def _compare_search(self, plan: QueryPlan, req: AskRequest, limit: int, rq: str):
         """One search per side, each with an equal share of the sources."""
@@ -228,10 +267,13 @@ class Pipeline:
         yield ev
 
         result, divisions, sources = self.find(plan, req)
+        from hansard.devolution import notes_for
         from hansard.rank.evidence import evidence_summary
 
         yield {"type": "sources", "sources": [s.card() for s in sources], "candidates": result.candidates,
-               "semantic": result.semantic_available, "evidence": evidence_summary(result.records, divisions)}
+               "semantic": result.semantic_available,
+               "evidence": {**evidence_summary(result.records, divisions), "devolution": notes_for(plan.question),
+                            "edms": sum(1 for s in sources if s.kind == "edm")}}
 
         if not sources or (result.no_records and not divisions):
             yield {"type": "final", "answer": {"segments": [{"text": NO_RECORDS + " The archive contains no "

@@ -2433,7 +2433,7 @@ main:focus {
 }
 
 .topic-summary {
-  margin-block: var(--space-3xs);
+  margin-block: var(--space-2xs);
   color: var(--ink-soft);
 }
 
@@ -2504,12 +2504,12 @@ main:focus {
 }
 
 .timeline-head {
-  margin-block: var(--space-3xs);
+  margin-block: var(--space-2xs);
 }
 
 .timeline-excerpt {
   color: var(--ink-soft);
-  margin-block-end: var(--space-3xs);
+  margin-block-end: var(--space-2xs);
 }
 
 .vote-badge {
@@ -2661,7 +2661,7 @@ main:focus {
 
 .chart-options legend {
   font-weight: 600;
-  margin-block-end: var(--space-3xs);
+  margin-block-end: var(--space-2xs);
 }
 
 .chart-context {
@@ -2674,4 +2674,273 @@ main:focus {
   font: inherit;
   max-inline-size: 100%;
   margin-block-end: var(--space-xs);
+}
+
+/* ---- kinds of vote and the glossary ------------------------------------------------------ */
+
+.vote-kind-note,
+.vote-kind-question,
+.vote-kind-outcome {
+  color: var(--ink-soft);
+}
+
+.vote-kind-key {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) 1fr;
+  gap: var(--space-2xs) var(--space-m);
+  margin: 0;
+}
+
+.vote-kind-key dt {
+  font-weight: 600;
+}
+
+.vote-kind-key dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.glossary {
+  grid-template-columns: minmax(10rem, 16rem) 1fr;
+}
+
+.glossary dt {
+  font-weight: 600;
+  scroll-margin-block-start: var(--space-l);
+}
+
+.glossary dt:target,
+.glossary dt:target + dd {
+  background: var(--mark);
+  color: var(--ink);
+}
+
+@media (width < 40rem) {
+  .vote-kind-key,
+  .glossary {
+    grid-template-columns: 1fr;
+  }
+
+  .vote-kind-key dd {
+    margin-block-end: var(--space-2xs);
+  }
+}
+
+/* ---- debate pages ------------------------------------------------------------------------- */
+
+.debate-section {
+  font-size: var(--step-1);
+  margin-block: var(--space-l) var(--space-xs);
+  scroll-margin-block-start: var(--space-l);
+}
+
+.contrib {
+  padding-block: var(--space-xs);
+  border-block-end: 1px solid var(--rule);
+  scroll-margin-block-start: var(--space-l);
+}
+
+.contrib p {
+  margin-block: 0 var(--space-xs);
+}
+
+.contrib-speaker {
+  margin-block-end: var(--space-2xs);
+}
+
+.contrib-role {
+  display: block;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+.contrib-ref {
+  margin-block-end: 0;
+}
+
+.contrib.procedural {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.contrib.is-target,
+.debate-division.is-target {
+  background: color-mix(in oklch, var(--mark) 45%, transparent);
+  padding-inline: var(--space-xs);
+}
+
+.debate-division {
+  margin-block: var(--space-s);
+  padding: var(--space-xs) var(--space-s);
+  border-inline-start: 3px solid var(--accent);
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+  scroll-margin-block-start: var(--space-l);
+}
+
+.debate-division p {
+  margin-block: 0 var(--space-2xs);
+}
+
+.same-day {
+  margin-block-start: var(--space-l);
+}
+
+.ask-row select {
+  flex: 1;
+  min-inline-size: 0;
+  margin-block-end: 0;
+}
+
+.drawer-ask {
+  padding-block-start: var(--space-s);
+  border-block-start: 1px solid var(--rule);
+}
+
+/* ---- the week in Parliament ---------------------------------------------------------------- */
+
+.week-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-s);
+  flex-wrap: wrap;
+  font-family: var(--sans);
+  font-size: var(--step--1);
+}
+
+.week-day {
+  margin-block-start: var(--space-l);
+}
+
+.week-chamber h3 {
+  font-size: var(--step-0);
+  margin-block: var(--space-s) var(--space-2xs);
+}
+
+.prose .week-debates,
+.prose .week-votes {
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.week-debates li,
+.week-votes li {
+  padding-block: var(--space-2xs);
+  border-block-end: 1px solid var(--rule);
+}
+
+.week-kind {
+  display: inline-block;
+  margin-inline-end: var(--space-xs);
+  font-family: var(--sans);
+  font-size: var(--step--2);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* ---- early day motions -------------------------------------------------------------------- */
+
+.prose .edm-list,
+.prose .edm-sponsors {
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.edm-sponsors .week-kind {
+  margin-inline: var(--space-xs) 0;
+}
+
+.edm-list li,
+.edm-sponsors li {
+  padding-block: var(--space-2xs);
+  border-block-end: 1px solid var(--rule);
+}
+
+.edm-sponsors {
+  columns: 2 16rem;
+  column-gap: var(--space-m);
+}
+
+.edm-sponsors li {
+  break-inside: avoid;
+}
+
+.edm-text {
+  margin-inline: 0;
+  padding: var(--space-s);
+  border-inline-start: 3px solid var(--accent);
+  background: color-mix(in oklch, var(--accent) 5%, transparent);
+}
+
+.evidence-note {
+  margin: 0;
+  padding: var(--space-2xs) var(--space-xs);
+  border-inline-start: 3px solid var(--accent);
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+}
+
+/* ---- registered interests ------------------------------------------------------------------ */
+
+.interest-category {
+  margin-block: var(--space-2xs);
+  border-block-end: 1px solid var(--rule);
+  padding-block: var(--space-2xs);
+}
+
+.interest-category > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.prose .interests,
+.prose .interest-children ul {
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.interest {
+  padding-block: var(--space-xs);
+  border-block-start: 1px solid var(--rule);
+}
+
+.interest p {
+  margin-block: 0 var(--space-2xs);
+}
+
+.interest-summary {
+  font-weight: 600;
+}
+
+.interest-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0 var(--space-s);
+  margin: 0 0 var(--space-2xs);
+}
+
+.interest-details div {
+  display: contents;
+}
+
+.interest-details dt {
+  color: var(--ink-soft);
+}
+
+.interest-details dd {
+  margin: 0;
+}
+
+.interest-children {
+  margin-inline-start: var(--space-s);
+}
+
+@media (width < 40rem) {
+  .interest-details {
+    grid-template-columns: 1fr;
+  }
+
+  .interest-details dd {
+    margin-block-end: var(--space-2xs);
+  }
 }

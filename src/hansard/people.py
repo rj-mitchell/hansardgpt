@@ -17,11 +17,13 @@ import duckdb
 import httpx
 
 from hansard.config import Settings
+from hansard.debates import debate_path
 from hansard.reference.build import office_display
 from hansard.reference.profiles import ProfileResolver, attach_reference
 from hansard.sources.demographics import USER_AGENT, age_on, assumed_birth
 from hansard.sources.elections import election_label, majority_band
 from hansard.store.parquet import attach_store
+from hansard.vote_types import vote_types
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +34,23 @@ OPEN_END = date(9999, 12, 31)
 
 def person_number(person_id: str) -> int | None:
     return int(person_id.rsplit("/", 1)[1]) if person_id and person_id.startswith(PREFIX) else None
+
+
+def members_by_parliament_id(con: Any, pairs: list[tuple[int, str | None]]
+                             ) -> dict[tuple[int, str | None], dict[str, Any]]:
+    """Members by UK Parliament ID, each with their party on a given date (or latest): for early day motions.
+    ``con`` is a DuckDB connection with the reference tables attached."""
+    if not pairs:
+        return {}
+    rows = con.execute("""
+        WITH p(mnis, on_date) AS (SELECT * FROM (VALUES {values}))
+        SELECT p.mnis, p.on_date, r.person_id, r.latest_name,
+               (SELECT arg_max(m.party_name, m.start) FROM ref_memberships m WHERE m.person_id = r.person_id
+                  AND coalesce(try_cast(p.on_date AS DATE), current_date) BETWEEN m.start AND m."end") AS party
+        FROM p JOIN ref_persons r ON r.datadotparl_id = CAST(p.mnis AS VARCHAR)""".format(
+        values=", ".join("(?, ?)" for _ in pairs)), [x for pair in pairs for x in pair]).fetchall()
+    return {(mnis, on): {"number": person_number(pid), "slug": slug(name), "name": name, "party": party}
+            for mnis, on, pid, name, party in rows}
 
 
 def slug(name: str) -> str:
@@ -64,6 +83,9 @@ class People:
                                                [person_id]).fetchall()]
 
     # ---- the page ----------------------------------------------------------------------------------------------
+    def by_parliament_id(self, pairs: list[tuple[int, str | None]]) -> dict[tuple[int, str | None], dict[str, Any]]:
+        return members_by_parliament_id(self.con, pairs)
+
     def page(self, person_id: str) -> dict[str, Any] | None:
         person = self.con.execute("SELECT latest_name, gender, birth_date, birth_precision, datadotparl_id "
                                   "FROM ref_persons WHERE person_id = ?", [person_id]).fetchone()
@@ -145,18 +167,20 @@ class People:
         for since in (year - 1, year - 5, 0):  # look at recent years first: most people have spoken lately
             rows = self.con.execute(
                 f"""SELECT DISTINCT ON (record_id) record_id, date, chamber, record_type, major_heading, minor_heading,
-                           left(text, 320) AS excerpt, twfy_url, official_url
+                           left(text, 320) AS excerpt, twfy_url, official_url, source, bill
                     FROM records WHERE year >= {int(since)} AND list_contains(?, xml_person_id)
                     ORDER BY record_id, date DESC""", [xml]).fetchall()
             if len(rows) >= limit or since == 0:
                 break
         rows.sort(key=lambda r: (r[1], r[0]), reverse=True)
         cols = ["record_id", "date", "chamber", "record_type", "major_heading", "minor_heading", "excerpt",
-                "twfy_url", "official_url"]
+                "twfy_url", "official_url", "source", "bill"]
         out = []
         for r in rows[:limit]:
             d = dict(zip(cols, r, strict=True))
             d["date"] = d["date"].isoformat()
+            d["debate_path"] = debate_path(d.pop("source"), d["date"], d["major_heading"], d["minor_heading"],
+                                           d.pop("bill"), d["record_id"])
             d["heading"] = " — ".join(x for x in (d.pop("major_heading"), d.pop("minor_heading")) if x)
             out.append(d)
         return out
@@ -197,7 +221,7 @@ class People:
             WHERE pv.person_id = ?""", [person_id]).fetchone()
         rows = self.con.execute("""
             SELECT d.date, d.house, d.number, d.major_heading, d.minor_heading, pv.vote, pm.majority, d.twfy_url,
-                   d.official_url
+                   d.official_url, d.division_id
             FROM party_votes pv JOIN party_majorities pm USING (division_id, whip_group)
             JOIN divisions d ON d.division_id = pv.division_id
             WHERE pv.person_id = ? AND pm.n >= 2 AND pv.vote <> pm.majority
@@ -205,7 +229,8 @@ class People:
         recent_rebellions = [{
             "date": r[0].isoformat(), "house": r[1], "number": r[2],
             "title": " — ".join(x for x in (r[3], r[4]) if x), "vote": r[5], "party_majority": r[6],
-            "twfy_url": r[7], "official_url": r[8]} for r in rows]
+            "twfy_url": r[7], "official_url": r[8], "division_id": r[9]} for r in rows]
+        vote_types(self.settings).annotate(recent_rebellions)
         return {"votes": total, "rebellions": rebellions, "since": first.isoformat() if first else None,
                 "until": last.isoformat() if last else None, "recent_rebellions": recent_rebellions,
                 "method": "A rebellion is a vote against the majority of the member's own party in that division, "

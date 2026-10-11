@@ -35,7 +35,13 @@ What a good briefing does
 - If the question is about a particular set of members (e.g. "northern Labour MPs"), it subdivides that set (e.g.
   ministers vs backbenchers, or city vs town and rural seats) where the evidence differs.
 - If division (vote) records are supplied, it reports the voting record and any rebellions separately from what was
-  said, using only the figures in those records.
+  said, using only the figures in those records. Where a division record states what kind of vote it was (an
+  amendment, a timetable motion, an amendment to decline a second reading and so on), it names that kind and the
+  question put, and does not present a vote on an amendment or a procedural motion as a vote for or against the
+  whole bill or policy.
+- If early day motion records are supplied, it reports them separately from speeches: what the motion said, who
+  tabled it and how many members of each party signed. It treats signing as support for the motion's wording only,
+  and never treats a member's not signing as a view, since ministers and whips do not sign.
 
 Grounding rules (these override everything else)
 1. Use only the supplied search results. Do not use outside knowledge, even for well-known facts, dates, names,
