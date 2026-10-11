@@ -41,10 +41,14 @@ if ! command -v docker >/dev/null; then
 fi
 
 echo "==> Turning on automatic security updates, the firewall (SSH, HTTP and HTTPS only) and fail2ban"
-apt-get install -y unattended-upgrades ufw fail2ban
-systemctl enable --now fail2ban
+apt-get install -y unattended-upgrades ufw fail2ban python3-systemd
+# read SSH logins from the system journal (some server images have no /var/log/auth.log)
+printf '[sshd]\nenabled = true\nbackend = systemd\n' > /etc/fail2ban/jail.d/where-they-stand.conf
+systemctl enable fail2ban >/dev/null 2>&1 || true
+systemctl restart fail2ban || echo "WARNING: fail2ban did not start; carrying on (deploy/check.sh will flag it)."
 dpkg-reconfigure -f noninteractive unattended-upgrades
-SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}')"
+# (sshd -T can fail on Ubuntu 24.04 when ssh is socket-activated; then the default port 22 is used)
+SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}' || true)"
 ufw allow "${SSH_PORT:-22}/tcp"
 ufw allow 80/tcp
 ufw allow 443/tcp
