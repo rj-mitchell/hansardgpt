@@ -78,3 +78,50 @@ def test_sync_search_and_page(indexed_settings, tmp_path):
         for p in (cpath, epath):
             for suffix in ("", "-wal", "-shm"):
                 p.with_name(p.name + suffix).unlink(missing_ok=True)
+
+
+def test_witnesses_are_told_apart_from_members():
+    from hansard.sources.evidence import witness_for
+
+    listed = [{"name": "Professor Keith Bell", "organisation": "University"}, {"name": "Lord Young of Old Windsor"},
+              {"name": "Dr Emily Wallace"}]
+    assert witness_for("Professor Bell", listed)["organisation"] == "University"
+    assert witness_for("Keith Bell", listed)["name"] == "Professor Keith Bell"
+    assert witness_for("Lord Young of Old Windsor", listed)["name"] == "Lord Young of Old Windsor"
+    assert witness_for("Emily Wallace", listed)
+    assert witness_for("The Chair", listed) is None and witness_for("Chair", listed) is None
+    assert witness_for("Lord Jay of Ewelme", listed) is None and witness_for("John Bell", listed) is None
+
+
+def test_briefings_can_include_committee_evidence(indexed_settings):
+    from hansard.embed.base import HashingEmbedder
+    from hansard.engine import Engine, Scope
+    from hansard.rag.pipeline import AskRequest, Pipeline
+    from hansard.rag.query_parse import parse_offline
+    from hansard.sources.committees import build
+    from hansard.sync import committees_path, evidence_path
+
+    from .test_committees import fake_api
+
+    long_doc = DOC.replace("Fares have risen faster than wages.",
+                           "Fares have risen faster than wages. " + "Rail fares hurt commuters every year. " * 12)
+    paths = [evidence_path(indexed_settings), committees_path(indexed_settings)]
+    try:
+        build(paths[1], fake_api(), lambda _s: None)
+        sync_transcripts(EvidenceStore(paths[0]), [(77, "2024-03-05")], since=date(2022, 1, 1), client=fake([]),
+                         sleep=lambda _s: None)
+        p = Pipeline(indexed_settings, Engine(indexed_settings, embedder=HashingEmbedder(64)))
+        plan = parse_offline("What has been said about rail fares?", indexed_settings.regions)
+        _, _, off = p.find(plan, AskRequest(question=plan.question))
+        assert not [s for s in off if s.kind == "evidence"], "off unless the reader asks"
+        EvidenceStore(paths[0]).save(77, *parse_transcript(long_doc))
+        _, _, on = p.find(plan, AskRequest(question=plan.question, scope=Scope(evidence=True)))
+        ev = [s for s in on if s.kind == "evidence"]
+        assert len(ev) == 1, "the witness's answer only: not the chair's question"
+        assert ev[0].meta["witness"]["organisation"] == "Passenger Watch"
+        assert "not a view of Parliament" in ev[0].blocks[0] and "Transport Committee" in ev[0].title
+        assert ev[0].url == "/evidence/77#t1"
+    finally:
+        for path in paths:
+            for suffix in ("", "-wal", "-shm"):
+                path.with_name(path.name + suffix).unlink(missing_ok=True)

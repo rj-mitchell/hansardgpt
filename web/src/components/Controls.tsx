@@ -107,6 +107,14 @@ export function Controls({ settings, onChange, answersEnabled }: Props) {
           />
           Devolved parliaments (Holyrood, the Senedd, the NI Assembly)
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.scope.evidence ?? false}
+            onChange={(e) => scope({ evidence: e.target.checked })}
+          />
+          Witnesses' evidence to committees (since 2022)
+        </label>
       </fieldset>
     </section>
   );

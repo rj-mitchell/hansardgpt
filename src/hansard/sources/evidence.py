@@ -72,6 +72,29 @@ def parse_transcript(doc: str) -> tuple[list[str], list[dict[str, Any]]]:
     return header, turns
 
 
+_TITLES = {"professor", "prof", "dr", "sir", "dame", "mr", "mrs", "ms", "miss", "mx", "rt", "hon", "the", "right",
+           "honourable", "mp", "obe", "mbe", "cbe", "kc", "qc", "frs", "freng", "fmedsci", "cb", "dbe", "kbe"}
+
+
+def _name_key(name: str | None) -> list[str]:
+    words = re.findall(r"[a-z'’-]+", (name or "").lower().replace("’", "'"))
+    return [w for w in words if w not in _TITLES]
+
+
+def witness_for(speaker: str | None, witnesses: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The listed witness a transcript speaker is, if any (committee members and the chair are not witnesses)."""
+    said = _name_key(speaker)
+    if not said or said[0] == "chair":
+        return None
+    for w in witnesses:
+        listed = _name_key(w.get("name"))
+        if not listed:
+            continue
+        if said == listed or (said[-1] == listed[-1] and (len(said) == 1 or said[0] == listed[0])):
+            return w
+    return None
+
+
 def decode(body: Any) -> str:
     """The API returns {"data": base64 HTML}; older responses may be the HTML itself."""
     if isinstance(body, dict) and body.get("data"):
@@ -139,6 +162,19 @@ class EvidenceStore:
                 FROM turn_text JOIN turns t ON t.id = turn_text.rowid WHERE turn_text MATCH ?
                 ORDER BY t.session_id DESC, t.ord LIMIT ? OFFSET ?""", (match, limit, offset)).fetchall()
         return total, [dict(r) for r in rows]
+
+    def relevant(self, keywords: list[str], limit: int = 120, min_chars: int = 300) -> list[dict[str, Any]]:
+        """Substantial turns containing all the words, best match first."""
+        words = [w for w in keywords if re.fullmatch(r"[\w'’-]+", w)][:5]
+        if not words:
+            return []
+        match = " ".join(f'"{w}"' for w in words)
+        with self.connect() as con:
+            rows = con.execute("""
+                SELECT t.session_id, t.ord, t.speaker, t.question, t.text FROM turn_text JOIN turns t
+                ON t.id = turn_text.rowid WHERE turn_text MATCH ? AND length(t.text) >= ?
+                ORDER BY bm25(turn_text, 1.0, 0.0) LIMIT ?""", (match, min_chars, limit)).fetchall()
+        return [dict(r) for r in rows]
 
     def available(self) -> set[int]:
         with self.connect() as con:

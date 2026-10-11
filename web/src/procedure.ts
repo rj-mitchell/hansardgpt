@@ -45,6 +45,13 @@ const NOTES: Record<string, { title: string; text: string }> = {
       "devolved subjects such as health, education and housing. Their members are not members of the UK Parliament, " +
       "and what they say is recorded in each parliament's own official report.",
   },
+  evidence: {
+    title: "Oral evidence to committees",
+    text:
+      "Select committees question witnesses (experts, officials, ministers and others) in public evidence " +
+      "sessions. What a witness says is their own evidence to the committee: it is not the committee's view or " +
+      "Parliament's, and the committee's conclusions are in its reports.",
+  },
   edm: {
     title: "Early day motions",
     text:
@@ -65,6 +72,7 @@ export function aboutRecord(s: Pick<SourceCard, "kind" | "chamber" | "record_typ
   if (s.kind === "division") return NOTES.division;
   if (s.kind === "edm") return NOTES.edm;
   if (s.kind === "devolved") return NOTES.devolved;
+  if (s.kind === "evidence") return NOTES.evidence;
   if (s.record_type === "question" || s.record_type === "answer" || /written answers/i.test(s.chamber)) {
     return NOTES.writtenAnswer;
   }

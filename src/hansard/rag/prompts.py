@@ -42,6 +42,9 @@ What a good briefing does
 - If contributions from the Scottish Parliament, the Senedd or the Northern Ireland Assembly are supplied, it reports
   them in their own section, by parliament, never as views of the UK Parliament, and notes that those parliaments
   decide many subjects for their own nations.
+- If oral evidence to select committees is supplied, it reports it in its own section, as what named witnesses told
+  a committee (giving each witness's role and organisation as stated), never as the view of the committee, of
+  Parliament or of any member, and does not merge it with what members said.
 - If early day motion records are supplied, it reports them separately from speeches: what the motion said, who
   tabled it and how many members of each party signed. It treats signing as support for the motion's wording only,
   and never treats a member's not signing as a view, since ministers and whips do not sign.

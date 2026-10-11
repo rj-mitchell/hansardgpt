@@ -55,6 +55,7 @@ CREATE INDEX inquiry_committees_committee ON inquiry_committees (committee_id);
 CREATE INDEX session_committees_committee ON session_committees (committee_id);
 CREATE VIRTUAL TABLE witness_text USING fts5(name, organisation, role, content='witnesses');
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE committee_business (committee_id INTEGER, inquiry_id INTEGER, PRIMARY KEY (committee_id, inquiry_id));
 """
 
 
@@ -124,6 +125,41 @@ def _previous_purposes(path: Path) -> dict[int, str | None]:
         return {}
 
 
+def _previous_owners(path: Path) -> tuple[dict[int, list[int]], set[int]]:
+    """Which committee each inquiry belongs to, as looked up for the last copy, and the closed committees already
+    looked up (their lists cannot change, so a weekly rebuild asks only about current and new committees)."""
+    if not path.exists():
+        return {}, set()
+    try:
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            owners: dict[int, list[int]] = {}
+            for cid, iid in con.execute("SELECT committee_id, inquiry_id FROM committee_business"):
+                owners.setdefault(cid, []).append(iid)
+            done = con.execute("SELECT value FROM meta WHERE key = 'owners_done'").fetchone()
+            return owners, set(json.loads(done[0])) if done else set()
+        finally:
+            con.close()
+    except (sqlite3.Error, ValueError):
+        return {}, set()
+
+
+def _owners(client: httpx.Client, committees: list[dict[str, Any]], path: Path, sleep: Callable[[float], None]
+            ) -> dict[int, list[int]]:
+    """The inquiry list does not say whose inquiry each is, so ask committee by committee (those sitting since
+    2010), reusing what is known for closed committees."""
+    owners, done = _previous_owners(path)
+    for c in committees:
+        cid = c.get("id")
+        if not cid or (_day(c.get("endDate")) or "9999") < f"{FIRST_YEAR}":
+            continue
+        if c.get("endDate") and cid in done:
+            continue
+        owners[cid] = [b["id"] for b in _pages(client, "/CommitteeBusiness", {"CommitteeId": cid}, sleep)
+                       if b.get("id")]
+    return owners
+
+
 def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep,
           details: bool = True, raw_cache: Path | None = None) -> dict[str, Any]:
     """Fetch everything and write a fresh database (swapped in only when complete).
@@ -132,7 +168,8 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
     if raw_cache and Path(raw_cache).exists():
         raw = json.loads(Path(raw_cache).read_text())
         return _write(Path(path), raw["committees"], raw["businesses"], raw["pubs"], raw["sessions"],
-                      {int(k): v for k, v in raw["purposes"].items()})
+                      {int(k): v for k, v in raw["purposes"].items()},
+                      {int(k): v for k, v in (raw.get("owners") or {}).items()})
     own = client is None
     client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
     try:
@@ -150,6 +187,7 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
                 if not c.get("endDate") and c.get("id") and not purposes.get(c["id"]):
                     one = _get(client, f"/Committees/{c['id']}", None, sleep) or {}
                     purposes[c["id"]] = _plain(one.get("purpose"))
+        owners = _owners(client, committees, Path(path), sleep)
     finally:
         if own:
             client.close()
@@ -157,12 +195,12 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
         raise ValueError("the committees API returned no committees or no evidence sessions")
     if raw_cache:
         Path(raw_cache).write_text(json.dumps({"committees": committees, "businesses": businesses, "pubs": pubs,
-                                               "sessions": sessions, "purposes": purposes}))
-    return _write(Path(path), committees, businesses, pubs, sessions, purposes)
+                                               "sessions": sessions, "purposes": purposes, "owners": owners}))
+    return _write(Path(path), committees, businesses, pubs, sessions, purposes, owners)
 
 
 def _write(path: Path, committees: list, businesses: list, pubs: list, sessions: list,
-           purposes: dict[int, str | None]) -> dict[str, Any]:
+           purposes: dict[int, str | None], owners: dict[int, list[int]] | None = None) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.unlink(missing_ok=True)
@@ -191,6 +229,13 @@ def _write(path: Path, committees: list, businesses: list, pubs: list, sessions:
                 con.execute("INSERT OR IGNORE INTO publication_inquiries VALUES (?, ?)", (p["id"], b["id"]))
                 if (p.get("committee") or {}).get("id"):
                     con.execute("INSERT OR IGNORE INTO inquiry_committees VALUES (?, ?)", (b["id"], p["committee"]["id"]))
+        known = {c["id"] for c in committees if c.get("id")}
+        inquiries = {b["id"] for b in businesses if b.get("id")}
+        for cid, iids in (owners or {}).items():
+            for iid in iids:
+                con.execute("INSERT OR IGNORE INTO committee_business VALUES (?, ?)", (cid, iid))
+                if cid in known and iid in inquiries:
+                    con.execute("INSERT OR IGNORE INTO inquiry_committees VALUES (?, ?)", (iid, cid))
         n_witnesses = 0
         seen: set[int] = set()
         for s in sessions:
@@ -216,7 +261,10 @@ def _write(path: Path, committees: list, businesses: list, pubs: list, sessions:
                     n_witnesses += 1
         con.execute("INSERT INTO witness_text (witness_text) VALUES ('rebuild')")
         built = datetime.now(UTC).isoformat(timespec="seconds")
-        con.executemany("INSERT INTO meta VALUES (?, ?)", [("built", built), ("source", API)])
+        closed = {c["id"] for c in committees if c.get("id") and c.get("endDate")}
+        done = sorted(closed & set(owners or {}))
+        con.executemany("INSERT INTO meta VALUES (?, ?)",
+                        [("built", built), ("source", API), ("owners_done", json.dumps(done))])
         con.commit()
     finally:
         con.close()

@@ -7,6 +7,7 @@ import type { Answer, SourceCard } from "./types";
 export function formalReference(s: SourceCard): string {
   const date = fmtDate(s.date);
   if (s.kind === "devolved") return `${s.chamber} Official Report, ${date}`;
+  if (s.kind === "evidence") return `Oral evidence to the ${s.committee ?? "committee"}, ${date}`.replace("the The ", "the ");
   if (s.kind === "edm") return `EDM ${s.uin ?? ""}, tabled ${date}`.replace("EDM ,", "Early day motion,");
   if (s.kind === "division") {
     const house = /lords/i.test(s.chamber) ? "HL Deb" : "HC Deb";
@@ -31,6 +32,13 @@ export function sourceLine(s: SourceCard): string {
     const m = s.member;
     const who = [m?.name, m?.party || m?.seat ? `(${[m?.party, m?.seat].filter(Boolean).join(", ")})` : ""].filter(Boolean).join(" ");
     return `[${s.n}] ${who}. ${formalReference(s)}${s.heading ? `, "${s.heading}"` : ""}. ${s.official_url ?? s.url}`;
+  }
+  if (s.kind === "evidence") {
+    const w = s.witness;
+    const who = [w?.name, w?.role || w?.organisation ? `(${[w?.role, w?.organisation].filter(Boolean).join(", ")})` : ""]
+      .filter(Boolean)
+      .join(" ");
+    return `[${s.n}] ${who}. ${formalReference(s)}${s.inquiry ? `, "${s.inquiry}"` : ""}. ${s.official_url ?? s.url}`;
   }
   if (s.kind === "edm") {
     const by = s.sponsor?.name ? `, tabled by ${s.sponsor.name}${s.sponsor.party ? ` (${s.sponsor.party})` : ""}` : "";

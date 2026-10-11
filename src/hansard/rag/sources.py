@@ -206,12 +206,35 @@ def devolved_source(n: int, d: dict[str, Any]) -> Source:
     return Source(n, "devolved", title, f"/devolved/{d['legislature']}/{d['key']}#s{d['ord']}", blocks, meta)
 
 
+def evidence_source(n: int, e: dict[str, Any]) -> Source:
+    """A witness's answer in a committee evidence session: labelled as evidence to a committee, not a view of
+    Parliament."""
+    w = e["witness"]
+    about = ", ".join(x for x in (w.get("role"), w.get("organisation")) if x)
+    who = f"{w['name']} ({about})" if about else w["name"]
+    committee = e.get("committees") or "a parliamentary committee"
+    where = f"oral evidence to the {committee}" if not committee.lower().startswith("the ") else \
+        f"oral evidence to {committee}"
+    title = " — ".join(x for x in (who, where[0].upper() + where[1:], _fmt_date(e["date"]), e.get("inquiry")) if x)
+    blocks = [f"{where[0].upper() + where[1:]}, {_fmt_date(e['date'])}"
+              f"{', inquiry: ' + e['inquiry'] if e.get('inquiry') else ''}. {who}, a witness answering the "
+              "committee's questions (evidence to a committee, not a view of Parliament):",
+              *[p for p in e["text"].split("\n\n") if p.strip()]]
+    meta = {"date": e["date"], "chamber": "Committee evidence", "committee": committee, "inquiry": e.get("inquiry"),
+            "inquiry_id": e.get("inquiry_id"), "session_id": e["session_id"], "witness": w,
+            "text": "\n\n".join(blocks), "group": "Committee evidence", "official_url": e.get("url"),
+            "speaker_name_raw": e.get("speaker")}
+    return Source(n, "evidence", title, f"/evidence/{e['session_id']}#t{e['ord']}", blocks, meta)
+
+
 def build_sources(records: list[dict[str, Any]], divisions: list[dict[str, Any]],
                   facets: set[str] | bool = False, group_by: str = "role",
                   edms: list[dict[str, Any]] | None = None,
-                  devolved: list[dict[str, Any]] | None = None) -> list[Source]:
+                  devolved: list[dict[str, Any]] | None = None,
+                  evidence: list[dict[str, Any]] | None = None) -> list[Source]:
     out = [record_source(i, r, facets, group_by) for i, r in enumerate(records, 1)]
     out += [division_source(len(out) + i, d) for i, d in enumerate(divisions, 1)]
     out += [edm_source(len(out) + i, e) for i, e in enumerate(edms or [], 1)]
     out += [devolved_source(len(out) + i, d) for i, d in enumerate(devolved or [], 1)]
+    out += [evidence_source(len(out) + i, e) for i, e in enumerate(evidence or [], 1)]
     return out

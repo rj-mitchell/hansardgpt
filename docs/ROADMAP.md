@@ -66,7 +66,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | ✓ **Topic briefings**: regularly refreshed briefings on the issues in the news, on permanent pages | S–M | Done 11 October: 16 topics in `config/topics.toml`. Rewritten only when due and the evidence has changed: about £2 to start, then roughly £2–6 a month |
 | **1997–2010** records | M–L | Needs the older boundary sets; disk use roughly doubles |
 | ✓ **Early Day Motions**: who signed which motions | M | Done: /edms to search and read motions and see who signed (with party on the day), and a section on each MP's page. Collected by the sync, working back to 2010 a year at a time. Briefings also use the two or three motions most relevant to a question, with signatures by party, as their own kind of source |
-| ✓ **Select committee evidence and reports** | L | Different source and format; Committee pages, reports, government responses and the witness index done (/committees, /witnesses); transcripts in search still to do |
+| ✓ **Select committee evidence and reports** | L | Different source and format; Committee pages, reports, government responses and the witness index done (/committees, /witnesses); transcripts in search and (opt-in) briefings done |
 | ✓ **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data; Done: /devolved (reading and search, since 2021); not yet in briefings |
 
 ### B. Discussed earlier, not yet built
@@ -177,7 +177,7 @@ what committees heard and recommended.
 |---|---|---|
 | ✓ **Committee pages**: inquiries, reports and the government's responses, with links | 2–3 days | Done: /committees, /committees/<id> and /inquiries/<id>, rebuilt weekly from the Committees API, including how long each government response took |
 | ✓ **Witness index**: who gave evidence to which inquiry, searchable by organisation | 2 days | Done: /witnesses, plus each committee's most-heard organisations and, on MP and peer pages, the sessions where they were a witness |
-| **Oral evidence transcripts in search and briefings** | 5–8 days | The large item in section A. Different format; witnesses are not members, so they need their own labels. Readable (/evidence/<id>) and searchable (on /witnesses) from 2022, collected a few hundred per update; not yet in briefings |
+| ✓ **Oral evidence transcripts in search and briefings** | 5–8 days | Done: readable (/evidence/<id>) and searchable (on /witnesses) from 2022, collected a few hundred per update, and in briefings as an opt-in setting. Witnesses' answers are matched to the listed witnesses (so the chair's and members' questions are left out) and kept in their own labelled section |
 | **Plain-English summaries of evidence sessions** | 2 days, after the above | About $0.05–0.20 per session, written once and stored |
 | **Recommendation tracking**: each report recommendation, whether the government accepted it, and what happened next | 2–3 weeks | Recommendations and responses are long documents; matching them needs AI and checking by a person. Best done for a few committees first, or in partnership with a research group |
 

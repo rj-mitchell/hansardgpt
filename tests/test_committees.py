@@ -13,7 +13,7 @@ COMMITTEE = {"id": 10, "name": "Transport Committee", "house": "Commons", "categ
              "scrutinisingDepartments": [{"name": "Department for Transport"}]}
 DATA = {
     "/api/Committees": [COMMITTEE, {**COMMITTEE, "id": 11, "name": "Old Committee", "endDate": "2015-03-30T00:00:00"}],
-    "/api/CommitteeBusiness": [INQ],
+    "/api/CommitteeBusiness": [INQ, {**INQ, "id": 901, "title": "Bus services", "openDate": "2012-02-01T00:00:00"}],
     "/api/Publications": [
         {"id": 1, "type": {"id": 1}, "description": "Rail fares: first report", "publicationStartDate": "2024-06-01T10:00:00",
          "committee": COMMITTEE, "hcNumber": {"number": "HC 123", "sessionId": 38}, "hlPaper": None,
@@ -32,12 +32,19 @@ DATA = {
 }
 
 
+calls: list[int] = []
+
+
 def fake_api() -> httpx.Client:
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path.startswith("/api/Committees/"):
             return httpx.Response(200, json={"purpose": "<p>We scrutinise <b>transport</b>.</p><p>More.</p>"})
         items = DATA.get(path, [])
+        owner = request.url.params.get("CommitteeId")
+        if owner:  # whose inquiry each is: only this list says so
+            items = [i for i in items if (i["id"] == 900) == (owner == "10")]
+            calls.append(int(owner))
         start, end = request.url.params.get("StartDate"), request.url.params.get("EndDate")
         if start:  # the real service filters by date
             items = [i for i in items
@@ -144,3 +151,16 @@ def test_sitemaps(indexed_settings, tmp_path):
             assert client.get(p).status_code == 200
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_inquiries_get_their_committee_from_its_own_list(tmp_path):
+    path = tmp_path / "committees.sqlite"
+    calls.clear()
+    build(path, fake_api(), no_wait)
+    assert sorted(calls) == [10, 11]
+    c = Committees(path)
+    assert [x["name"] for x in c.inquiry(901)["committees"]] == ["Old Committee"]
+    calls.clear()  # a rebuild asks again only about committees still sitting
+    build(path, fake_api(), no_wait)
+    assert calls == [10]
+    assert [x["name"] for x in Committees(path).inquiry(901)["committees"]] == ["Old Committee"]

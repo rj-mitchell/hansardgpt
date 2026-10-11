@@ -84,6 +84,13 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
             <b>{s.member?.name}</b>
             {s.member && (s.member.party || s.member.seat) ? ` (${[s.member.party, s.member.seat].filter(Boolean).join(", ")})` : ""}
           </span>
+        ) : s.kind === "evidence" ? (
+          <span className="att">
+            <b>{s.witness?.name}</b>
+            {s.witness && (s.witness.role || s.witness.organisation)
+              ? ` (${[s.witness.role, s.witness.organisation].filter(Boolean).join(", ")})`
+              : ""}
+          </span>
         ) : s.kind === "edm" ? (
           <span className="att">
             <b>{s.uin ? `EDM ${s.uin}` : "Early day motion"}</b> {s.edm_title}
@@ -161,6 +168,8 @@ export function SourceDrawer({
               ? `Early day motion${source.uin ? ` ${source.uin}` : ""}`
               : source.kind === "devolved"
                 ? (source.member?.name ?? "A member")
+              : source.kind === "evidence"
+                ? (source.witness?.name ?? "A witness")
               : speakerLine(sp, source.speaker_name_raw)}
         </h2>
         <button type="button" className="close" onClick={onClose} aria-label="Close source">
@@ -175,6 +184,8 @@ export function SourceDrawer({
           <EdmDetail source={source} quotes={quotes} />
         ) : source.kind === "devolved" ? (
           <DevolvedDetail source={source} quotes={quotes} />
+        ) : source.kind === "evidence" ? (
+          <EvidenceDetail source={source} quotes={quotes} />
         ) : (
           <>
         <dl className="facts">
@@ -507,6 +518,53 @@ function DevolvedDetail({ source, quotes }: { source: SourceCard; quotes: string
           {source.official_url && (
             <a href={source.official_url} target="_blank" rel="noreferrer">
               The official report
+            </a>
+          )}
+        </dd>
+      </dl>
+      <AboutRecord source={source} />
+      <section className="verbatim" aria-label="Verbatim text">
+        {words.map((para, i) => (
+          <p key={i}>
+            {highlightParts(para, quotes).map((part, j) =>
+              part.hit ? <mark key={j}>{part.text}</mark> : <span key={j}>{part.text}</span>,
+            )}
+          </p>
+        ))}
+      </section>
+    </>
+  );
+}
+
+/** A witness's answer to a committee: who they are, which committee and inquiry, and their words. */
+function EvidenceDetail({ source, quotes }: { source: SourceCard; quotes: string[] }) {
+  const w = source.witness;
+  const words = source.text.split("\n\n").slice(1);
+  return (
+    <>
+      <dl className="facts">
+        <dt>Witness</dt>
+        <dd>{w?.name ?? "—"}</dd>
+        <dt>Role</dt>
+        <dd>{[w?.role, w?.organisation].filter(Boolean).join(", ") || "—"}</dd>
+        <dt>Committee</dt>
+        <dd>
+          {source.committee}, {fmtDate(source.date)}
+        </dd>
+        {source.inquiry && (
+          <>
+            <dt>Inquiry</dt>
+            <dd>
+              {source.inquiry_id ? <a href={`/inquiries/${source.inquiry_id}`}>{source.inquiry}</a> : source.inquiry}
+            </dd>
+          </>
+        )}
+        <dt>Links</dt>
+        <dd className="links">
+          <a href={source.url}>The whole transcript on this site</a>
+          {source.official_url && (
+            <a href={source.official_url} target="_blank" rel="noreferrer">
+              The session on Parliament's website
             </a>
           )}
         </dd>
