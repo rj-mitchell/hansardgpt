@@ -19,7 +19,7 @@ interface Inquiry {
   url: string;
   committees: { id: number; name: string; house: string }[];
   publications: { id: number; type: string; title: string; date: string | null; hc: string | null; hl: string | null; url: string; days_after_report?: number }[];
-  sessions: { id: number; date: string | null; url: string; witnesses: Witness[] }[];
+  sessions: { id: number; date: string | null; url: string; witnesses: Witness[]; transcript?: boolean }[];
 }
 
 function Page({ id }: { id: string }) {
@@ -108,9 +108,13 @@ function Page({ id }: { id: string }) {
             {d.sessions.map((s) => (
               <li key={s.id}>
                 <p className="timeline-head">
-                  <a href={s.url} target="_blank" rel="noreferrer">
-                    {s.date ? fmtDate(s.date) : "Session"}
-                  </a>
+                  {s.transcript ? (
+                    <a href={`/evidence/${s.id}`}>{s.date ? fmtDate(s.date) : "Session"}: read the transcript</a>
+                  ) : (
+                    <a href={s.url} target="_blank" rel="noreferrer">
+                      {s.date ? fmtDate(s.date) : "Session"}
+                    </a>
+                  )}
                 </p>
                 <ul className="witness-list">
                   {s.witnesses.map((w, k) => (

@@ -93,6 +93,10 @@ def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[d
     return load_demographics(demographics_path(settings)), status
 
 
+def evidence_path(settings: Settings) -> Path:
+    return settings.data_dir / "evidence.sqlite"
+
+
 def devolved_path(settings: Settings) -> Path:
     return settings.data_dir / "devolved.sqlite"
 
@@ -269,6 +273,25 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("committees not updated: %s", exc)
                 stats["committees"] = {"error": str(exc)[:200]}
+            t = time.time()
+            try:  # oral evidence transcripts, a few hundred per run (needs the committee data above)
+                import sqlite3
+
+                from hansard.sources.evidence import SINCE as EVIDENCE_SINCE
+                from hansard.sources.evidence import EvidenceStore, sync_transcripts
+
+                if committees_path(settings).exists():
+                    with sqlite3.connect(committees_path(settings)) as cc:
+                        sessions = cc.execute("SELECT id, date FROM sessions").fetchall()
+                    since = settings.section("committees").get("transcripts_since")
+                    stats["transcripts"] = {**sync_transcripts(
+                        EvidenceStore(evidence_path(settings)), sessions,
+                        since=date.fromisoformat(since) if since else EVIDENCE_SINCE,
+                        max_sessions=int(settings.section("committees").get("transcripts_per_run", 300))),
+                        "seconds": round(time.time() - t, 1)}
+            except Exception as exc:
+                log.warning("committee transcripts not updated: %s", exc)
+                stats["transcripts"] = {"error": str(exc)[:200]}
 
         t = time.time()
         if fetch and settings.section("edms").get("enabled", True):

@@ -420,6 +420,31 @@ class Committees:
                 WHERE p.date IS NOT NULL ORDER BY p.date DESC, p.id DESC LIMIT ?""", (limit,)).fetchall()
         return [dict(r) | {"url": links("publication", r["id"], r["document_id"])} for r in rows]
 
+    def sessions_meta(self, ids: set[int]) -> dict[int, dict[str, Any]]:
+        """Date, committees, inquiry and witnesses of evidence sessions, for transcripts and search results."""
+        if not ids:
+            return {}
+        marks = ",".join("?" for _ in ids)
+        with self.connect() as con:
+            rows = con.execute(f"""
+                SELECT s.id, s.date,
+                       (SELECT group_concat(c.name, '; ') FROM session_committees sc JOIN committees c
+                          ON c.id = sc.committee_id WHERE sc.session_id = s.id) AS committees,
+                       (SELECT sc.committee_id FROM session_committees sc WHERE sc.session_id = s.id LIMIT 1)
+                          AS committee_id,
+                       (SELECT i.id FROM session_inquiries si JOIN inquiries i ON i.id = si.inquiry_id
+                         WHERE si.session_id = s.id LIMIT 1) AS inquiry_id,
+                       (SELECT i.title FROM session_inquiries si JOIN inquiries i ON i.id = si.inquiry_id
+                         WHERE si.session_id = s.id LIMIT 1) AS inquiry
+                FROM sessions s WHERE s.id IN ({marks})""", list(ids)).fetchall()
+            wit = con.execute(f"SELECT session_id, name, organisation, role FROM witnesses WHERE session_id IN ({marks})",
+                              list(ids)).fetchall()
+        out = {r["id"]: dict(r) | {"url": links("session", r["id"]), "witnesses": []} for r in rows}
+        for w in wit:
+            out[w["session_id"]]["witnesses"].append({"name": w["name"], "organisation": w["organisation"],
+                                                      "role": w["role"]})
+        return out
+
     def stats(self) -> dict[str, Any]:
         with self.connect() as con:
             built = con.execute("SELECT value FROM meta WHERE key = 'built'").fetchone()

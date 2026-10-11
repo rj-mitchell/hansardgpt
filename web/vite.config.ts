@@ -64,6 +64,7 @@ export default defineConfig({
         devolvedday: here("./devolvedday.html"),
         developers: here("./developers.html"),
         press: here("./press.html"),
+        evidence: here("./evidence.html"),
         charts: here("./charts.html"),
         compare: here("./compare.html"),
         notfound: here("./404.html"),

@@ -882,7 +882,52 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         d = get_committees().inquiry(iid)
         if d is None:
             raise HTTPException(404, "There is no inquiry with that number.")
+        have = get_evidence().available()
+        for s in d["sessions"]:
+            s["transcript"] = s["id"] in have
         return d
+
+    def get_evidence():
+        from hansard.sources.evidence import EvidenceStore
+        from hansard.sync import evidence_path
+
+        with lock:
+            if "evidence" not in holder:
+                holder["evidence"] = EvidenceStore(evidence_path(settings))
+        return holder["evidence"]
+
+    @app.get("/api/evidence")
+    def evidence_search(q: str = "", page: int = 1):
+        """What witnesses and committee members said in oral evidence (transcripts collected so far)."""
+        page = max(1, min(page, 200))
+        total, rows = get_evidence().search(q[:200], limit=25, offset=(page - 1) * 25)
+        sessions = {r["session_id"] for r in rows}
+        meta = get_committees().sessions_meta(sessions) if sessions else {}
+        return {"total": total, "page": page, "per_page": 25,
+                "items": [{**r, **meta.get(r["session_id"], {})} for r in rows]}
+
+    @app.get("/api/evidence/{sid}")
+    def evidence_detail(sid: int):
+        t = get_evidence().transcript(sid)
+        if t is None:
+            raise HTTPException(404, "There is no transcript for that session here yet.")
+        return {**t, **get_committees().sessions_meta({sid}).get(sid, {})}
+
+    @app.get("/evidence/{sid}", include_in_schema=False)
+    def evidence_page(sid: int, request: Request):
+        index = dist / "evidence.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        url = f"{str(request.base_url).rstrip('/')}/evidence/{sid}"
+        t = get_evidence().transcript(sid)
+        if t is None:
+            return Response(page_with_meta(page, title="Transcript not found — Where They Stand",
+                                           description="There is no transcript for that session here yet.", url=url,
+                                           image=None), status_code=404, media_type="text/html")
+        title = t["title"] or "Oral evidence"
+        return Response(page_with_meta(page, title=f"{title} — Where They Stand",
+                                       description=f"{title}: the transcript of a committee evidence session, with "
+                                                   "who said what.", url=url, image=None, noindex=False),
+                        media_type="text/html")
 
     @app.get("/api/witnesses")
     def witness_search(q: str = ""):

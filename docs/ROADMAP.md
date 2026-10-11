@@ -177,7 +177,7 @@ what committees heard and recommended.
 |---|---|---|
 | ✓ **Committee pages**: inquiries, reports and the government's responses, with links | 2–3 days | Done: /committees, /committees/<id> and /inquiries/<id>, rebuilt weekly from the Committees API, including how long each government response took |
 | ✓ **Witness index**: who gave evidence to which inquiry, searchable by organisation | 2 days | Done: /witnesses, plus each committee's most-heard organisations and, on MP and peer pages, the sessions where they were a witness |
-| **Oral evidence transcripts in search and briefings** | 5–8 days | The large item in section A. Different format; witnesses are not members, so they need their own labels |
+| **Oral evidence transcripts in search and briefings** | 5–8 days | The large item in section A. Different format; witnesses are not members, so they need their own labels. Readable (/evidence/<id>) and searchable (on /witnesses) from 2022, collected a few hundred per update; not yet in briefings |
 | **Plain-English summaries of evidence sessions** | 2 days, after the above | About $0.05–0.20 per session, written once and stored |
 | **Recommendation tracking**: each report recommendation, whether the government accepted it, and what happened next | 2–3 weeks | Recommendations and responses are long documents; matching them needs AI and checking by a person. Best done for a few committees first, or in partnership with a research group |
 

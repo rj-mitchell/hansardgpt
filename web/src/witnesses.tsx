@@ -12,6 +12,78 @@ interface Result {
   sessions: { id: number; date: string | null; name: string | null; organisation: string | null; role: string | null; committees: string | null; inquiry_id: number | null; inquiry: string | null; url: string }[];
 }
 
+interface Said {
+  total: number;
+  items: { session_id: number; ord: number; speaker: string; snippet: string; date?: string; committees?: string; inquiry?: string }[];
+}
+
+/** "[word]" marks the matches in a snippet. */
+function Snippet({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\[[^\]]*\])/).map((part, k) =>
+        part.startsWith("[") ? <mark key={k}>{part.slice(1, -1)}</mark> : <span key={k}>{part}</span>,
+      )}
+    </>
+  );
+}
+
+function WhatWasSaid() {
+  const [q, setQ] = useState("");
+  const [d, setD] = useState<Said | null>(null);
+  useEffect(() => {
+    if (!q) return;
+    fetch(`/api/evidence?q=${encodeURIComponent(q)}`)
+      .then((r) => (r.ok ? r.json() : { total: 0, items: [] }))
+      .then(setD)
+      .catch(() => setD({ total: 0, items: [] }));
+  }, [q]);
+  return (
+    <section aria-labelledby="h-said">
+      <h2 id="h-said">What witnesses said</h2>
+      <p className="muted small">Search the transcripts of oral evidence sessions collected so far (from 2022).</p>
+      <form
+        className="people-search-form"
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const v = new FormData(e.currentTarget).get("q");
+          setQ(typeof v === "string" ? v.trim() : "");
+        }}
+      >
+        <label htmlFor="said-q">Words to find in the transcripts</label>
+        <div className="ask-row">
+          <input id="said-q" name="q" placeholder="For example: grid connections" />
+          <button type="submit" className="primary">
+            Search
+          </button>
+        </div>
+      </form>
+      {d && (
+        <>
+          <p className="muted small" aria-live="polite">
+            {d.total.toLocaleString("en-GB")} passage{d.total === 1 ? "" : "s"} found.
+          </p>
+          <ul className="edm-list">
+            {d.items.map((i) => (
+              <li key={`${i.session_id}-${i.ord}`}>
+                <p className="timeline-date">
+                  <a href={`/evidence/${i.session_id}#t${i.ord}`}>{i.date ? fmtDate(i.date) : "Session"}</a>
+                  {i.committees ? ` · ${i.committees}` : ""}
+                  {i.inquiry ? ` · ${i.inquiry}` : ""}
+                </p>
+                <p>
+                  <strong>{i.speaker}</strong>: <Snippet text={i.snippet} />
+                </p>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Witnesses() {
   const [q, setQ] = useState(new URLSearchParams(window.location.search).get("q") ?? "");
   const [d, setD] = useState<Result | null>(null);
@@ -119,5 +191,6 @@ function Witnesses() {
 createRoot(document.getElementById("witnesses-root")!).render(
   <StrictMode>
     <Witnesses />
+    <WhatWasSaid />
   </StrictMode>,
 );
