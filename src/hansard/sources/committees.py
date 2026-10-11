@@ -355,14 +355,18 @@ class Committees:
         match = " ".join(f'"{w}"' for w in words)
         with self.connect() as con:
             rows = con.execute("""
-                SELECT w.organisation, count(DISTINCT w.session_id) AS sessions, min(s.date) AS first, max(s.date) AS last,
-                       group_concat(DISTINCT c.name) AS committees
+                SELECT w.organisation, count(DISTINCT w.session_id) AS sessions, min(s.date) AS first, max(s.date) AS last
                 FROM witnesses w JOIN sessions s ON s.id = w.session_id
-                LEFT JOIN session_committees sc ON sc.session_id = w.session_id
-                LEFT JOIN committees c ON c.id = sc.committee_id
                 WHERE w.rowid IN (SELECT rowid FROM witness_text WHERE witness_text MATCH ?)
                 GROUP BY coalesce(w.organisation, w.name) COLLATE NOCASE
                 ORDER BY sessions DESC LIMIT ?""", (match, limit)).fetchall()
+            committees = {}
+            for r in rows:  # which committees heard each organisation (names can contain commas)
+                committees[r["organisation"]] = [c[0] for c in con.execute("""
+                    SELECT DISTINCT c.name FROM witnesses w JOIN session_committees sc ON sc.session_id = w.session_id
+                    JOIN committees c ON c.id = sc.committee_id
+                    WHERE w.organisation = ? COLLATE NOCASE ORDER BY c.name""", (r["organisation"],))] \
+                    if r["organisation"] else []
             recent = con.execute("""
                 SELECT s.id, s.date, w.name, w.organisation, w.role,
                        (SELECT group_concat(c.name, '; ') FROM session_committees sc JOIN committees c ON c.id = sc.committee_id
@@ -374,7 +378,7 @@ class Committees:
                 FROM witnesses w JOIN sessions s ON s.id = w.session_id
                 WHERE w.rowid IN (SELECT rowid FROM witness_text WHERE witness_text MATCH ?)
                 ORDER BY s.date DESC LIMIT 40""", (match,)).fetchall()
-        return {"query": q, "organisations": [dict(r) | {"committees": sorted(set((r["committees"] or "").split(",")) - {""})}
+        return {"query": q, "organisations": [dict(r) | {"committees": committees.get(r["organisation"], [])}
                                               for r in rows],
                 "sessions": [dict(r) | {"url": links("session", r["id"])} for r in recent]}
 
