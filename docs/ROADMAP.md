@@ -120,7 +120,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | **Fill in missing dates of birth** (about 5% of members since 2010) from other sources, with a small corrections file | S | More complete age groupings |
 | ✓ **Glossary page** of parliamentary terms (division, Westminster Hall, urgent question and so on), linked from the source panel | S | Done: /glossary, linked from every vote label and the footer |
 | **Accessibility testing with real users** (screen reader and keyboard users) | M | Automated checks only catch some problems |
-| **Automatic accessibility check in CI**, so new pages stay accessible | S | |
+| ✓ **Automatic accessibility check in CI**, so new pages stay accessible | S | Done: scripts/a11y.mjs runs axe on 24 pages, light and dark, desktop and phone, against the site on sample data |
 
 **Running the site**
 | Item | Effort | What it gives |
