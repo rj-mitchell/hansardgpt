@@ -41,6 +41,7 @@ export default defineConfig({
         status: here("./status.html"),
         corrections: here("./corrections.html"),
         accessibility: here("./accessibility.html"),
+        resources: here("./resources.html"),
         about: here("./about.html"),
         privacy: here("./privacy.html"),
         terms: here("./terms.html"),

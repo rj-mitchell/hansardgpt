@@ -427,6 +427,33 @@ legend,
   border-block-end: 1px solid var(--rule-strong);
 }
 
+/* GOV.UK-style phase banner: the service is in beta */
+.phase-banner {
+  grid-column: breakout;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  font-family: var(--sans);
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+  text-align: start;
+  padding-block-end: var(--space-xs);
+  margin-block-end: var(--space-xs);
+  border-block-end: 1px solid var(--rule);
+}
+
+.phase-tag {
+  flex: none;
+  font-size: var(--step--2);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--ink-soft);
+  padding: 0.1em 0.5em;
+  border-radius: var(--radius);
+}
+
 .running-head {
   grid-column: breakout;
   display: flex;
@@ -449,6 +476,11 @@ legend,
   gap: var(--space-s);
   text-transform: none;
   letter-spacing: normal;
+}
+
+.masthead-actions > button {
+  flex: none;
+  white-space: nowrap;
 }
 
 .title-block {
@@ -2234,6 +2266,7 @@ main:focus {
   .examples-head,
   .footer-nav,
   .banner,
+  .phase-banner,
   .status::before {
     display: none !important;
   }
@@ -2302,4 +2335,25 @@ main:focus {
   .cite {
     border: 1px solid;
   }
+}
+
+/* ---- other resources: a site, then what it is best for ------------------------------- */
+
+.resources {
+  display: grid;
+  gap: var(--space-2xs);
+}
+
+.resources dt {
+  font-weight: 600;
+  margin-block-start: var(--space-s);
+}
+
+.resources dt:first-child {
+  margin-block-start: 0;
+}
+
+.resources dd {
+  margin-inline-start: 0;
+  color: var(--ink-soft);
 }

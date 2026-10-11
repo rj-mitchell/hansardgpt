@@ -264,6 +264,13 @@ export default function App() {
         Skip to main content
       </a>
       <header className="masthead full-width">
+        <p className="phase-banner">
+          <strong className="phase-tag">Beta</strong>{" "}
+          <span>
+            This is a new service and it is still being tested. Briefings can contain mistakes, so check the cited
+            sources. <a href="/corrections#report">Tell us about a problem</a>.
+          </span>
+        </p>
         <div className="running-head">
           <span>
             Debates, written answers and divisions{meta ? ` · ${meta.archive_start.slice(0, 4)} to date` : ""}
@@ -273,6 +280,7 @@ export default function App() {
               <a href="/people">MPs and peers</a>
               <a href="/about">About</a>
               <a href="/methodology">Methodology</a>
+              <a href="/resources">Other resources</a>
               <a href="/status">Status</a>
             </nav>
             <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
@@ -317,11 +325,13 @@ export default function App() {
               and the column or question reference.
             </p>
             <p className="muted small">
-              Looking for every mention of a word?{" "}
+              Where They Stand is in beta: it is new and still being tested, so check the cited sources. Looking for
+              every mention of a word?{" "}
               <a href="https://hansard.parliament.uk/search" target="_blank" rel="noreferrer">
                 Hansard's own search
               </a>{" "}
-              does that best.
+              does that best, and the <a href="/resources">other resources</a> page lists more sites worth using
+              alongside this one.
             </p>
             {composer("composer composer-inline")}
             <h3 className="examples-head">Example questions</h3>
@@ -415,12 +425,13 @@ export default function App() {
       <footer className="footer full-width">
         <p className="independence">{BRAND.independence}</p>
         <p className="print-only">
-          From {BRAND.name}, wheretheystand.uk. Briefings are written by AI from the cited Hansard records; check the
+          From {BRAND.name} (beta), wheretheystand.uk. Briefings are written by AI from the cited Hansard records; check the
           sources.
         </p>
         <nav className="footer-nav" aria-label="About this site">
           <a href="/about">About</a>
           <a href="/methodology">Methodology</a>
+          <a href="/resources">Other resources</a>
           <a href="/changelog">Changelog</a>
           <a href="/status">Status</a>
           <a href="/corrections">Corrections</a>
