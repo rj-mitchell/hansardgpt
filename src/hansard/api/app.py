@@ -178,6 +178,15 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 holder["p"] = Pipeline(settings, Engine(settings))
             return holder["p"]
 
+    def get_people():
+        from hansard.people import People
+
+        p = get_pipeline()
+        with lock:
+            if "people" not in holder:
+                holder["people"] = People(settings, p.engine.resolver, p.today)
+            return holder["people"]
+
     def current_user(request: Request) -> dict[str, Any] | None:
         user = user_for_token(state, request.cookies.get(COOKIE))
         if user is None and auth_required:
@@ -432,6 +441,63 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     @app.get("/api/admin/briefings")
     def briefings_list(limit: int = 50, user=Depends(admin_user)):
         return {"briefings": recent_briefings(state, min(max(limit, 1), 500))}
+
+    # ---- MPs and peers -----------------------------------------------------------------------
+    @app.get("/api/people")
+    def people_list(q: str = "", everyone: bool = False):
+        return {"people": get_people().search(q.strip()[:80], current_only=not everyone)}
+
+    @app.get("/api/people/{number}")
+    def person(number: int):
+        pp = get_people()
+        pid = pp.resolve(number)
+        page = pp.page(pid) if pid else None
+        if page is None:
+            raise HTTPException(404, "There is no member with that number.")
+        return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid)}
+
+    @app.get("/api/postcode/{postcode}")
+    def postcode(postcode: str, request: Request, user=Depends(current_user)):
+        requester(request, user)
+        try:
+            found = get_people().by_postcode(postcode)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        except Exception:  # Parliament's service could not be reached
+            raise HTTPException(503, "The postcode service could not be reached. Please try again.") from None
+        if not found:
+            raise HTTPException(404, "No constituency was found for that postcode.")
+        return found
+
+    @app.get("/people/{number}", include_in_schema=False)
+    @app.get("/people/{number}/{name}", include_in_schema=False)
+    def person_page(number: int, request: Request, name: str = ""):
+        """The person page, with that member's name and description in the page head."""
+        page_file = dist / "person.html"
+        html_doc = page_file.read_text() if page_file.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        pp = get_people()
+        pid = pp.resolve(number)
+        info = pp.page(pid) if pid else None
+        base = str(request.base_url).rstrip("/")
+        if info is None:
+            return Response(page_with_meta(html_doc, title="Member not found — Where They Stand",
+                                           description="There is no member at this address.",
+                                           url=f"{base}/people/{number}", image=None), status_code=404,
+                            media_type="text/html")
+        desc = f"{info['status']}. What {info['name']} has said in Parliament, with roles, majorities and votes."
+        return Response(page_with_meta(html_doc, title=f"{info['name']} — Where They Stand", description=desc,
+                                       url=f"{base}/people/{info['number']}/{info['slug']}",
+                                       image=f"{base}/og-image.png", image_alt="Where They Stand", noindex=False),
+                        media_type="text/html")
+
+    @app.get("/sitemap-people.xml", include_in_schema=False)
+    def sitemap_people(request: Request):
+        base = str(request.base_url).rstrip("/")
+        urls = "".join(f"<url><loc>{base}/people/{p['number']}/{p['slug']}</loc><changefreq>weekly</changefreq></url>"
+                       for p in get_people().search(current_only=True))
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
+                        f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
+                        media_type="application/xml")
 
     # ---- feedback, visit counts and public status ---------------------------------------
     @app.post("/api/feedback")

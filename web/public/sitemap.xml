@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://wheretheystand.uk/</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://wheretheystand.uk/people</loc><changefreq>weekly</changefreq></url>
   <url><loc>https://wheretheystand.uk/about</loc><changefreq>monthly</changefreq></url>
   <url><loc>https://wheretheystand.uk/methodology</loc><changefreq>monthly</changefreq></url>
   <url><loc>https://wheretheystand.uk/changelog</loc><changefreq>weekly</changefreq></url>

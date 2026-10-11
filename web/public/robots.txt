@@ -4,3 +4,4 @@ Disallow: /api/
 Disallow: /admin
 
 Sitemap: https://wheretheystand.uk/sitemap.xml
+Sitemap: https://wheretheystand.uk/sitemap-people.xml

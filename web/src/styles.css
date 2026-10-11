@@ -332,11 +332,11 @@ input[type="range"] {
   accent-color: var(--accent);
 }
 
-/* large enough to tap (WCAG 2.2 target size): 18px boxes in rows at least 24px apart */
+/* large enough to tap (WCAG 2.2 target size): at least 24px each */
 input[type="checkbox"],
 input[type="radio"] {
-  inline-size: 1.125rem;
-  block-size: 1.125rem;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
   margin: 0;
   flex: none;
 }
@@ -777,6 +777,12 @@ legend,
 
 .chip button {
   position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 1.5rem;
+  min-block-size: 1.5rem;
+  margin-block: -0.4rem;
+  margin-inline-end: -0.35rem;
   border: 0;
   background: none;
   padding: 0;
@@ -1170,6 +1176,76 @@ legend,
   line-height: 2;
 }
 
+/* ---- MPs and peers ------------------------------------------------------------------------ */
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--step--1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.ask-about {
+  display: grid;
+  gap: var(--space-2xs);
+  margin-block: var(--space-m, 1.5rem);
+  font-family: var(--sans);
+}
+
+.ask-row {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.ask-row input {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.people-search {
+  inline-size: 100%;
+  margin-block: var(--space-2xs) var(--space-s);
+}
+
+#people-live h3 {
+  margin-block: var(--space-m) var(--space-2xs);
+}
+
+.people-list {
+  padding: 0;
+  list-style: none;
+  columns: 2 18rem;
+  column-gap: var(--space-l);
+}
+
+.people-list li {
+  break-inside: avoid;
+  padding-block: 0.15em;
+}
+
+.person .seat h3,
+.person section h3 {
+  margin-block: var(--space-s) var(--space-2xs);
+  font-size: var(--step-0);
+}
+
+.person .roles,
+.person .contributions {
+  padding: 0;
+  list-style: none;
+}
+
+.person .contributions li {
+  padding-block: var(--space-xs);
+  border-block-end: 1px solid var(--rule);
+}
+
+.person .contributions p {
+  margin-block: 0.2em;
+}
+
 .corrections-list {
   padding: 0;
   list-style: none;
@@ -1423,6 +1499,17 @@ legend,
   gap: var(--space-xs);
   padding-block: var(--space-s) calc(var(--space-s) + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(to bottom, transparent, var(--paper) 30%);
+  /* the faded strip along the top must not swallow taps meant for the content behind it */
+  pointer-events: none;
+}
+
+.composer > * {
+  pointer-events: auto;
+}
+
+/* keep anything scrolled to or focused by keyboard clear of the question box pinned to the bottom (WCAG 2.4.11) */
+html:has(.thread .turn) {
+  scroll-padding-block-end: 9rem;
 }
 
 /* On the empty home page the question box sits under the introduction, above the examples. */

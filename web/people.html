@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <!--#include head-->
+    <title>MPs and peers — Where They Stand</title>
+    <meta name="description" content="Find your MP by postcode, or any MP or peer by name: what they have said in Parliament, their roles, majorities and votes." />
+    <link rel="canonical" href="https://wheretheystand.uk/people" />
+  </head>
+  <body>
+    <div class="app page">
+      <!--#include header-->
+      <main id="main" tabindex="-1" class="prose">
+        <h1>MPs and peers</h1>
+        <p class="lede">What each member has said in Parliament, with their roles, majorities and votes.</p>
+
+        <h2 id="your-mp">Your MP</h2>
+        <form id="postcode-form" class="ask-about" novalidate>
+          <label for="postcode">Your postcode</label>
+          <div class="ask-row">
+            <input id="postcode" name="postcode" autocomplete="postal-code" placeholder="for example SW1A 0AA" maxlength="10" required />
+            <button type="submit" class="primary">Find</button>
+          </div>
+          <p class="form-error" id="postcode-error" role="alert" hidden></p>
+          <p class="muted small">The postcode is looked up with the UK Parliament's own service and is not stored.</p>
+        </form>
+
+        <h2 id="find">Find a member</h2>
+        <label for="people-search">Name, constituency or party</label>
+        <input id="people-search" type="search" class="people-search" placeholder="for example Benn, Leeds or Green" />
+        <div id="people-live" aria-live="polite"><p class="muted">Loading…</p></div>
+      </main>
+      <!--#include footer-->
+    </div>
+    <script type="module" src="/src/peopleIndex.ts"></script>
+  </body>
+</html>

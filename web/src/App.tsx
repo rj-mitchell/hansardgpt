@@ -71,7 +71,14 @@ export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [question, setQuestion] = useState("");
+  // a question handed over from another page, such as an MP's page ("What has … said about …?")
+  const [question, setQuestion] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("q")?.slice(0, 500) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const [drawer, setDrawer] = useState<{ turn: string; h: Highlight } | null>(null);
   const [showControls, setShowControls] = useState(false);
@@ -263,6 +270,7 @@ export default function App() {
           </span>
           <span className="masthead-actions">
             <nav className="page-nav" aria-label="Site">
+              <a href="/people">MPs and peers</a>
               <a href="/about">About</a>
               <a href="/methodology">Methodology</a>
               <a href="/status">Status</a>

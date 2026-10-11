@@ -44,6 +44,8 @@ export default defineConfig({
         about: here("./about.html"),
         privacy: here("./privacy.html"),
         terms: here("./terms.html"),
+        person: here("./person.html"),
+        people: here("./people.html"),
         admin: here("./admin.html"),
       },
     },
