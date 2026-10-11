@@ -47,6 +47,10 @@ printf '[sshd]\nenabled = true\nbackend = systemd\n' > /etc/fail2ban/jail.d/wher
 systemctl enable fail2ban >/dev/null 2>&1 || true
 systemctl restart fail2ban || echo "WARNING: fail2ban did not start; carrying on (deploy/check.sh will flag it)."
 dpkg-reconfigure -f noninteractive unattended-upgrades
+# a file read last, so no image default can switch security updates off again; and the timers that act on it
+printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' > /etc/apt/apt.conf.d/99zz-auto-upgrades
+systemctl unmask apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
+systemctl enable --now apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
 # (sshd -T can fail on Ubuntu 24.04 when ssh is socket-activated; then the default port 22 is used)
 SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}' || true)"
 ufw allow "${SSH_PORT:-22}/tcp"

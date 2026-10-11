@@ -125,12 +125,16 @@ last_backup="$(ls -1t backups/where-they-stand-*.tar.gz 2>/dev/null | head -1)"
 [[ -n "$last_backup" ]] && ok "latest backup: $last_backup" || note "no backups yet (the first runs at 3.30am)"
 ufw status 2>/dev/null | grep -q "Status: active" && ok "firewall is on" || bad "firewall is off" "ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable"
 systemctl is-active --quiet fail2ban 2>/dev/null && ok "fail2ban is on" || bad "fail2ban is off" "apt-get install -y fail2ban && systemctl enable --now fail2ban"
-# what matters is apt's daily setting and timer, not the unattended-upgrades service itself
-if apt-config dump 2>/dev/null | grep -q 'APT::Periodic::Unattended-Upgrade "1"' \
-   && systemctl is-enabled --quiet apt-daily-upgrade.timer 2>/dev/null; then
+# what matters is apt's daily setting (the last one read wins) and the timer that acts on it
+AUTO_FIX="printf 'APT::Periodic::Update-Package-Lists \"1\";\\nAPT::Periodic::Unattended-Upgrade \"1\";\\n' > /etc/apt/apt.conf.d/99zz-auto-upgrades && systemctl unmask apt-daily.timer apt-daily-upgrade.timer && systemctl enable --now apt-daily.timer apt-daily-upgrade.timer"
+setting="$(apt-config dump 2>/dev/null | grep '^APT::Periodic::Unattended-Upgrade ' | tail -1)"
+timer="$(systemctl is-enabled apt-daily-upgrade.timer 2>/dev/null || true)"
+if [[ "$setting" == *'"1"'* && "$timer" == enabled ]]; then
   ok "automatic security updates are on"
+elif [[ "$setting" != *'"1"'* ]]; then
+  bad "automatic security updates are off (apt setting: ${setting:-not set})" "$AUTO_FIX"
 else
-  bad "automatic security updates are off" "dpkg-reconfigure -f noninteractive unattended-upgrades"
+  bad "automatic security updates are set up, but their daily timer is ${timer:-missing}" "$AUTO_FIX"
 fi
 if sshd -T 2>/dev/null | grep -qi "^passwordauthentication no"; then
   ok "password logins are off (key only)"
