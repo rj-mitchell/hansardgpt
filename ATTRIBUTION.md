@@ -22,6 +22,20 @@ committee memberships come from the `members/` data in
 the UK Parliament Members' Names Information Service (Open Parliament Licence
 v3.0). With thanks to mySociety for maintaining these datasets.
 
+## Early day motions, committees, interests and the devolved parliaments
+
+Early day motions and their signatures come from the UK Parliament
+[oral questions and motions API](https://oralquestionsandmotions-api.parliament.uk/), and committees, inquiries,
+reports, government responses and oral evidence witnesses from the UK Parliament
+[Committees API](https://committees-api.parliament.uk/), both under the Open Parliament Licence v3.0.
+
+The Register of Members' Financial Interests, the official reports of the Scottish Parliament, the Senedd and
+the Northern Ireland Assembly, and plain-English descriptions of some divisions
+([TheyWorkForYou Votes](https://votes.theyworkforyou.com/)) come from the data published by
+[TheyWorkForYou](https://www.theyworkforyou.com/pwdata/) (mySociety). The devolved reports contain information
+licensed under the Open Parliament Licence and the equivalent licences of the Scottish Parliament, the Senedd and
+the Northern Ireland Assembly.
+
 ## Gender and date of birth
 
 Members' gender and constituency election results (majorities, votes cast, by-elections) come from the UK
