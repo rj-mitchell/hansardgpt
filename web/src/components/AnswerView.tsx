@@ -59,6 +59,7 @@ export function AnswerView({
             {link && <ShareButton url={link} title={question} />}
             <CopyButton label="Copy with sources" text={() => briefingWithSources(question, answer, sources, new Date(), link)} />
             <CopyButton label="Copy references" text={() => referencesOnly(answer, sources)} />
+            {link && <CopyButton label="Copy embed code" text={() => embedCode(link, question)} />}
             <button
               type="button"
               className="secondary"
@@ -75,6 +76,18 @@ export function AnswerView({
         </>
       )}
     </div>
+  );
+}
+
+/** A snippet for a website or blog: the briefing's preview card, linking back to the briefing. */
+export function embedCode(link: string, question: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return (
+    `<a href="${esc(link)}" style="display:inline-block;max-width:600px">` +
+    `<img src="${esc(link)}/card.png" alt="${esc(`Where They Stand briefing: ${question}`)}" ` +
+    `width="600" style="width:100%;height:auto;border:1px solid #ccc"></a>\n` +
+    `<p style="font-size:0.9em">From <a href="${esc(link)}">Where They Stand</a>, a briefing on the UK ` +
+    `Parliament written by AI from the Hansard record (CC BY 4.0).</p>`
   );
 }
 
