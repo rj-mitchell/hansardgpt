@@ -9,6 +9,7 @@ If the API cannot be reached the previous copy is kept.
 from __future__ import annotations
 
 import html
+import json
 import logging
 import re
 import sqlite3
@@ -124,8 +125,14 @@ def _previous_purposes(path: Path) -> dict[int, str | None]:
 
 
 def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep,
-          details: bool = True) -> dict[str, Any]:
-    """Fetch everything and write a fresh database (swapped in only when complete)."""
+          details: bool = True, raw_cache: Path | None = None) -> dict[str, Any]:
+    """Fetch everything and write a fresh database (swapped in only when complete).
+
+    ``raw_cache``: keep (and reuse) what was fetched, for working on the code without fetching again."""
+    if raw_cache and Path(raw_cache).exists():
+        raw = json.loads(Path(raw_cache).read_text())
+        return _write(Path(path), raw["committees"], raw["businesses"], raw["pubs"], raw["sessions"],
+                      {int(k): v for k, v in raw["purposes"].items()})
     own = client is None
     client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
     try:
@@ -148,7 +155,14 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
             client.close()
     if not committees or not sessions:
         raise ValueError("the committees API returned no committees or no evidence sessions")
-    path = Path(path)
+    if raw_cache:
+        Path(raw_cache).write_text(json.dumps({"committees": committees, "businesses": businesses, "pubs": pubs,
+                                               "sessions": sessions, "purposes": purposes}))
+    return _write(Path(path), committees, businesses, pubs, sessions, purposes)
+
+
+def _write(path: Path, committees: list, businesses: list, pubs: list, sessions: list,
+           purposes: dict[int, str | None]) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.unlink(missing_ok=True)
@@ -170,7 +184,7 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
             docs = p.get("documents") or []
             con.execute("INSERT OR REPLACE INTO publications VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (
                 p["id"], ptype, p.get("description"), _day(p.get("publicationStartDate")),
-                (p.get("committee") or {}).get("id"), p.get("hcNumber"), p.get("hlPaper"),
+                (p.get("committee") or {}).get("id"), _paper(p.get("hcNumber")), _paper(p.get("hlPaper")),
                 p.get("responseToPublicationId"), docs[0].get("documentId") if docs else None))
             for b in p.get("businesses") or []:
                 _business(con, b)
@@ -209,6 +223,13 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
     tmp.replace(path)
     return {"committees": len(committees), "inquiries": len(businesses), "publications": len(pubs),
             "sessions": len(seen), "witnesses": n_witnesses, "built": built}
+
+
+def _paper(v: Any) -> str | None:
+    """'HC 61' from the API's {"number": "HC 61", "sessionId": …} (or a plain value in older records)."""
+    if isinstance(v, dict):
+        v = v.get("number")
+    return str(v) if v not in (None, "") else None
 
 
 def _business(con: sqlite3.Connection, b: dict[str, Any]) -> None:

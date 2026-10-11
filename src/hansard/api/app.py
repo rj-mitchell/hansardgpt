@@ -709,6 +709,41 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return week_page(start, request)
 
     # ---- early day motions -----------------------------------------------------------------------
+    # ---- the public search API (no AI) -----------------------------------------------------------
+    @app.get("/api/v1/search")
+    def public_search(request: Request, q: str = "", date_from: str | None = None, date_to: str | None = None,
+                      house: str | None = None, party: str | None = None, written: bool = True,
+                      limit: int = 20, user=Depends(current_user)):
+        """Search the Westminster record since 2010, ranked by relevance. Free; no AI. See /developers."""
+        from hansard.engine import Filters
+
+        requester(request, user)
+        q = " ".join(q.split())[:300]
+        if len(q) < 2:
+            raise HTTPException(400, "Give some words to search for (q).")
+        try:
+            filters = Filters(date_from=date.fromisoformat(date_from) if date_from else None,
+                              date_to=date.fromisoformat(date_to) if date_to else None,
+                              houses=[house] if house in ("commons", "lords") else [],
+                              parties=[party] if party else [])
+        except ValueError as exc:
+            raise HTTPException(400, "Dates must be written as YYYY-MM-DD.") from exc
+        res = get_pipeline().engine.search(q, filters, Scope(written=written), [], 0.0, 1.0,
+                                           max(1, min(int(limit), 50)), diversify=False)
+        out = []
+        for r in res.records:
+            sp = r.get("speaker") or {}
+            out.append({"record_id": r["record_id"], "date": r["date"], "house": r["house"], "chamber": r["chamber"],
+                        "type": r["record_type"], "heading": r.get("heading"),
+                        "speaker": {"name": sp.get("name") or r.get("speaker_name_raw"), "party": sp.get("party"),
+                                    "constituency": sp.get("constituency"), "person_id": sp.get("person_id")},
+                        "excerpt": " ".join((r.get("excerpt") or "").split())[:1000],
+                        "column": r.get("colnum"), "uin": r.get("uin"),
+                        "url": r.get("official_url") or r.get("twfy_url"), "twfy_url": r.get("twfy_url"),
+                        "relevance": round(r["ranking"]["relevance"], 4) if r.get("ranking") else None})
+        return {"query": q, "results": out, "count": len(out),
+                "licence": "Contains Parliamentary information licensed under the Open Parliament Licence v3.0."}
+
     # ---- the devolved parliaments --------------------------------------------------------------
     def get_devolved():
         from hansard.devolved import DevolvedStore, Members

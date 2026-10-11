@@ -61,29 +61,29 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | Item | Effort | Notes |
 |---|---|---|
 | ✓ **Your MP**: enter a postcode to see your MP, ask about them, see what they've said on a topic and their votes | M | Done 11 October: uses Parliament's own postcode look-up. No AI cost |
-| **Comparisons**: two MPs, parties or nations side by side on the same question | M | Costs the same as one or two briefings |
-| **Charts**: how much a subject was debated over time, by party, House and nation | M | No AI cost. Must show context with every number (the lesson from the NZ site's expenses) |
+| ✓ **Comparisons**: two MPs, parties or nations side by side on the same question | M | Costs the same as one or two briefings; Done: /compare |
+| ✓ **Charts**: how much a subject was debated over time, by party, House and nation | M | No AI cost. Must show context with every number (the lesson from the NZ site's expenses); Done: /charts, now including all five chambers |
 | ✓ **Topic briefings**: regularly refreshed briefings on the issues in the news, on permanent pages | S–M | Done 11 October: 16 topics in `config/topics.toml`. Rewritten only when due and the evidence has changed: about £2 to start, then roughly £2–6 a month |
 | **1997–2010** records | M–L | Needs the older boundary sets; disk use roughly doubles |
 | ✓ **Early Day Motions**: who signed which motions | M | Done: /edms to search and read motions and see who signed (with party on the day), and a section on each MP's page. Collected by the sync, working back to 2010 a year at a time. Briefings also use the two or three motions most relevant to a question, with signatures by party, as their own kind of source |
-| **Select committee evidence and reports** | L | Different source and format |
-| **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data |
+| ✓ **Select committee evidence and reports** | L | Different source and format; Committee pages, reports, government responses and the witness index done (/committees, /witnesses); transcripts in search still to do |
+| ✓ **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data; Done: /devolved (reading and search, since 2021); not yet in briefings |
 
 ### B. Discussed earlier, not yet built
 
 | Item | Effort | Notes |
 |---|---|---|
 | ✓ **MP and peer pages**: roles over time, seats, recent contributions, voting record, briefings asked about them | M | Done 11 October, with seats and majorities. Still to add: briefings asked about them |
-| **Recent-activity feed** on each MP page ("spoke in…", "voted against their party on…") | S, after MP pages | |
+| ✓ **Recent-activity feed** on each MP page ("spoke in…", "voted against their party on…") | S, after MP pages | Done |
 | **Voting record summaries** per member and topic, with the method shown in full | M | Per member done (votes and rebellions on MP pages); per topic still to do |
-| **Test set of 50–100 questions with scoring** | M | About $3–5 per run. The foundation for the next two items |
-| **Cheaper models where they are just as good** (for example, a smaller model for reading the question) | S, after the test set | Lowers running costs |
-| **Re-ranking step** for sharper choice of sources | M | Judged with the test set |
-| **Public search API** for researchers (search only, no AI briefings), documented and rate-limited | M | |
+| ✓ **Test set of 50–100 questions with scoring** | M | About $3–5 per run. The foundation for the next two items; Done: see docs/EVALUATION.md |
+| ✓ **Cheaper models where they are just as good** (for example, a smaller model for reading the question) | S, after the test set | Lowers running costs; Done: a smaller model reads the question |
+| ✓ **Re-ranking step** for sharper choice of sources | M | Judged with the test set; Done |
+| ✓ **Public search API** for researchers (search only, no AI briefings), documented and rate-limited | M | Done: /api/v1/search and the other JSON endpoints, documented on /developers |
 | **Topic alerts by email** (a weekly digest on chosen topics) | M–L | Needs an email-sending service and a sign-up with consent |
 | **Cloudflare protection** (proxy on) | S–M | Make the server trust Cloudflare's visitor details, choose the right certificate setting, update the privacy notice |
 | **Off-site backups** sent automatically to cheap storage | S | Needs a storage account from you (for example Backblaze B2) |
-| **Contact and press page**: a short media pack, logo files, how to cite the site | S | |
+| ✓ **Contact and press page**: a short media pack, logo files, how to cite the site | S | Done: /press |
 | ✓ **Link to the source code** from the About page and footer (the repository is public and MIT-licensed) | S | Done |
 
 ### B2. Added on 11 October
@@ -98,8 +98,8 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 **Finding and following positions**
 | Item | Effort | What it gives |
 |---|---|---|
-| **Timeline view**: one person's or party's statements on a topic in date order, with votes in between | M | Shows how positions developed, without the site judging consistency |
-| **Bill pages**: each bill's debates by stage (second reading, committee, report, Lords) with a briefing per stage | M | The data already includes bill names and committee debates |
+| ✓ **Timeline view**: one person's or party's statements on a topic in date order, with votes in between | M | Shows how positions developed, without the site judging consistency; Done: /timeline |
+| ✓ **Bill pages**: each bill's debates by stage (second reading, committee, report, Lords) with a briefing per stage | M | The data already includes bill names and committee debates; Done: /bills, with every vote's kind and the debates in full; a briefing per stage still to do |
 | ✓ **Debate pages**: "what was said in this debate", one briefing per debate | S–M | Done: every debate since 2010 readable in full on the site, with each speaker as they were on the day, its votes and an "Ask about this debate" box. Linked from sources, timelines, member and bill pages. A ready-made briefing per debate is still to do |
 | ✓ **"Ask about this"** in the source panel: a follow-up question about one speech or speaker | S | Done |
 | ✓ **Sources only** button: show the balanced evidence set without writing a briefing | S | Done |

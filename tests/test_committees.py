@@ -16,7 +16,8 @@ DATA = {
     "/api/CommitteeBusiness": [INQ],
     "/api/Publications": [
         {"id": 1, "type": {"id": 1}, "description": "Rail fares: first report", "publicationStartDate": "2024-06-01T10:00:00",
-         "committee": COMMITTEE, "hcNumber": "123", "businesses": [INQ], "documents": [{"documentId": 55}]},
+         "committee": COMMITTEE, "hcNumber": {"number": "HC 123", "sessionId": 38}, "hlPaper": None,
+         "businesses": [INQ], "documents": [{"documentId": 55}]},
         {"id": 2, "type": {"id": 2}, "description": "Government response", "publicationStartDate": "2024-07-31T10:00:00",
          "committee": COMMITTEE, "responseToPublicationId": 1, "businesses": [INQ], "documents": []},
     ],
@@ -65,6 +66,7 @@ def test_build_and_read(tmp_path):
     inq = c.inquiry(900)
     response = next(p for p in inq["publications"] if p["type"] == "Government response")
     assert response["days_after_report"] == 60
+    assert next(p for p in inq["publications"] if p["type"] == "Report")["hc"] == "HC 123", "the paper number as given"
     assert [len(s["witnesses"]) for s in inq["sessions"]] == [2, 1]
     found = c.witnesses("passenger watch")
     assert found["organisations"][0]["sessions"] == 2 and len(found["sessions"]) == 2

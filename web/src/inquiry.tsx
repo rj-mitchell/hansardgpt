@@ -90,8 +90,8 @@ function Page({ id }: { id: string }) {
                 <span className="muted small">
                   {" "}
                   {p.date ? fmtDate(p.date) : ""}
-                  {p.hc ? ` · HC ${p.hc}` : ""}
-                  {p.hl ? ` · HL Paper ${p.hl}` : ""}
+                  {p.hc ? ` · ${/^HC/i.test(p.hc) ? p.hc : `HC ${p.hc}`}` : ""}
+                  {p.hl ? ` · ${/^HL/i.test(p.hl) ? p.hl : `HL Paper ${p.hl}`}` : ""}
                   {p.days_after_report != null ? ` · ${p.days_after_report} days after the report` : ""}
                 </span>
               </li>
