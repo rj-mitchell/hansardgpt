@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -113,6 +114,21 @@ def group_label(speaker: dict[str, Any] | None, group_by: str = "role") -> str:
     return GROUPS[speaker_group(speaker)]
 
 
+# A speaker's own declaration in the record, e.g. "I refer the House to my entry in the Register of Members'
+# Financial Interests" or "I declare an interest as a member of Unite": first person only, never about someone else.
+_DECLARED = re.compile(
+    r"(?:^|(?<=[.?!]\s))[^.?!]*?\b(?:I|We)\b[^.?!]{0,60}?(?:"
+    r"\b(?:declare|declaring)\b[^.?!]{0,20}?\b(?:an?|my|our)\b[^.?!]{0,80}?\b(?:interests?|[Rr]egister)\b"
+    r"|\b(?:refer|referring|draw|drawing|remind|direct)\b[^.?!]{0,80}?\b(?:my|our)\b[^.?!]{0,60}?"
+    r"\b(?:entry|entries|interests?|[Rr]egister)\b)[^.?!]*[.?!]?")
+
+
+def declared_interest(text: str) -> str | None:
+    """The sentence in which the speaker declared an interest, as they said it (None if they did not)."""
+    m = _DECLARED.search(text or "")
+    return " ".join(m.group(0).split()) if m else None
+
+
 def record_source(n: int, r: dict[str, Any], facets: set[str] | bool = False, group_by: str = "role") -> Source:
     ref = f"col. {r['colnum']}" if r.get("colnum") else (f"UIN {r['uin']}" if r.get("uin") else "")
     heading = r.get("heading") or r.get("minor_heading") or r.get("major_heading") or ""
@@ -144,6 +160,7 @@ def record_source(n: int, r: dict[str, Any], facets: set[str] | bool = False, gr
         "text": r["text"],
         "context": r.get("context"),
         "ranking": r.get("ranking"),
+        "declared": declared_interest(r["text"]),
     }
     return Source(n, "record", title, url, blocks, meta)
 

@@ -101,6 +101,7 @@ export interface SourceCard {
   // devolved parliaments
   legislature?: string;
   member?: { name: string | null; party: string | null; seat: string | null; number?: number | null; slug?: string | null };
+  declared?: string | null; // the speaker's own declaration of an interest, as said
   // oral evidence to committees
   committee?: string;
   inquiry?: string | null;

@@ -100,6 +100,7 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
         )}
         {roles.length > 0 && <span className="role">{roles.join("; ")}</span>}
         {seat && <span className="seat">{seat}</span>}
+        {s.declared && <span className="seat">Declared an interest when speaking</span>}
         <span className="where">
           <time dateTime={s.date}>{fmtDate(s.date)}</time> · {s.chamber}
           {s.heading ? ` · ${s.heading}` : ""}
@@ -216,6 +217,23 @@ export function SourceDrawer({
               )}
               <dt>Role on {fmtDate(source.date)}</dt>
               <dd>{roleTitles(sp).length ? roleTitles(sp).join("; ") : "Backbencher (no ministerial or committee-chair post)"}</dd>
+              {source.declared && (
+                <>
+                  <dt>Declared an interest</dt>
+                  <dd>
+                    “{source.declared}”{" "}
+                    <span className="muted small">
+                      (in their own words)
+                      {sp?.house === "commons" && sp.person_id && (
+                        <>
+                          {" · "}
+                          <a href={`/people/${sp.person_id.split("/").pop()}#h-interests`}>Their registered interests</a>
+                        </>
+                      )}
+                    </span>
+                  </dd>
+                </>
+              )}
               {sp?.house === "commons" && sp.majority_then && (
                 <>
                   <dt>Majority then</dt>
