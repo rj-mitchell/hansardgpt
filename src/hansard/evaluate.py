@@ -190,17 +190,19 @@ class Variant:
     reranker: str = ""           # cross-encoder model name, or "" for none
     rerank_query: str = "both"   # question | keywords | both
     rerank_weight: float | None = None
+    rerank_top: int | None = None
 
 
 def parse_variant(text: str) -> Variant:
-    """``baseline`` or ``rerank:<model>[:<question|keywords|both>[:<weight>]]``."""
+    """``baseline`` or ``rerank:<model>[:<question|keywords|both>[:<weight>[:<how many to re-rank>]]]``."""
     if text == "baseline":
         return Variant("baseline")
     parts = text.split(":")
     if parts[0] != "rerank" or len(parts) < 2:
         raise ValueError(f"unknown variant {text!r}")
     return Variant(text, parts[1], parts[2] if len(parts) > 2 else "both",
-                   float(parts[3]) if len(parts) > 3 else None)
+                   float(parts[3]) if len(parts) > 3 and parts[3] else None,
+                   int(parts[4]) if len(parts) > 4 else None)
 
 
 def run_sources(settings: Settings, plans: dict[str, dict[str, Any]], questions: list[Question], today: date,
@@ -211,6 +213,8 @@ def run_sources(settings: Settings, plans: dict[str, dict[str, Any]], questions:
         s = with_model(s, "ranking", "rerank_query", variant.rerank_query)
         if variant.rerank_weight is not None:
             s = with_model(s, "ranking", "rerank_weight", variant.rerank_weight)
+        if variant.rerank_top is not None:
+            s = with_model(s, "ranking", "rerank_top", variant.rerank_top)
     else:
         s = with_model(s, "ranking", "reranker", "")
     engine = Engine(s, today=today)
