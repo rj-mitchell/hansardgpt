@@ -7,7 +7,9 @@ weights downloaded once like the embedding model), so it costs nothing per quest
 
 The relevance used for ranking becomes a blend: ``(1 - weight) * search relevance + weight * cross-encoder score``.
 Candidates beyond the re-ranked set are treated as if the cross-encoder had scored them zero, so they stay below.
-Recency and the role weighting apply exactly as before. Turned on with ``[ranking] reranker`` in the settings.
+Recency and the role weighting apply exactly as before. Which speaker groups are eligible for the evidence is still
+decided by the search relevance (see ``select_evidence``), so re-ranking changes the order, never the balance.
+Turned on with ``[ranking] reranker`` in the settings.
 """
 
 from __future__ import annotations
@@ -64,10 +66,11 @@ def rerank(scored: list[Scored], query: str, reranker: Reranker, top: int = 150,
     out = []
     for s, x in zip(head, sims, strict=True):
         rel = (1 - weight) * s.relevance + weight * x
-        out.append(replace(s, relevance=rel, score=rel * s.recency * s.authority, rerank=x))
+        out.append(replace(s, relevance=rel, score=rel * s.recency * s.authority, rerank=x,
+                           base_relevance=s.relevance))
     for s in tail:
         rel = (1 - weight) * s.relevance
-        out.append(replace(s, relevance=rel, score=rel * s.recency * s.authority))
+        out.append(replace(s, relevance=rel, score=rel * s.recency * s.authority, base_relevance=s.relevance))
     out.sort(key=lambda s: (-s.score, -s.relevance, s.candidate.record_id))
     return out
 

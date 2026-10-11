@@ -85,8 +85,11 @@ def select_evidence(scored: list[Scored], profiles: dict[str, Any], k: int, *, m
                     min_relevance_ratio: float = 0.25, group_by: str = "role") -> list[Scored]:
     if not scored:
         return []
-    best_rel = max(s.relevance for s in scored)
-    pool = [s for s in scored if s.relevance >= best_rel * min_relevance_ratio]
+    def rel(s: Scored) -> float:  # search relevance: re-ranking reorders the evidence but must not narrow it
+        return s.relevance if s.base_relevance is None else s.base_relevance
+
+    best_rel = max(rel(s) for s in scored)
+    pool = [s for s in scored if rel(s) >= best_rel * min_relevance_ratio]
     per_speaker: Counter[str] = Counter()
     groups: dict[str, list[Scored]] = defaultdict(list)
     for s in pool:  # already in score order

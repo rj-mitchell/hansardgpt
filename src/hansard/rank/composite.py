@@ -85,6 +85,7 @@ class Scored:
     authority_reason: str
     score: float
     rerank: float | None = None  # the cross-encoder's score, when re-ranking is on
+    base_relevance: float | None = None  # search relevance before re-ranking (decides which groups are in the pool)
 
     def breakdown(self) -> dict[str, Any]:
         out = {
