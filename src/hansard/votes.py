@@ -129,6 +129,9 @@ def division_text(d: dict[str, Any]) -> list[str]:
     blocks = [f"{house} division {d['number']} on {d['date']}: {title}. "
               f"Result: Ayes {d['ayes']}, Noes {d['noes']}."]
     vt = d.get("vote_type")
+    if vt and vt.get("aye_means"):  # written by mySociety or Parliament, for some votes
+        blocks.append(f"What the vote was on (TheyWorkForYou Votes). Voting aye: {vt['aye_means']}"
+                      + (f" Voting no: {vt['no_means']}" if vt.get("no_means") else ""))
     if vt and vt["kind"] != "other":
         what = f"Kind of vote: {vt['label']}. {vt['note']}"
         if vt.get("question"):

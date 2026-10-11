@@ -282,6 +282,13 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                 stats["edms"] = {"error": str(exc)[:200]}
 
         t = time.time()
+        if fetch:
+            try:  # plain-English descriptions of some votes, from TheyWorkForYou Votes (weekly)
+                from hansard.sources.twfy_votes import refresh as refresh_descriptions
+
+                stats["vote_descriptions"] = refresh_descriptions(settings.data_dir / "raw" / "twfy_divisions.parquet")
+            except Exception as exc:
+                log.warning("vote descriptions not updated: %s", exc)
         try:  # what each vote was on (amendment, second reading and so on), used across the site
             from hansard.vote_types import vote_types
 

@@ -102,7 +102,7 @@ export function Timeline({ query, showSpeaker }: { query: string; showSpeaker: b
                     : `The party's members: ${i.party_ayes ?? 0} Aye, ${i.party_noes ?? 0} No.`}{" "}
                   Result: Ayes {i.ayes}, Noes {i.noes} ({i.house === "lords" ? "Lords" : "Commons"} division {i.number}).
                 </p>
-                {i.vote_type && i.vote_type.kind !== "other" && (
+                {i.vote_type && (
                   <p className="small">
                     <VoteKind vt={i.vote_type} detail />
                   </p>

@@ -2,13 +2,22 @@ import type { VoteType } from "../types";
 
 /** The kind of vote (amendment, second reading…) as a link to its glossary entry, with what it usually means. */
 export function VoteKind({ vt, detail = false }: { vt?: VoteType; detail?: boolean }) {
-  if (!vt || vt.kind === "other") return null;
+  if (!vt || (vt.kind === "other" && !vt.aye_means)) return null;
   return (
     <span className="vote-kind">
-      <a className="vote-kind-label" href={`/glossary#vote-${vt.kind.replace(/_/g, "-")}`}>
-        {vt.label}
-      </a>
-      {detail && (
+      {vt.kind !== "other" && (
+        <a className="vote-kind-label" href={`/glossary#vote-${vt.kind.replace(/_/g, "-")}`}>
+          {vt.label}
+        </a>
+      )}
+      {vt.aye_means && (
+        <span className="vote-kind-means">
+          {vt.kind !== "other" ? ". " : ""}Voting aye: {vt.aye_means}
+          {detail && vt.no_means ? ` Voting no: ${vt.no_means}` : ""}{" "}
+          <span className="muted small">(TheyWorkForYou Votes)</span>
+        </span>
+      )}
+      {detail && vt.kind !== "other" && (
         <>
           {vt.question && (
             <span className="vote-kind-question">

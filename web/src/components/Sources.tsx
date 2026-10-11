@@ -373,7 +373,7 @@ function DivisionDetail({ source }: { source: SourceCard }) {
       <p>
         <strong>{[source.major_heading, source.minor_heading].filter(Boolean).join(" — ")}</strong>
       </p>
-      {source.vote_type && source.vote_type.kind !== "other" && (
+      {source.vote_type && (
         <p className="small">
           <VoteKind vt={source.vote_type} detail />
         </p>

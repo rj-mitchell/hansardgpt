@@ -107,6 +107,9 @@ export interface VoteType {
   note: string;
   question: string;
   outcome: string;
+  title?: string;
+  aye_means?: string;
+  no_means?: string;
 }
 
 export interface Filters {

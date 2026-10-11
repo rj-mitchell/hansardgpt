@@ -223,7 +223,7 @@ function Person({ number }: { number: string }) {
                 {p.voting.recent_rebellions.map((r) => (
                   <li key={r.date + r.title}>
                     {fmtDate(r.date)}: <a href={r.twfy_url}>{r.title || "Division"}</a>
-                    {r.vote_type && r.vote_type.kind !== "other" && (
+                    {r.vote_type && (
                       <>
                         {" "}
                         (<VoteKind vt={r.vote_type} />)

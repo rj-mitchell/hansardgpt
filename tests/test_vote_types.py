@@ -71,3 +71,29 @@ def test_built_from_the_record_and_cached(indexed_settings):
     assert again.all() == types
     some = next(iter(types))
     assert vt.annotate([{"division_id": some}, {"title": "no id"}])[0]["vote_type"] == types[some]
+
+
+def test_plain_english_descriptions_are_added(indexed_settings, tmp_path):
+    import shutil
+
+    from hansard.sources.twfy_votes import descriptions
+
+    con = duckdb.connect()
+    attach_store(con, indexed_settings.parquet_dir)
+    did = con.execute("SELECT division_id FROM divisions LIMIT 1").fetchone()[0]
+    raw = indexed_settings.data_dir / "raw" / "twfy_divisions.parquet"
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    con.execute(f"""COPY (SELECT * FROM (VALUES
+        ('{did}', 'commons', 'en', 'Test <i>Bill</i> &#8212; Second Reading', 'MANUAL', 'giving the bill a second reading. ', ''),
+        ('x', 'scotland', 'en', 'Elsewhere', 'MANUAL', 'something', '')
+      ) t(source_gid, chamber, language, division_title, title_priority, yes_text, no_text)) TO '{raw.as_posix()}'
+      (FORMAT PARQUET)""")
+    try:
+        d = descriptions(raw)
+        assert list(d) == [did], "Westminster divisions only"
+        assert d[did] == {"title": "Test Bill — Second Reading", "aye_means": "giving the bill a second reading."}
+        vt = VoteTypes(indexed_settings)
+        assert vt.get(did)["aye_means"] == "giving the bill a second reading."
+    finally:
+        raw.unlink(missing_ok=True)
+        shutil.rmtree(tmp_path, ignore_errors=True)

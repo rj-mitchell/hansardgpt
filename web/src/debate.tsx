@@ -161,7 +161,7 @@ function Debate({ path }: { path: string }) {
                     </a>
                   )}
                 </p>
-                {i.vote_type && i.vote_type.kind !== "other" && (
+                {i.vote_type && (
                   <p className="small">
                     <VoteKind vt={i.vote_type} detail />
                   </p>
