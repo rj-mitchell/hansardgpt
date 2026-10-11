@@ -35,13 +35,15 @@ DATA = {
 calls: list[int] = []
 
 
-def fake_api() -> httpx.Client:
+def fake_api(fail_owner: str | None = None) -> httpx.Client:
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path.startswith("/api/Committees/"):
             return httpx.Response(200, json={"purpose": "<p>We scrutinise <b>transport</b>.</p><p>More.</p>"})
         items = DATA.get(path, [])
         owner = request.url.params.get("CommitteeId")
+        if owner and owner == fail_owner:
+            return httpx.Response(500)
         if owner:  # whose inquiry each is: only this list says so
             items = [i for i in items if (i["id"] == 900) == (owner == "10")]
             calls.append(int(owner))
@@ -163,4 +165,15 @@ def test_inquiries_get_their_committee_from_its_own_list(tmp_path):
     calls.clear()  # a rebuild asks again only about committees still sitting
     build(path, fake_api(), no_wait)
     assert calls == [10]
+    assert [x["name"] for x in Committees(path).inquiry(901)["committees"]] == ["Old Committee"]
+    assert [x["name"] for x in Committees(path).inquiry(900)["committees"]] == ["Transport Committee"]
+
+
+def test_a_committee_the_service_fails_on_does_not_stop_the_build(tmp_path):
+    path = tmp_path / "committees.sqlite"
+    build(path, fake_api(fail_owner="11"), no_wait)
+    assert Committees(path).inquiry(901)["committees"] == []
+    calls.clear()
+    build(path, fake_api(), no_wait)
+    assert sorted(calls) == [10, 11], "tried again next time"
     assert [x["name"] for x in Committees(path).inquiry(901)["committees"]] == ["Old Committee"]

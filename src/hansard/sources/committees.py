@@ -31,6 +31,7 @@ API = "https://committees-api.parliament.uk/api"
 SITE = "https://committees.parliament.uk"
 REFRESH = timedelta(days=6)
 PAGE = 500
+OWNER_PAGE = 100  # the per-committee lists fail at 500
 PAUSE = 0.25
 FIRST_YEAR = 2010  # the start of the site's archive
 REPORT_TYPES = {1: "Report", 2: "Government response", 12: "Special report"}
@@ -73,17 +74,17 @@ def _plain(text: str | None, limit: int = 600) -> str | None:
     return out[:limit] if out else None
 
 
-def _pages(client: httpx.Client, path: str, params: dict[str, Any], sleep: Callable[[float], None]
-           ) -> list[dict[str, Any]]:
+def _pages(client: httpx.Client, path: str, params: dict[str, Any], sleep: Callable[[float], None],
+           take: int = PAGE) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     skip = 0
     while True:
-        body = _get(client, path, {**params, "Skip": skip, "Take": PAGE}, sleep)
+        body = _get(client, path, {**params, "Skip": skip, "Take": take}, sleep)
         items = (body or {}).get("items") or []
         out += items
-        skip += PAGE
+        skip += take
         total = (body or {}).get("totalResults")
-        if len(items) < PAGE or (total is not None and skip >= total) or skip > 100000:
+        if len(items) < take or (total is not None and skip >= total) or skip > 100000:
             return out
 
 
@@ -125,39 +126,49 @@ def _previous_purposes(path: Path) -> dict[int, str | None]:
         return {}
 
 
-def _previous_owners(path: Path) -> tuple[dict[int, list[int]], set[int]]:
-    """Which committee each inquiry belongs to, as looked up for the last copy, and the closed committees already
-    looked up (their lists cannot change, so a weekly rebuild asks only about current and new committees)."""
+def _previous_owners(path: Path) -> tuple[dict[int, set[int]], set[int], str | None]:
+    """Which committee each inquiry belongs to, as looked up for the last copy; the committees whose whole list
+    was fetched; and when that copy was built."""
     if not path.exists():
-        return {}, set()
+        return {}, set(), None
     try:
         con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         try:
-            owners: dict[int, list[int]] = {}
+            owners: dict[int, set[int]] = {}
             for cid, iid in con.execute("SELECT committee_id, inquiry_id FROM committee_business"):
-                owners.setdefault(cid, []).append(iid)
-            done = con.execute("SELECT value FROM meta WHERE key = 'owners_done'").fetchone()
-            return owners, set(json.loads(done[0])) if done else set()
+                owners.setdefault(cid, set()).add(iid)
+            meta = dict(con.execute("SELECT key, value FROM meta").fetchall())
+            return owners, set(json.loads(meta.get("owners_done") or "[]")), meta.get("built")
         finally:
             con.close()
     except (sqlite3.Error, ValueError):
-        return {}, set()
+        return {}, set(), None
 
 
 def _owners(client: httpx.Client, committees: list[dict[str, Any]], path: Path, sleep: Callable[[float], None]
-            ) -> dict[int, list[int]]:
+            ) -> tuple[dict[int, set[int]], set[int]]:
     """The inquiry list does not say whose inquiry each is, so ask committee by committee (those sitting since
-    2010), reusing what is known for closed committees."""
-    owners, done = _previous_owners(path)
+    2010). A committee's whole list is fetched once; after that, closed committees are not asked again and
+    current ones only for recent work. The service is slow and fails on large pages, so pages are small, and a
+    committee that fails keeps what was known and is tried again next time."""
+    owners, done, built = _previous_owners(path)
+    since = (datetime.fromisoformat(built) - timedelta(days=120)).date().isoformat() if built else None
     for c in committees:
         cid = c.get("id")
         if not cid or (_day(c.get("endDate")) or "9999") < f"{FIRST_YEAR}":
             continue
         if c.get("endDate") and cid in done:
             continue
-        owners[cid] = [b["id"] for b in _pages(client, "/CommitteeBusiness", {"CommitteeId": cid}, sleep)
-                       if b.get("id")]
-    return owners
+        recent = cid in done and since is not None
+        try:
+            found = _pages(client, "/CommitteeBusiness", {"CommitteeId": cid, **({"DateFrom": since} if recent else {})},
+                           sleep, take=OWNER_PAGE)
+        except httpx.HTTPError as e:
+            log.warning("committee %s: its inquiries could not be listed (%s); trying again next time", cid, e)
+            continue
+        owners[cid] = (owners.get(cid, set()) if recent else set()) | {b["id"] for b in found if b.get("id")}
+        done.add(cid)
+    return owners, done
 
 
 def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep,
@@ -169,7 +180,7 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
         raw = json.loads(Path(raw_cache).read_text())
         return _write(Path(path), raw["committees"], raw["businesses"], raw["pubs"], raw["sessions"],
                       {int(k): v for k, v in raw["purposes"].items()},
-                      {int(k): v for k, v in (raw.get("owners") or {}).items()})
+                      {int(k): set(v) for k, v in (raw.get("owners") or {}).items()}, set(raw.get("owners_done") or []))
     own = client is None
     client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
     try:
@@ -187,7 +198,7 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
                 if not c.get("endDate") and c.get("id") and not purposes.get(c["id"]):
                     one = _get(client, f"/Committees/{c['id']}", None, sleep) or {}
                     purposes[c["id"]] = _plain(one.get("purpose"))
-        owners = _owners(client, committees, Path(path), sleep)
+        owners, owners_done = _owners(client, committees, Path(path), sleep)
     finally:
         if own:
             client.close()
@@ -195,12 +206,15 @@ def build(path: Path, client: httpx.Client | None = None, sleep: Callable[[float
         raise ValueError("the committees API returned no committees or no evidence sessions")
     if raw_cache:
         Path(raw_cache).write_text(json.dumps({"committees": committees, "businesses": businesses, "pubs": pubs,
-                                               "sessions": sessions, "purposes": purposes, "owners": owners}))
-    return _write(Path(path), committees, businesses, pubs, sessions, purposes, owners)
+                                               "sessions": sessions, "purposes": purposes,
+                                               "owners": {k: sorted(v) for k, v in owners.items()},
+                                               "owners_done": sorted(owners_done)}))
+    return _write(Path(path), committees, businesses, pubs, sessions, purposes, owners, owners_done)
 
 
 def _write(path: Path, committees: list, businesses: list, pubs: list, sessions: list,
-           purposes: dict[int, str | None], owners: dict[int, list[int]] | None = None) -> dict[str, Any]:
+           purposes: dict[int, str | None], owners: dict[int, set[int]] | None = None,
+           owners_done: set[int] | None = None) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.unlink(missing_ok=True)
@@ -261,8 +275,7 @@ def _write(path: Path, committees: list, businesses: list, pubs: list, sessions:
                     n_witnesses += 1
         con.execute("INSERT INTO witness_text (witness_text) VALUES ('rebuild')")
         built = datetime.now(UTC).isoformat(timespec="seconds")
-        closed = {c["id"] for c in committees if c.get("id") and c.get("endDate")}
-        done = sorted(closed & set(owners or {}))
+        done = sorted(owners_done or set())
         con.executemany("INSERT INTO meta VALUES (?, ?)",
                         [("built", built), ("source", API), ("owners_done", json.dumps(done))])
         con.commit()
