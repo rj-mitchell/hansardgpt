@@ -57,8 +57,10 @@ comprehensive_sources = 40
 summary_effort = "medium"
 comprehensive_effort = "high"
 query_parse_effort = "low"
-# The model that reads each question and chooses the filters (defaults to the model above).
-# query_parse_model = "claude-haiku-5-5"
+# The model that reads each question and chooses the filters (defaults to the model above). On the 62-question test
+# set (eval/), Haiku chose every filter right on 60 (Opus: 62), about twice as fast, at a thirtieth of the cost
+# (about 0.01p a question), so it also reads the question for "Sources only".
+query_parse_model = "claude-haiku-5-5"
 max_tokens = 16000
 # Server-side refusal fallback (beta). Disable if your account or platform rejects it.
 use_fallbacks = true

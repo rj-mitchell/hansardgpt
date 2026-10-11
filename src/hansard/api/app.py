@@ -73,7 +73,7 @@ from hansard.api.usage import (
 from hansard.config import REPO_ROOT, Settings, load_settings
 from hansard.engine import Engine, Scope
 from hansard.rag import prompts
-from hansard.rag.pipeline import AskRequest, Pipeline
+from hansard.rag.pipeline import AskRequest, Pipeline, rerank_query
 from hansard.rag.query_parse import ITL1_REGIONS, QueryPlan, parse_model
 from hansard.reference.portfolios import PORTFOLIOS
 from hansard.store.state import StateDB
@@ -314,10 +314,10 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 return
             if body.sources_only:
                 yield from sources_only_events(body, "Sources only: no briefing was written. Ask again without "
-                                                     "'Sources only' for a written briefing.")
+                                                     "'Sources only' for a written briefing.", uid, visitor)
                 return
             if blocked:  # the sources still help, and cost nothing
-                yield from sources_only_events(body, f"{blocked} The sources found are shown below.")
+                yield from sources_only_events(body, f"{blocked} The sources found are shown below.", uid, visitor)
                 return
             kept: list[dict[str, Any]] = []
             text: list[str] = []
@@ -362,11 +362,22 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return StreamingResponse(_sse(events()), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-    def retrieve(body: AskBody) -> dict[str, Any]:
-        """Retrieval only (no model call): the plan and ranked sources for the question or edited plan."""
+    def retrieve(body: AskBody, read_with_model: bool = False, uid: int | None = None,
+                 visitor: str | None = None) -> dict[str, Any]:
+        """The plan and ranked sources for the question or edited plan, without writing a briefing.
+
+        The question is read by the model when ``read_with_model`` (a fraction of a penny with a small model, and far
+        more accurate), otherwise by the free built-in rules.
+        """
         p = get_pipeline()
         if body.plan:
             plan = QueryPlan.from_dict({"question": body.question, **body.plan})
+        elif read_with_model and p.has_model():
+            plan, usage = p.make_plan(AskRequest(question=body.question, history=body.history))
+            if plan.parse_error:
+                record_failure(state, "question reading", body.question, plan.parse_error)
+            if usage:
+                record_usage(state, uid, "parse", parse_model(settings), usage, settings.usage, visitor)
         else:
             from hansard.rag.query_parse import parse_offline
 
@@ -374,7 +385,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         limit = int(settings.answer.get("comprehensive_sources" if body.mode == "comprehensive"
                                         else "summary_sources", 12))
         res = p.engine.search(plan.search_text, plan.filters, Scope(**body.scope.model_dump()), plan.portfolios,
-                              body.recency, body.role_weight, limit, diversify=True, group_by=plan.group_by)
+                              body.recency, body.role_weight, limit, diversify=True, group_by=plan.group_by,
+                              rerank_query=rerank_query(plan, settings.ranking.get("rerank_query")))
         from hansard.rag.pipeline import plan_facets
         from hansard.rag.sources import build_sources
 
@@ -382,8 +394,10 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                                                                                       plan.group_by)],
                 "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
 
-    def sources_only_events(body: AskBody, note: str) -> Iterator[dict[str, Any]]:
-        r = retrieve(body)
+    def sources_only_events(body: AskBody, note: str, uid: int | None = None,
+                            visitor: str | None = None) -> Iterator[dict[str, Any]]:
+        # read the question with the model unless the site's own budget is used up
+        r = retrieve(body, check_caps(state, None, settings.usage, None) is None, uid, visitor)
         yield {"type": "plan", "plan": r["plan"], "usage": None}
         yield {"type": "sources", **{k: r[k] for k in ("sources", "candidates", "semantic", "evidence")}}
         yield {"type": "final", "answer": None, "usage": None, "note": note}

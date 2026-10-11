@@ -36,7 +36,7 @@ from hansard.config import Settings
 from hansard.engine import Engine, Scope
 from hansard.rag.answer import usage_dict
 from hansard.rag.pipeline import AskRequest, Pipeline, rerank_query
-from hansard.rag.query_parse import QueryPlan, parse_model, parse_with_model
+from hansard.rag.query_parse import QueryPlan, parse_model, parse_offline, parse_with_model
 from hansard.rank.evidence import demographic_group, speaker_group
 
 log = logging.getLogger(__name__)
@@ -129,17 +129,21 @@ def score_plan(expect: dict[str, Any], got: dict[str, Any]) -> dict[str, bool]:
 def run_plans(settings: Settings, questions: list[Question], today: date, client, parties, model: str | None = None,
               effort: str | None = None, progress: Callable[[str], None] = print) -> dict[str, Any]:
     s = settings
-    if model:
+    offline = model == "offline"  # the free built-in rules (used for "Sources only")
+    if model and not offline:
         s = with_model(s, "answer", "query_parse_model", model)
     if effort:
         s = with_model(s, "answer", "query_parse_effort", effort)
-    model = parse_model(s)
+    model = "offline" if offline else parse_model(s)
     rows = []
     for q in questions:
         t0 = time.perf_counter()
         try:
-            plan, usage = parse_with_model(client, s, q.question, [{"question": h} for h in q.history], parties,
-                                           today)
+            if offline:
+                plan, usage = parse_offline(q.question, s.regions, today), None
+            else:
+                plan, usage = parse_with_model(client, s, q.question, [{"question": h} for h in q.history], parties,
+                                               today)
             error = None
         except Exception as exc:  # recorded as a failure on every field
             plan, usage, error = None, None, f"{type(exc).__name__}: {exc}"

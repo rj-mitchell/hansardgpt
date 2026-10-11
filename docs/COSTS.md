@@ -7,7 +7,8 @@ Last updated 11 October 2026. AI prices are Anthropic's, per call, measured on t
 These run on the server you already pay for, so extra use costs nothing.
 
 - **Searching and showing sources**, including the "Sources only" button and the sources shown under every briefing.
-  Keyword and meaning-based search both run on the server itself.
+  Keyword and meaning-based search both run on the server itself. (Only reading the question costs anything; see
+  below.)
 - **Repeat questions.** A question already answered with the same settings is served from the saved copy for up to a
   week (or until new records arrive), at no cost.
 - **Shared briefing links** and printing or copying a briefing.
@@ -19,8 +20,9 @@ These run on the server you already pay for, so extra use costs nothing.
 
 ## Cheap (well under 1p each)
 
-- **Reading the question** (choosing the filters shown as chips) before each new briefing: about 0.4p with Opus. The
-  test set shows Haiku does this just as well for about 0.01p, so switching would make it effectively free.
+- **Reading the question** (choosing the filters shown as chips): about 0.01p with Haiku, which now does this job
+  (it was about 0.4p with Opus; the test set shows Haiku is nearly as accurate). Because it is so cheap, Haiku now
+  also reads the question for "Sources only", which used to rely on simpler built-in rules.
 - **Running the test set**: reading 60 questions costs about 1p with Haiku and about 25p with Opus. Grading the
   relevance of sources costs a few pence a run, and only for passages not graded before.
 
