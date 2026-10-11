@@ -34,6 +34,11 @@ records alone: those deliver your email to admin@wheretheystand.uk.
 | wheretheystand.org.uk | A | `@` | your server's IP |
 | wheretheystand.org.uk | A | `www` | your server's IP |
 
+**If your domains are on Cloudflare:** set every one of these records to **DNS only** (the grey cloud), not
+**Proxied** (the orange cloud, Cloudflare's default). While proxied, `nslookup` shows Cloudflare's addresses instead
+of your server's, the site cannot get its own HTTPS certificate, and every visitor appears to come from Cloudflare,
+so the per-visitor daily limit would be shared by everyone.
+
 Changes usually take effect within an hour. To check, run `nslookup wheretheystand.uk` on your computer (in
 Terminal or PowerShell): it should print your server's IP address. Wait until it does before step 4, so that the
 HTTPS certificates can be issued.
@@ -140,7 +145,18 @@ reload ssh`, and ask for help.
 If you are ever locked out (a lost laptop, say), the Hostkey control panel has a web console and can reset the
 root password.
 
-## 6. Watch the first data load
+## 6. Check everything is working
+
+On the server, run:
+
+```
+bash /opt/hansardgpt/deploy/check.sh
+```
+
+It changes nothing. It lists what is working (✓) and anything that needs attention (✗), with what to do about each.
+Run it again at any time.
+
+## 7. Watch the first data load
 
 On the server (log in again with `ssh root@YOUR.SERVER.IP` if you are not already):
 

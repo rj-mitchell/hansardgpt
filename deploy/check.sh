@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Check that Where They Stand is set up and working. Run on the server, as root:
+#   bash /opt/hansardgpt/deploy/check.sh
+# It changes nothing. Each line is a tick (fine), a cross (needs attention, with what to do) or a note.
+set -uo pipefail
+
+DIR="${DIR:-/opt/hansardgpt}"
+cd "$DIR/deploy" 2>/dev/null || { echo "✗ $DIR/deploy not found: run the setup script first (step 4 of the guide)."; exit 1; }
+
+problems=0
+ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+bad()  { printf '  \033[31m✗\033[0m %s\n      → %s\n' "$1" "$2"; problems=$((problems + 1)); }
+note() { printf '  • %s\n' "$1"; }
+env_value() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
+
+echo "Where They Stand: checking the server"
+echo
+
+echo "Settings"
+if [[ -f .env ]]; then
+  ok "settings file found (deploy/.env)"
+else
+  bad "no settings file (deploy/.env)" "run the setup script: bash provision.sh"
+fi
+DOMAIN="$(env_value DOMAIN)"
+REDIRECTS="$(env_value REDIRECT_DOMAINS)"
+[[ -n "$DOMAIN" ]] && ok "main address: $DOMAIN" || bad "no DOMAIN set" "add DOMAIN=wheretheystand.uk to deploy/.env"
+if [[ -n "$(env_value HANSARD_ANTHROPIC_API_KEY)" || -n "$(env_value ANTHROPIC_API_KEY)" ]]; then
+  ok "Anthropic API key is set (not shown)"
+else
+  bad "no Anthropic API key: the site will show sources but not write briefings" \
+      "add HANSARD_ANTHROPIC_API_KEY=… to deploy/.env, then: docker compose up -d"
+fi
+[[ -n "$(env_value HANSARD_ADMIN_TOKEN)" ]] && ok "admin token is set" || bad "no admin token" "add HANSARD_ADMIN_TOKEN=\$(openssl rand -hex 24) to deploy/.env"
+echo
+
+echo "Site"
+running="$(docker compose ps --status running --services 2>/dev/null)"
+for svc in app caddy; do
+  if grep -qx "$svc" <<<"$running"; then
+    ok "$svc is running"
+  else
+    bad "$svc is not running" "cd $DIR/deploy && docker compose up -d   (then docker compose logs $svc to see why)"
+  fi
+done
+if docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=10)" >/dev/null 2>&1; then
+  ok "the app answers inside the server"
+else
+  bad "the app does not answer" "docker compose logs --tail 50 app"
+fi
+if [[ -n "$DOMAIN" ]]; then
+  if curl -sI --max-time 20 "http://$DOMAIN/" 2>/dev/null | grep -qi '^server: cloudflare'; then
+    bad "$DOMAIN is going through Cloudflare's proxy (orange cloud)" \
+        "in Cloudflare's DNS settings, set each A record to 'DNS only' (grey cloud); see step 2 of the guide"
+  fi
+  status="$(curl -fsS --max-time 20 "https://$DOMAIN/api/status" 2>/dev/null)"
+  if [[ -n "$status" ]]; then
+    ok "https://$DOMAIN works, with a valid certificate"
+    python3 - "$status" <<'PY' 2>/dev/null
+import json, sys
+s = json.loads(sys.argv[1])
+print(f"  • briefings: {s.get('briefings')}; most recent record: {s.get('latest_record') or 'not loaded yet'}; "
+      f"meaning-based search covers {round(100 * (s.get('meaning_search_coverage') or 0))}% so far")
+PY
+  else
+    bad "https://$DOMAIN does not work yet" \
+        "check nslookup $DOMAIN shows this server's IP ($(hostname -I 2>/dev/null | awk '{print $1}')); certificates are issued once it does (docker compose logs caddy)"
+  fi
+  IFS=',' read -ra names <<<"$REDIRECTS"
+  for n in "${names[@]}"; do
+    n="$(echo "$n" | xargs)"
+    [[ -z "$n" ]] && continue
+    result="$(curl -s -o /dev/null --max-time 20 -w '%{http_code} %{redirect_url}' "https://$n/" 2>/dev/null)"
+    if [[ "$result" =~ ^30[178]\ https://$DOMAIN/ ]]; then
+      ok "$n redirects to $DOMAIN"
+    else
+      bad "$n does not redirect yet (got: ${result:-no answer})" "check its DNS A record points at this server; certificates follow automatically"
+    fi
+  done
+fi
+echo
+
+echo "Data"
+if docker ps --format '{{.Command}}' 2>/dev/null | grep -q "bootstrap"; then
+  note "the first data load is still running: $(tail -n 1 /var/log/hansard-bootstrap.log 2>/dev/null | cut -c1-120)"
+elif [[ -f /var/log/hansard-bootstrap.log ]]; then
+  if grep -q '"next"' /var/log/hansard-bootstrap.log; then
+    ok "the first data load finished"
+  else
+    bad "the first data load stopped before finishing" "see the end of: tail -n 40 /var/log/hansard-bootstrap.log"
+  fi
+fi
+echo
+
+echo "Updates, backups and security"
+for t in hansard-sync.timer hansard-backup.timer; do
+  if systemctl is-enabled --quiet "$t" 2>/dev/null; then
+    ok "$t is on (next: $(systemctl show "$t" -p NextElapseUSecRealtime --value 2>/dev/null))"
+  else
+    bad "$t is not on" "systemctl enable --now $t"
+  fi
+done
+last_backup="$(ls -1t backups/where-they-stand-*.tar.gz 2>/dev/null | head -1)"
+[[ -n "$last_backup" ]] && ok "latest backup: $last_backup" || note "no backups yet (the first runs at 3.30am)"
+ufw status 2>/dev/null | grep -q "Status: active" && ok "firewall is on" || bad "firewall is off" "ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable"
+systemctl is-active --quiet fail2ban 2>/dev/null && ok "fail2ban is on" || bad "fail2ban is off" "apt-get install -y fail2ban && systemctl enable --now fail2ban"
+systemctl is-enabled --quiet unattended-upgrades 2>/dev/null && ok "automatic security updates are on" || bad "automatic security updates are off" "dpkg-reconfigure -f noninteractive unattended-upgrades"
+if sshd -T 2>/dev/null | grep -qi "^passwordauthentication no"; then
+  ok "password logins are off (key only)"
+else
+  note "password logins are still on: fine for now; step 5 of the guide switches to a key"
+fi
+free_pct="$(df --output=pcent / | tail -1 | tr -dc '0-9')"
+[[ "${free_pct:-0}" -lt 85 ]] && ok "disk ${free_pct}% used" || bad "disk ${free_pct}% used" "ask for help freeing space before it fills"
+echo
+
+if [[ $problems -eq 0 ]]; then
+  echo "All good."
+else
+  echo "$problems thing(s) need attention (marked ✗ above)."
+fi
+exit $(( problems > 0 ))
