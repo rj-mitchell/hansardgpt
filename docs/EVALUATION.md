@@ -69,8 +69,36 @@ is graded by the same grader, so the comparisons are fair even where the absolut
 
 ## 3. Briefings: Opus or Sonnet
 
-(Results to follow.)
+Ten varied questions, each answered from the same sources. **The comparison is unfinished:** the Anthropic account ran
+out of credit after Opus's ten briefings and two of Sonnet's.
+
+**Opus 5.5 (the current model), 10 briefings:**
+
+| Measure | Result |
+|---|---|
+| Quotations not found word for word in their source | 0 |
+| Loaded words in the briefing's own voice | 0 |
+| Share of the text backed by a citation | 76% on average (48% to 100%) |
+| Sentences shown to readers as unsupported | 30 in total (3 per briefing) |
+| Share of the sources given that were cited | 47% |
+| Length | about 520 words |
+| Cost | 11p each on average (9p to 14p) |
+| Time | about 21 seconds |
+
+The briefings read well: balanced, with accurate quotes, and with differences within parties noted. The uncited text
+is mostly the briefing's own summing-up, for example "The split is not clean" or "the records do not separate seat
+type from party". The site already marks these to readers as unsupported. **Next step:** test a small change to the
+instructions asking for every summing-up sentence to cite its examples or be left out, and check that it raises the
+cited share without making the briefings stilted.
+
+**Sonnet 5.5:** the two briefings written cost 4.7p and 3.1p (about half of Opus) and were 67% and 90% cited. Too
+few to judge; the side-by-side comparison will be run when there is credit:
+
+    hansard eval briefings --plans eval/runs/<opus plans file> --model claude-opus-5-5 --model claude-sonnet-5-5 \
+      --only wind,nhs-waiting,assisted-dying,labour-tuition,northern-rail,since-2024-election,ministers-energy,benn-ni,gender-compare,loaded
 
 ## Cost of this round of testing
 
-(To follow.)
+About **$2.10** in all: reading the questions with each model about $0.54; grading sources about $0.11; checking the
+grader with Sonnet about $0.15; briefings about $1.30 (including about $0.10 lost to a bug in the scoring script,
+since fixed).
