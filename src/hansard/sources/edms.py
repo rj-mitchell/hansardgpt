@@ -17,7 +17,6 @@ import re
 import sqlite3
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
@@ -162,7 +161,9 @@ class EdmStore:
             con.executemany("INSERT OR REPLACE INTO edm_sponsors VALUES (?, ?, ?, ?, ?, ?, ?)",
                             [(edm_id, s["mnis"], s["name"], s["party"], s["sponsoring_order"], s["signed"],
                               s["withdrawn"]) for s in sponsors])
-            con.execute("UPDATE edms SET sponsors_fetched = date('now') WHERE id = ?", (edm_id,))
+            # the motion's own count can lag; the list of names is the record
+            con.execute("UPDATE edms SET sponsors_fetched = date('now'), sponsors_count = ? WHERE id = ?",
+                        (sum(1 for s in sponsors if not s["withdrawn"]), edm_id))
 
     def count(self) -> int:
         with self.connect() as con:
@@ -263,26 +264,43 @@ def _client() -> httpx.Client:
                         follow_redirects=True)
 
 
-def _get(client: httpx.Client, path: str, params: dict[str, Any] | None = None, tries: int = 3) -> Any:
+class RateLimited(Exception):
+    """Parliament asked us to slow down and kept asking: stop for now and carry on at the next update."""
+
+
+PAUSE = 0.25  # seconds between requests: one at a time, about four a second at most
+
+
+def _get(client: httpx.Client, path: str, params: dict[str, Any] | None = None, tries: int = 3,
+         sleep=time.sleep) -> Any:
     for attempt in range(tries):
         try:
             resp = client.get(f"{API}{path}", params=params)
+            if resp.status_code == 429:  # too many requests: wait as asked (or a while), then try again
+                wait = _int(resp.headers.get("Retry-After")) or 30 * (attempt + 1)
+                if attempt == tries - 1:
+                    raise RateLimited(f"{path}: still rate limited after {tries} tries")
+                sleep(min(wait, 300))
+                continue
             if resp.status_code == 404:
                 return None
             resp.raise_for_status()
-            return resp.json()
+            body = resp.json()
+            sleep(PAUSE)
+            return body
         except (httpx.HTTPError, ValueError):
             if attempt == tries - 1:
                 raise
-            time.sleep(1 + attempt * 2)
+            sleep(1 + attempt * 2)
     return None
 
 
-def _list(client: httpx.Client, params: dict[str, Any]) -> list[dict[str, Any]]:
+def _list(client: httpx.Client, params: dict[str, Any], sleep=time.sleep) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     skip = 0
     while True:
-        body = _get(client, "/EarlyDayMotions/list", {**params, "parameters.skip": skip, "parameters.take": PAGE})
+        body = _get(client, "/EarlyDayMotions/list", {**params, "parameters.skip": skip, "parameters.take": PAGE},
+                    sleep=sleep)
         items = _items(body)
         out += items
         total = _int(_get_key(_get_key(body, "PagingInfo") or {}, "Total")) if isinstance(body, dict) else None
@@ -301,17 +319,22 @@ def _save(store: EdmStore, items: list[dict[str, Any]]) -> int:
     return n
 
 
-def sync_edms(store: EdmStore, *, today: date | None = None, months_per_run: int = 12, sponsors_per_run: int = 2000,
-              client: httpx.Client | None = None) -> dict[str, Any]:
-    """Recent changes, then some older months, then signatures. Returns counts for the sync log."""
+def sync_edms(store: EdmStore, *, today: date | None = None, months_per_run: int = 36, sponsors_per_run: int = 1000,
+              client: httpx.Client | None = None, sleep=time.sleep) -> dict[str, Any]:
+    """Recent changes, then some older months, then signatures. Returns counts for the sync log.
+
+    Requests go one at a time with a short pause. If Parliament keeps asking us to slow down, the run stops early
+    and the next update carries on where it left off."""
     today = today or date.today()
-    stats: dict[str, Any] = {"recent": 0, "backfilled": 0, "months": 0, "signatures": 0, "unrecognised": 0}
+    stats: dict[str, Any] = {"recent": 0, "backfilled": 0, "months": 0, "signatures": 0, "motions_signatures": 0,
+                             "unrecognised": 0}
     own = client is None
     client = client or _client()
     try:
         since = store.latest_status()
         since_day = (date.fromisoformat(since) - timedelta(days=7)) if since else today - timedelta(days=30)
-        stats["recent"] = _save(store, _list(client, {"parameters.currentStatusDateStart": since_day.isoformat()}))
+        stats["recent"] = _save(store, _list(client, {"parameters.currentStatusDateStart": since_day.isoformat()},
+                                             sleep))
         done = store.months_done()
         month = date(today.year, today.month, 1)
         todo = []
@@ -322,32 +345,31 @@ def sync_edms(store: EdmStore, *, today: date | None = None, months_per_run: int
             month = (month - timedelta(days=1)).replace(day=1)
         for m in todo:
             end = (m + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-            items = _list(client, {"parameters.tabledStartDate": m.isoformat(), "parameters.tabledEndDate":
-                                   end.isoformat()})
+            items = _list(client, {"parameters.tabledStartDate": m.isoformat(),
+                                   "parameters.tabledEndDate": end.isoformat()}, sleep)
             stats["backfilled"] += _save(store, items)
             stats["unrecognised"] += sum(1 for i in items if normalise_edm(i) is None)
             if end < today - timedelta(days=60):  # recent months stay open: signatures still arrive
                 store.month_done(m.strftime("%Y-%m"))
             stats["months"] += 1
-        ids = store.needing_sponsors(sponsors_per_run)
-
-        def detail(eid: int) -> tuple[int, list[dict[str, Any]] | None]:
-            body = _get(client, f"/EarlyDayMotion/{eid}")  # an httpx client is safe to share between threads
-            items = _items(body)
-            return eid, normalise_sponsors(items[0]) if items else None
-
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            for eid, sponsors in pool.map(detail, ids):
-                if sponsors is not None:
-                    store.set_sponsors(eid, sponsors)
-                    stats["signatures"] += len(sponsors)
-        stats["total"] = store.count()
-        if stats["unrecognised"]:
-            log.warning("early day motions: %d records in an unrecognised shape", stats["unrecognised"])
-        return stats
+        for eid in store.needing_sponsors(sponsors_per_run):
+            items = _items(_get(client, f"/EarlyDayMotion/{eid}", sleep=sleep))
+            sponsors = normalise_sponsors(items[0]) if items else None
+            if sponsors is not None:
+                store.set_sponsors(eid, sponsors)
+                stats["signatures"] += len(sponsors)
+                stats["motions_signatures"] += 1
+    except RateLimited as exc:
+        log.warning("early day motions: %s; carrying on at the next update", exc)
+        stats["rate_limited"] = True
     finally:
         if own:
             client.close()
+    stats["total"] = store.count()
+    stats["signatures_still_to_fetch"] = len(store.needing_sponsors(100000))
+    if stats["unrecognised"]:
+        log.warning("early day motions: %d records in an unrecognised shape", stats["unrecognised"])
+    return stats
 
 
 def check(client: httpx.Client | None = None) -> str:
@@ -355,7 +377,10 @@ def check(client: httpx.Client | None = None) -> str:
     own = client is None
     client = client or _client()
     try:
-        body = _get(client, "/EarlyDayMotions/list", {"parameters.take": 1, "parameters.orderBy": "DateTabledDesc"})
+        try:
+            body = _get(client, "/EarlyDayMotions/list", {"parameters.take": 1, "parameters.orderBy": "DateTabledDesc"})
+        except RateLimited:
+            return "Parliament is asking for fewer requests just now (probably an update is fetching). Try again later."
         items = _items(body)
         lines = [f"list: top-level keys {sorted(body) if isinstance(body, dict) else type(body).__name__}"]
         if items:

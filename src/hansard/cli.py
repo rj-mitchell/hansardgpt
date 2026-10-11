@@ -263,7 +263,7 @@ def interests():
 @app.command()
 def edms(check: bool = typer.Option(False, help="show what the API returns now, to confirm the fields read"),
          months: int = typer.Option(12, help="older months to fetch in this run"),
-         signatures: int = typer.Option(2000, help="motions whose signatures to fetch in this run")):
+         signatures: int = typer.Option(1000, help="motions whose signatures to fetch in this run")):
     """Fetch early day motions (also done by every sync)."""
     _setup_logging()
     from hansard.sources.edms import EdmStore, sync_edms

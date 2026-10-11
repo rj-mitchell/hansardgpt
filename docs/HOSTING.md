@@ -192,7 +192,7 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 | See each topic's state | the admin page, or `docker compose exec app hansard topics list` |
 | Fetch the newest Register of Members' Financial Interests now (free; also done by every update) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard interests` |
 | Check that early day motions can be read from Parliament (free) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard edms --check` |
-| Collect more early day motions now, rather than waiting for the twice-daily update (free) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard edms --months 60` |
+| Collect all early day motions since 2010 in one go, in the background (free; about 4–5 hours, one request at a time) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard edms --months 200 --signatures 25000` |
 | Add, change or remove a topic | edit `config/topics.toml` in the code (ask me), then install it as a new version. Never change a published topic's `slug`: it is its address |
 | Withdraw a briefing (after a complaint, say) | `curl -X POST -H "Authorization: Bearer YOUR_ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"reason": "complaint about attribution"}' https://wheretheystand.uk/api/admin/briefings/THE_ID/withdraw` |
 
