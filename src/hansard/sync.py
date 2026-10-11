@@ -236,9 +236,17 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                 import duckdb
 
                 from hansard.reference.profiles import attach_reference
-                from hansard.sources.regmem import former_members, refresh, refresh_history
+                from hansard.sources.regmem import (
+                    former_members,
+                    refresh,
+                    refresh_history,
+                    refresh_previous,
+                )
 
                 stats["interests"] = refresh(regmem_path(settings))
+                # the edition from a year earlier, to show what changed
+                stats["interests"]["previous"] = refresh_previous(
+                    regmem_path(settings).with_name("regmem_previous.json"), stats["interests"].get("edition"))
                 con = duckdb.connect()
                 attach_reference(con, settings.reference_dir)
                 # former MPs: the last edition before they left, a few old editions per run

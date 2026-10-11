@@ -1,8 +1,13 @@
 import type { VoteType } from "../types";
 
 /** The kind of vote (amendment, second reading…) as a link to its glossary entry, with what it usually means. */
+/** Whether there is anything to say about a vote's kind (callers wrap it in brackets only then). */
+export function hasVoteKind(vt?: VoteType): vt is VoteType {
+  return !!vt && (vt.kind !== "other" || !!vt.aye_means);
+}
+
 export function VoteKind({ vt, detail = false }: { vt?: VoteType; detail?: boolean }) {
-  if (!vt || (vt.kind === "other" && !vt.aye_means)) return null;
+  if (!hasVoteKind(vt)) return null;
   return (
     <span className="vote-kind">
       {vt.kind !== "other" && (

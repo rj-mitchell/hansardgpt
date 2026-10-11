@@ -5,7 +5,7 @@ import "./pages";
 import { Timeline } from "./components/Timeline";
 import { EdmList, type EdmRow } from "./components/EdmList";
 import { type Interests, InterestsSection } from "./components/Interests";
-import { VoteKind } from "./components/VoteKind";
+import { hasVoteKind, VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
 import type { VoteType } from "./types";
 
@@ -223,7 +223,7 @@ function Person({ number }: { number: string }) {
                 {p.voting.recent_rebellions.map((r) => (
                   <li key={r.date + r.title}>
                     {fmtDate(r.date)}: <a href={r.twfy_url}>{r.title || "Division"}</a>
-                    {r.vote_type && (
+                    {hasVoteKind(r.vote_type) && (
                       <>
                         {" "}
                         (<VoteKind vt={r.vote_type} />)

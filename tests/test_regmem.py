@@ -112,3 +112,41 @@ def test_former_members_get_the_last_edition_before_they_left(tmp_path):
     fetched.clear()
     assert refresh_history(hist, {FORMER: "2016-09-12"}, client=client)["editions_fetched"] == 0
     assert fetched == [], "nothing is fetched again once known"
+
+
+def test_changes_since_the_edition_a_year_earlier(tmp_path):
+    import copy
+    import json
+
+    from hansard.sources.regmem import refresh_previous
+
+    files = {"regmem2025-09-01.xml": b"", "regmem2025-09-29.xml": b"", "regmem2026-09-21.xml": FIXTURE.read_bytes()}
+    fetched: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.rsplit("/", 1)[1]
+        if not name:
+            return httpx.Response(200, text=" ".join(f'<a href="{n}"></a>' for n in files))
+        fetched.append(name)
+        return httpx.Response(200, content=FIXTURE.read_bytes())
+
+    latest = tmp_path / "regmem.json"
+    refresh(latest, httpx.Client(transport=httpx.MockTransport(handler)))
+    previous = tmp_path / "regmem_previous.json"
+    fetched.clear()
+    out = refresh_previous(previous, "2026-09-21", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert out == {"edition": "2025-09-01", "updated": True} and fetched == ["regmem2025-09-01.xml"], \
+        "the newest edition at least a year older"
+    assert not refresh_previous(previous, "2026-09-21",
+                                client=httpx.Client(transport=httpx.MockTransport(handler)))["updated"]
+
+    assert Register(latest).for_person(BENN)["changes"] == {"since": "2025-09-01", "added": [], "removed": []}
+    data = json.loads(previous.read_text())
+    cats = copy.deepcopy(data["members"][BENN]["categories"])
+    gone = cats[0]["items"].pop(0)
+    cats[0]["items"].append({**gone, "summary": "An old job"})
+    data["members"][BENN]["categories"] = cats
+    previous.write_text(json.dumps(data))
+    ch = Register(latest).for_person(BENN)["changes"]
+    assert ch["added"] == [{"category": cats[0]["name"], "summary": gone["summary"]}]
+    assert ch["removed"] == [{"category": cats[0]["name"], "summary": "An old job"}]

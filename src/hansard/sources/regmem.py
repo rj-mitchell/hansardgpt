@@ -16,7 +16,7 @@ import logging
 import re
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -233,6 +233,55 @@ def refresh_history(path: Path, leavers: dict[str, str], *, client: httpx.Client
             "still_to_fetch": waiting}
 
 
+def refresh_previous(path: Path, latest: str | None, *, client: httpx.Client | None = None,
+                     days: int = 365) -> dict[str, Any]:
+    """Keep the edition from about a year before ``latest`` (the newest published on or before that day), so a
+    member's page can show what is new in the register and what is no longer listed."""
+    path = Path(path)
+    if not latest:
+        return {"edition": None, "updated": False}
+    target = (date.fromisoformat(latest) - timedelta(days=days)).isoformat()
+    current = None
+    if path.exists():
+        try:
+            current = json.loads(path.read_text()).get("edition")
+        except (OSError, ValueError):
+            current = None
+    own = client is None
+    client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
+    try:
+        before = [(n, d) for n, d in editions(client) if d <= target]
+        if not before:
+            return {"edition": current, "updated": False}
+        name, day = before[-1]
+        if current == day:
+            return {"edition": day, "updated": False}
+        resp = client.get(BASE + name)
+        resp.raise_for_status()
+        data = parse(resp.content)
+        if not data["members"]:
+            return {"edition": current, "updated": False, "error": f"{name}: no members found"}
+        data["edition"] = day
+    finally:
+        if own:
+            client.close()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+    return {"edition": day, "updated": True}
+
+
+def _entries(categories: list[dict[str, Any]]) -> dict[tuple[str, str], str]:
+    return {(c["type"], i["summary"]): c["name"] for c in categories for i in c["items"] if i.get("summary")}
+
+
+def changes(now: list[dict[str, Any]], before: list[dict[str, Any]]) -> dict[str, list[dict[str, str]]]:
+    """Entries listed now but not in the earlier edition, and the reverse, compared by category and wording."""
+    a, b = _entries(now), _entries(before)
+    return {"added": [{"category": a[k], "summary": k[1]} for k in a if k not in b],
+            "removed": [{"category": b[k], "summary": k[1]} for k in b if k not in a]}
+
+
 class Register:
     """The latest edition on disk, reloaded when the file changes."""
 
@@ -241,6 +290,7 @@ class Register:
         self._lock = threading.Lock()
         self._data: dict[str, Any] | None = None
         self._mtime: float | None = None
+        self._sides: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def _load(self) -> dict[str, Any]:
         with self._lock:
@@ -255,19 +305,27 @@ class Register:
                     return self._data or {}
             return self._data
 
-    def _history(self) -> dict[str, Any]:
-        hpath = self.path.with_name("regmem_history.json")
+    def _side(self, name: str) -> dict[str, Any]:
+        """A companion file (former members, or the edition a year back), reloaded when it changes."""
+        spath = self.path.with_name(name)
         with self._lock:
             try:
-                mtime = hpath.stat().st_mtime
+                mtime = spath.stat().st_mtime
             except OSError:
                 return {}
-            if getattr(self, "_hmtime", None) != mtime:
+            cached = self._sides.get(name)
+            if cached is None or cached[0] != mtime:
                 try:
-                    self._hdata, self._hmtime = json.loads(hpath.read_text()), mtime
+                    self._sides[name] = (mtime, json.loads(spath.read_text()))
                 except (OSError, ValueError):
-                    return getattr(self, "_hdata", {}) or {}
-            return self._hdata
+                    return cached[1] if cached else {}
+            return self._sides[name][1]
+
+    def _history(self) -> dict[str, Any]:
+        return self._side("regmem_history.json")
+
+    def _previous(self) -> dict[str, Any]:
+        return self._side("regmem_previous.json")
 
     def for_person(self, person_id: str) -> dict[str, Any] | None:
         data = self._load()
@@ -279,5 +337,10 @@ class Register:
                         "categories": h["categories"], "listed": True}
         if not data:
             return None
-        return {"edition": data.get("edition"), "source": data.get("source"), "official": OFFICIAL,
-                "categories": (m or {}).get("categories", []), "listed": m is not None, "former": False}
+        out = {"edition": data.get("edition"), "source": data.get("source"), "official": OFFICIAL,
+               "categories": (m or {}).get("categories", []), "listed": m is not None, "former": False}
+        earlier = self._previous()
+        was = (earlier.get("members") or {}).get(person_id)
+        if m is not None and was is not None and earlier.get("edition") != data.get("edition"):
+            out["changes"] = {"since": earlier.get("edition"), **changes(m["categories"], was["categories"])}
+        return out
