@@ -191,7 +191,7 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 | Write the topic briefings now, rather than waiting for the twice-daily update (about 11p each) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard topics refresh` (add `--only cost-of-living` for one) |
 | See each topic's state | the admin page, or `docker compose exec app hansard topics list` |
 | Collect the devolved parliaments' records now, rather than a few dozen files per update (free; about 1,000 files since 2021, roughly an hour) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard devolved --files 2000` |
-| Rebuild the committee pages now, rather than waiting for the weekly update (free; about 20–25 minutes) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard committees` |
+| Rebuild the committee pages now, rather than waiting for the weekly update (free; the first time takes an hour or more, because each committee's list of inquiries is fetched once; later rebuilds take about 30 minutes) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard committees` |
 | Fetch the newest Register of Members' Financial Interests now (free; also done by every update) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard interests` |
 | Check that early day motions can be read from Parliament (free) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard edms --check` |
 | Collect all early day motions since 2010 in one go, in the background (free; about 4–5 hours, one request at a time) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard edms --months 200 --signatures 25000` |
