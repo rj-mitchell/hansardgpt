@@ -492,7 +492,7 @@ legend,
 }
 
 .title-block > .mark {
-  block-size: calc(2.2 * var(--step-1));
+  block-size: calc(3.2 * var(--step-1));
   inline-size: auto;
   margin-block-end: var(--space-xs);
 }
@@ -2041,7 +2041,7 @@ html:has(.login) body {
 }
 
 .title-block > .home-link > .mark {
-  block-size: calc(2.2 * var(--step-1));
+  block-size: calc(3.2 * var(--step-1));
   inline-size: auto;
   margin-block-end: var(--space-xs);
 }
@@ -2620,6 +2620,11 @@ main:focus {
   display: flex;
   align-items: center;
   gap: 0.4em;
+  margin: 0;
+}
+
+.prose .legend li + li {
+  margin: 0; /* not the spacing of ordinary lists */
 }
 
 .legend svg {
