@@ -64,7 +64,7 @@ function loadSettings(defaults?: Meta["defaults"]): Settings {
     mode: "summary",
     recency: defaults?.recency ?? 0.5,
     roleWeight: defaults?.role_weight ?? 1.5,
-    scope: { written: true, pbc: true, votes: true },
+    scope: { written: true, pbc: true, votes: true, edms: true },
   };
 }
 

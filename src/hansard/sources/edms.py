@@ -213,6 +213,25 @@ class EdmStore:
                                    LIMIT ? OFFSET ?""", [*params, limit, offset]).fetchall()
         return total, [dict(r) for r in rows]
 
+    def relevant(self, keywords: list[str], *, date_from: str | None = None, date_to: str | None = None,
+                 limit: int = 3) -> list[dict[str, Any]]:
+        """Motions matching all the keywords (the best few by relevance, then support), with their signatures."""
+        words = [w for w in keywords if re.fullmatch(r"[\w'’-]+", w)][:5]
+        if not words or self.count() == 0:
+            return []
+        where, params = ["edm_text MATCH ?", "e.amendment_to IS NULL"], [" ".join(f'"{w}"' for w in words)]
+        if date_from:
+            where.append("e.date_tabled >= ?")
+            params.append(str(date_from))
+        if date_to:
+            where.append("e.date_tabled <= ?")
+            params.append(str(date_to))
+        with self.connect() as con:
+            ids = [r[0] for r in con.execute(f"""
+                SELECT e.id FROM edm_text JOIN edms e ON e.id = edm_text.rowid WHERE {' AND '.join(where)}
+                ORDER BY bm25(edm_text, 5.0, 1.0), e.sponsors_count DESC LIMIT ?""", [*params, limit])]
+        return [e for i in ids if (e := self.get(i))]
+
     def get(self, edm_id: int) -> dict[str, Any] | None:
         with self.connect() as con:
             row = con.execute("SELECT * FROM edms WHERE id = ?", (edm_id,)).fetchone()

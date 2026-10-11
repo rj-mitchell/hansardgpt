@@ -113,6 +113,7 @@ class ScopeBody(BaseModel):
     written: bool = True
     pbc: bool = True
     votes: bool = True
+    edms: bool = True
 
 
 class FeedbackBody(BaseModel):
@@ -401,9 +402,10 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         req = AskRequest(question=body.question, mode=body.mode, recency=body.recency, role_weight=body.role_weight,
                          scope=Scope(**body.scope.model_dump()))
         res, _, sources = p.find(plan, req)
-        return {"plan": plan.to_dict(), "sources": [s.card() for s in sources if s.kind == "record"],
+        return {"plan": plan.to_dict(), "sources": [s.card() for s in sources if s.kind in ("record", "edm")],
                 "candidates": res.candidates, "semantic": res.semantic_available,
-                "evidence": {**res.evidence, "devolution": notes_for(plan.question)} if res.evidence else res.evidence}
+                "evidence": {**res.evidence, "devolution": notes_for(plan.question),
+                             "edms": sum(1 for s in sources if s.kind == "edm")} if res.evidence else res.evidence}
 
     def sources_only_events(body: AskBody, note: str, uid: int | None = None,
                             visitor: str | None = None) -> Iterator[dict[str, Any]]:

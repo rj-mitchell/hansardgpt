@@ -70,7 +70,7 @@ export function SourceList({
 function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Highlight) => void }) {
   const roles = roleTitles(s.speaker);
   const seat = seatTypeLabel(s.speaker);
-  const ref = reference(s);
+  const ref = s.kind === "edm" ? null : reference(s);
   return (
     <button type="button" className="source-card" data-house={houseOf(s)} onClick={() => onOpen({ source: s.n, quotes: [] })}>
       <span className="badge">{s.n}</span>
@@ -78,6 +78,10 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
         {s.kind === "division" ? (
           <span className="att">
             <b>Division {s.number}</b> {s.major_heading}
+          </span>
+        ) : s.kind === "edm" ? (
+          <span className="att">
+            <b>{s.uin ? `EDM ${s.uin}` : "Early day motion"}</b> {s.edm_title}
           </span>
         ) : (
           <Attribution sp={s.speaker} raw={s.speaker_name_raw} />
@@ -145,7 +149,13 @@ export function SourceDrawer({
     >
       <header className="drawer-head">
         <span className="badge">{source.n}</span>
-        <h2>{source.kind === "division" ? `Division ${source.number}` : speakerLine(sp, source.speaker_name_raw)}</h2>
+        <h2>
+          {source.kind === "division"
+            ? `Division ${source.number}`
+            : source.kind === "edm"
+              ? `Early day motion${source.uin ? ` ${source.uin}` : ""}`
+              : speakerLine(sp, source.speaker_name_raw)}
+        </h2>
         <button type="button" className="close" onClick={onClose} aria-label="Close source">
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M3 3l10 10M13 3L3 13" />
@@ -154,6 +164,10 @@ export function SourceDrawer({
       </header>
 
       <div className="drawer-body">
+        {source.kind === "edm" ? (
+          <EdmDetail source={source} quotes={quotes} />
+        ) : (
+          <>
         <dl className="facts">
           {source.kind === "record" && (
             <>
@@ -276,6 +290,9 @@ export function SourceDrawer({
               </p>
             ))}
           </section>
+        )}
+
+          </>
         )}
 
         {source.kind === "record" && <AskAbout source={source} />}
@@ -404,6 +421,56 @@ function DivisionDetail({ source }: { source: SourceCard }) {
         <p className="muted">Nobody in scope.</p>
       )}
     </section>
+  );
+}
+
+/** An early day motion: who tabled it, its words and who signed, by party on the day they signed. */
+function EdmDetail({ source, quotes }: { source: SourceCard; quotes: string[] }) {
+  const sp = source.sponsor;
+  const signed = (source.party_counts ?? []).reduce((n, [, k]) => n + k, 0);
+  return (
+    <>
+      <dl className="facts">
+        <dt>Motion</dt>
+        <dd>{source.edm_title}</dd>
+        <dt>Tabled by</dt>
+        <dd>
+          {sp?.number && sp.slug ? <a href={`/people/${sp.number}/${sp.slug}`}>{sp.name}</a> : (sp?.name ?? "—")}
+          {sp?.party ? ` (${sp.party})` : ""}
+        </dd>
+        <dt>Tabled on</dt>
+        <dd>{source.date ? fmtDate(source.date) : "—"}</dd>
+        <dt>Signatures</dt>
+        <dd>
+          {signed || source.sponsors_count || 0}
+          {source.party_counts && source.party_counts.length > 0 && (
+            <span className="muted small">
+              {" "}
+              ({source.party_counts.map(([p, k]) => `${p} ${k}`).join("; ")}, by party on the day they signed)
+            </span>
+          )}
+        </dd>
+        <dt>Links</dt>
+        <dd className="links">
+          <a href={source.url}>Who signed, on this site</a>
+          {source.official_url && (
+            <a href={source.official_url} target="_blank" rel="noreferrer">
+              Parliament's early day motions site
+            </a>
+          )}
+        </dd>
+      </dl>
+      <AboutRecord source={source} />
+      <section className="verbatim" aria-label="Text of the motion">
+        {(source.motion_text ?? "").split("\n\n").map((para, i) => (
+          <p key={i}>
+            {highlightParts(para, quotes).map((part, j) =>
+              part.hit ? <mark key={j}>{part.text}</mark> : <span key={j}>{part.text}</span>,
+            )}
+          </p>
+        ))}
+      </section>
+    </>
   );
 }
 

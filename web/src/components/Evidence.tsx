@@ -53,6 +53,7 @@ export function EvidenceBar({
         {evidence.speakers} speaker{evidence.speakers === 1 ? "" : "s"}
         {years ? `, ${years}` : ""}
         {evidence.divisions ? `, plus ${evidence.divisions} division${evidence.divisions === 1 ? "" : "s"}` : ""}
+        {evidence.edms ? ` and ${evidence.edms} early day motion${evidence.edms === 1 ? "" : "s"}` : ""}
       </p>
       {evidence.imbalance && (
         <p className="evidence-warning">

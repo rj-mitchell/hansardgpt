@@ -97,3 +97,30 @@ def test_pages_and_api(indexed_settings, tmp_path):
     finally:
         for suffix in ("", "-wal", "-shm"):
             path.with_name(path.name + suffix).unlink(missing_ok=True)
+
+
+def test_motions_join_the_evidence_for_a_briefing(indexed_settings):
+    from hansard.embed.base import HashingEmbedder
+    from hansard.engine import Engine, Scope
+    from hansard.rag.pipeline import AskRequest, Pipeline
+    from hansard.rag.query_parse import parse_offline
+    from hansard.sync import edms_path
+
+    path = edms_path(indexed_settings)
+    try:
+        sync_edms(EdmStore(path), today=date(2024, 2, 1), months_per_run=3,
+                  client=fake_api([motion(1, "Hospice funding crisis", "2024-01-10"),
+                                   motion(2, "Bus services", "2024-01-12")]))
+        p = Pipeline(indexed_settings, Engine(indexed_settings, embedder=HashingEmbedder(64)))
+        plan = parse_offline("What have MPs said about hospice funding?", indexed_settings.regions)
+        _, _, sources = p.find(plan, AskRequest(question=plan.question))
+        edms = [s for s in sources if s.kind == "edm"]
+        assert [s.meta["edm_id"] for s in edms] == [1], "only the motion on the subject"
+        text = "\n".join(edms[0].blocks)
+        assert "Hospice funding crisis" in text and "Signed by 1 member" in text
+        assert "not signing" not in text and "absence of a signature says nothing" in text
+        _, _, none = p.find(plan, AskRequest(question=plan.question, scope=Scope(edms=False)))
+        assert not [s for s in none if s.kind == "edm"], "the reader can leave motions out"
+    finally:
+        for suffix in ("", "-wal", "-shm"):
+            path.with_name(path.name + suffix).unlink(missing_ok=True)

@@ -38,6 +38,13 @@ const NOTES: Record<string, { title: string; text: string }> = {
       "After a bill's second reading in the Commons, a committee of MPs goes through it line by line and may first " +
       "hear from expert witnesses. Its debates are reported in their own Hansard.",
   },
+  edm: {
+    title: "Early day motions",
+    text:
+      "MPs put down early day motions to record a view and gather support; few are ever debated. Signing one shows " +
+      "support for its wording. Ministers, whips and the Speaker do not sign them, so not signing says nothing " +
+      "about a member's view.",
+  },
   division: {
     title: "Divisions (votes)",
     text:
@@ -49,6 +56,7 @@ const NOTES: Record<string, { title: string; text: string }> = {
 
 export function aboutRecord(s: Pick<SourceCard, "kind" | "chamber" | "record_type">): { title: string; text: string } {
   if (s.kind === "division") return NOTES.division;
+  if (s.kind === "edm") return NOTES.edm;
   if (s.record_type === "question" || s.record_type === "answer" || /written answers/i.test(s.chamber)) {
     return NOTES.writtenAnswer;
   }

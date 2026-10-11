@@ -158,8 +158,40 @@ def division_source(n: int, d: dict[str, Any]) -> Source:
     return Source(n, "division", title, url, blocks, meta)
 
 
+def edm_source(n: int, e: dict[str, Any]) -> Source:
+    """An early day motion as a citable source: its words, who tabled it and who signed, by party on the day."""
+    sponsor = e.get("sponsor") or {}
+    who = sponsor.get("name") or e.get("primary_name") or "an MP"
+    party = sponsor.get("party") or e.get("primary_party")
+    tabled = _fmt_date(e["date_tabled"]) if e.get("date_tabled") else "an unknown date"
+    ref = f"EDM {e['uin']}" if e.get("uin") else "Early day motion"
+    title = f"{ref}, tabled {tabled} by {who}{' (' + party + ')' if party else ''} — {e['title']}"
+    by = f"{who} ({party})" if party else who
+    blocks = [f"{ref}: {e['title']}. Tabled on {tabled} by {by}."]
+    if e.get("text"):
+        blocks.append(e["text"])
+    counts = e.get("party_counts") or []
+    signed = sum(n for _, n in counts)
+    if counts:
+        blocks.append(f"Signed by {signed} member{'s' if signed != 1 else ''} (party on the day they signed): "
+                      + "; ".join(f"{p} {k}" for p, k in counts) + ".")
+    elif e.get("sponsors_count") is not None:
+        blocks.append(f"Signatures recorded: {e['sponsors_count']}.")
+    blocks.append("An early day motion records the view of the MPs who sign it. Few are debated, and ministers, "
+                  "whips and the Speaker do not sign them, so the absence of a signature says nothing about a "
+                  "member's view.")
+    meta = {"edm_id": e["id"], "uin": e.get("uin"), "date": e.get("date_tabled"), "edm_title": e["title"],
+            "motion_text": e.get("text"),
+            "chamber": "Early day motions", "sponsor": sponsor or {"name": who, "party": party},
+            "party_counts": counts, "sponsors_count": e.get("sponsors_count"), "text": "\n\n".join(blocks),
+            "official_url": f"https://edm.parliament.uk/early-day-motion/{e['id']}", "group": "Early day motions"}
+    return Source(n, "edm", title, f"/edms/{e['id']}", blocks, meta)
+
+
 def build_sources(records: list[dict[str, Any]], divisions: list[dict[str, Any]],
-                  facets: set[str] | bool = False, group_by: str = "role") -> list[Source]:
+                  facets: set[str] | bool = False, group_by: str = "role",
+                  edms: list[dict[str, Any]] | None = None) -> list[Source]:
     out = [record_source(i, r, facets, group_by) for i, r in enumerate(records, 1)]
     out += [division_source(len(out) + i, d) for i, d in enumerate(divisions, 1)]
+    out += [edm_source(len(out) + i, e) for i, e in enumerate(edms or [], 1)]
     return out

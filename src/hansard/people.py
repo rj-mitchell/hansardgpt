@@ -36,6 +36,23 @@ def person_number(person_id: str) -> int | None:
     return int(person_id.rsplit("/", 1)[1]) if person_id and person_id.startswith(PREFIX) else None
 
 
+def members_by_parliament_id(con: Any, pairs: list[tuple[int, str | None]]
+                             ) -> dict[tuple[int, str | None], dict[str, Any]]:
+    """Members by UK Parliament ID, each with their party on a given date (or latest): for early day motions.
+    ``con`` is a DuckDB connection with the reference tables attached."""
+    if not pairs:
+        return {}
+    rows = con.execute("""
+        WITH p(mnis, on_date) AS (SELECT * FROM (VALUES {values}))
+        SELECT p.mnis, p.on_date, r.person_id, r.latest_name,
+               (SELECT arg_max(m.party_name, m.start) FROM ref_memberships m WHERE m.person_id = r.person_id
+                  AND coalesce(try_cast(p.on_date AS DATE), current_date) BETWEEN m.start AND m."end") AS party
+        FROM p JOIN ref_persons r ON r.datadotparl_id = CAST(p.mnis AS VARCHAR)""".format(
+        values=", ".join("(?, ?)" for _ in pairs)), [x for pair in pairs for x in pair]).fetchall()
+    return {(mnis, on): {"number": person_number(pid), "slug": slug(name), "name": name, "party": party}
+            for mnis, on, pid, name, party in rows}
+
+
 def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
 
@@ -67,18 +84,7 @@ class People:
 
     # ---- the page ----------------------------------------------------------------------------------------------
     def by_parliament_id(self, pairs: list[tuple[int, str | None]]) -> dict[tuple[int, str | None], dict[str, Any]]:
-        """Members by UK Parliament ID, each with their party on a given date (or latest): for early day motions."""
-        if not pairs:
-            return {}
-        rows = self.con.execute("""
-            WITH p(mnis, on_date) AS (SELECT * FROM (VALUES {values}))
-            SELECT p.mnis, p.on_date, r.person_id, r.latest_name,
-                   (SELECT arg_max(m.party_name, m.start) FROM ref_memberships m WHERE m.person_id = r.person_id
-                      AND coalesce(try_cast(p.on_date AS DATE), current_date) BETWEEN m.start AND m."end") AS party
-            FROM p JOIN ref_persons r ON r.datadotparl_id = CAST(p.mnis AS VARCHAR)""".format(
-            values=", ".join("(?, ?)" for _ in pairs)), [x for pair in pairs for x in pair]).fetchall()
-        return {(mnis, on): {"number": person_number(pid), "slug": slug(name), "name": name, "party": party}
-                for mnis, on, pid, name, party in rows}
+        return members_by_parliament_id(self.con, pairs)
 
     def page(self, person_id: str) -> dict[str, Any] | None:
         person = self.con.execute("SELECT latest_name, gender, birth_date, birth_precision, datadotparl_id "

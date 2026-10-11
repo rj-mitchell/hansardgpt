@@ -6,6 +6,7 @@ import type { Answer, SourceCard } from "./types";
 /** A formal reference in the style used to cite Hansard, e.g. "HC Deb 9 March 2023, col 412". */
 export function formalReference(s: SourceCard): string {
   const date = fmtDate(s.date);
+  if (s.kind === "edm") return `EDM ${s.uin ?? ""}, tabled ${date}`.replace("EDM ,", "Early day motion,");
   if (s.kind === "division") {
     const house = /lords/i.test(s.chamber) ? "HL Deb" : "HC Deb";
     return `${house} ${date}, Division ${s.number ?? ""}`.trim();
@@ -24,6 +25,10 @@ export function formalReference(s: SourceCard): string {
 export function sourceLine(s: SourceCard): string {
   if (s.kind === "division") {
     return `[${s.n}] ${formalReference(s)}: ${s.major_heading ?? s.title}. ${s.official_url ?? s.url}`;
+  }
+  if (s.kind === "edm") {
+    const by = s.sponsor?.name ? `, tabled by ${s.sponsor.name}${s.sponsor.party ? ` (${s.sponsor.party})` : ""}` : "";
+    return `[${s.n}] ${formalReference(s)}: "${s.edm_title ?? s.title}"${by}. ${s.official_url ?? s.url}`;
   }
   const { name, tail } = attribution(s.speaker, s.speaker_name_raw);
   const roles = roleTitles(s.speaker);

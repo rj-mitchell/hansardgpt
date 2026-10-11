@@ -65,7 +65,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | **Charts**: how much a subject was debated over time, by party, House and nation | M | No AI cost. Must show context with every number (the lesson from the NZ site's expenses) |
 | ✓ **Topic briefings**: regularly refreshed briefings on the issues in the news, on permanent pages | S–M | Done 11 October: 16 topics in `config/topics.toml`. Rewritten only when due and the evidence has changed: about £2 to start, then roughly £2–6 a month |
 | **1997–2010** records | M–L | Needs the older boundary sets; disk use roughly doubles |
-| ✓ **Early Day Motions**: who signed which motions | M | Done: /edms to search and read motions and see who signed (with party on the day), and a section on each MP's page. Collected by the sync, working back to 2010 a year at a time. Not yet used in briefings |
+| ✓ **Early Day Motions**: who signed which motions | M | Done: /edms to search and read motions and see who signed (with party on the day), and a section on each MP's page. Collected by the sync, working back to 2010 a year at a time. Briefings also use the two or three motions most relevant to a question, with signatures by party, as their own kind of source |
 | **Select committee evidence and reports** | L | Different source and format |
 | **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data |
 
