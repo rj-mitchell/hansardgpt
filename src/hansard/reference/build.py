@@ -14,6 +14,8 @@ Outputs (Parquet, in ``settings.reference_dir``):
                       de-duplicated and interval-merged, with policy portfolios
 * ``constituencies``  ONS constituency -> ITL1 region with validity intervals
 * ``parties``         party id -> name and whip group (for rebellion analysis)
+* ``representations`` the Commons seats each MP has held, by UK Parliament constituency id (Members API)
+* ``election_results`` every general election and by-election result for those seats (Members API)
 
 Identity is keyed only on ``uk.org.publicwhip/person/N``. Names, including
 "Alternate" names such as "The Prime Minister", are never used to resolve who
@@ -73,6 +75,8 @@ class ReferenceData:
     offices: list[dict[str, Any]] = field(default_factory=list)
     constituencies: list[dict[str, Any]] = field(default_factory=list)
     parties: list[dict[str, Any]] = field(default_factory=list)
+    representations: list[dict[str, Any]] = field(default_factory=list)
+    election_results: list[dict[str, Any]] = field(default_factory=list)
     stats: dict[str, Any] = field(default_factory=dict)
 
 
@@ -120,6 +124,27 @@ def _resolve_chain(mapping: dict[str, str], key: str) -> str:
     return key
 
 
+def election_tables(persons: list[dict[str, Any]], elections: dict[str, Any]) -> tuple[list[dict], list[dict]]:
+    by_mnis = {p["datadotparl_id"]: p["person_id"] for p in persons if p.get("datadotparl_id")}
+    reps = []
+    for mnis, seats in (elections.get("representations") or {}).items():
+        person = by_mnis.get(str(mnis))
+        if person is None:
+            continue
+        for r in seats:
+            reps.append({"person_id": person, "constituency_id": int(r["id"]), "constituency_name": r["name"],
+                         "start": date.fromisoformat(r["start"]),
+                         "end": date.fromisoformat(r["end"]) if r.get("end") else SENTINEL_END})
+    results = []
+    for cid, rs in (elections.get("results") or {}).items():
+        for r in rs:
+            results.append({"constituency_id": int(cid), "election_date": date.fromisoformat(r["date"]),
+                            "title": r.get("title"), "is_general": bool(r.get("general")),
+                            "majority": r.get("majority"), "votes": r.get("votes"), "electorate": r.get("electorate"),
+                            "result": r.get("result"), "party": r.get("party")})
+    return reps, results
+
+
 def load_constituencies(csv_path: Path) -> list[dict[str, Any]]:
     rows = []
     with open(csv_path, encoding="utf-8") as fh:
@@ -154,6 +179,7 @@ def build_reference(
     geo_csv: Path,
     overrides_csv: Path | None = None,
     demographics: dict[str, dict[str, Any]] | None = None,
+    elections: dict[str, Any] | None = None,
 ) -> ReferenceData:
     genders = (demographics or {}).get("genders", {})
     births = (demographics or {}).get("births", {})
@@ -290,6 +316,9 @@ def build_reference(
     # ---- offices
     ref.offices, office_stats = load_offices(members_dir, person_redirect, known)
 
+    # ---- seats and election results (matched by UK Parliament ID)
+    ref.representations, ref.election_results = election_tables(ref.persons, elections or {})
+
     recent = {m["person_id"] for m in ref.memberships if m["end"] >= date(2010, 5, 6)}
     recent_persons = [p for p in ref.persons if p["person_id"] in recent]
     ref.stats = {
@@ -297,6 +326,8 @@ def build_reference(
         "members_since_2010": len(recent_persons),
         "with_gender_since_2010": sum(1 for p in recent_persons if p["gender"]),
         "with_birth_date_since_2010": sum(1 for p in recent_persons if p["birth_date"]),
+        "mps_with_election_results": len({r["person_id"] for r in ref.representations}),
+        "election_results": len(ref.election_results),
         "memberships": len(ref.memberships),
         "names": len(ref.names),
         "unmatched_seats_since_2010": sorted(unmatched_seats),
@@ -417,6 +448,12 @@ _SCHEMAS = {
         ("urban_area", pa.string()), ("urban_area_pop", pa.int32())]),
     "parties": pa.schema([("party_id", pa.string()), ("party_name", pa.string()),
                           ("whip_group", pa.string())]),
+    "representations": pa.schema([("person_id", pa.string()), ("constituency_id", pa.int32()),
+                                  ("constituency_name", pa.string()), ("start", pa.date32()), ("end", pa.date32())]),
+    "election_results": pa.schema([("constituency_id", pa.int32()), ("election_date", pa.date32()),
+                                   ("title", pa.string()), ("is_general", pa.bool_()), ("majority", pa.int32()),
+                                   ("votes", pa.int32()), ("electorate", pa.int32()), ("result", pa.string()),
+                                   ("party", pa.string())]),
 }
 
 

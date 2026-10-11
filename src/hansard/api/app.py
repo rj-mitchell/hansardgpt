@@ -351,10 +351,10 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                                         else "summary_sources", 12))
         res = p.engine.search(plan.search_text, plan.filters, Scope(**body.scope.model_dump()), plan.portfolios,
                               body.recency, body.role_weight, limit, diversify=True, group_by=plan.group_by)
+        from hansard.rag.pipeline import plan_facets
         from hansard.rag.sources import build_sources
 
-        demographics = plan.group_by != "role" or bool(plan.filters.genders or plan.filters.age_bands)
-        return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [], demographics,
+        return {"plan": plan.to_dict(), "sources": [s.card() for s in build_sources(res.records, [], plan_facets(plan),
                                                                                       plan.group_by)],
                 "candidates": res.candidates, "semantic": res.semantic_available, "evidence": res.evidence}
 

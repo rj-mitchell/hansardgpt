@@ -137,7 +137,7 @@ def test_older_reference_files_without_the_columns_still_load(tmp_path, referenc
 def test_speaker_label_mentions_gender_and_age_only_when_asked(resolver):
     rec = {"speaker": resolver.profile(GREENING, date(2015, 1, 1)).to_dict(), "speaker_name_raw": "Justine Greening"}
     assert "woman" not in speaker_label(rec) and "aged" not in speaker_label(rec)
-    label = speaker_label(rec, demographics=True)
+    label = speaker_label(rec, {"gender", "age"})
     assert "woman" in label and "aged 45" in label
 
 

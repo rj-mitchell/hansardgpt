@@ -70,10 +70,14 @@ def speaker_group(profile: Any) -> str:
 
 
 def demographic_group(profile: Any, group_by: str) -> str:
-    """'F'/'M'/'unknown' for gender; an age band (age on the date) or 'unknown' for age."""
+    """The group key for gender, age on the date, first term or majority at the time ('unknown' when not known)."""
     p = profile.to_dict() if hasattr(profile, "to_dict") else (profile or {})
     if group_by == "gender":
         return p.get("gender") or "unknown"
+    if group_by == "tenure":
+        return {True: "first-term", False: "returning"}.get(p.get("first_term"), "unknown")
+    if group_by == "majority":
+        return p.get("majority_band") or "unknown"
     return p.get("age_band") or "unknown"
 
 
@@ -130,6 +134,8 @@ def evidence_summary(records: list[dict[str, Any]], divisions: list[dict[str, An
     settlements: Counter[str] = Counter()
     genders: Counter[str] = Counter()
     ages: Counter[str] = Counter()
+    tenures: Counter[str] = Counter()
+    majorities: Counter[str] = Counter()
     speakers: set[str] = set()
     dates = []
     for r in records:
@@ -142,6 +148,9 @@ def evidence_summary(records: list[dict[str, Any]], divisions: list[dict[str, An
         if sp.get("person_id"):
             genders[sp.get("gender") or "unknown"] += 1
             ages[sp.get("age_band") or "unknown"] += 1
+            if sp.get("house") == "commons":
+                tenures[demographic_group(sp, "tenure")] += 1
+                majorities[demographic_group(sp, "majority")] += 1
         speakers.add(sp.get("person_id") or r.get("speaker_name_raw") or r["record_id"])
         dates.append(r["date"])
     return {
@@ -155,6 +164,8 @@ def evidence_summary(records: list[dict[str, Any]], divisions: list[dict[str, An
         "seat_types": dict(settlements.most_common()),
         "genders": dict(genders.most_common()),       # contributions by speakers' gender (F, M, unknown)
         "age_bands": dict(ages.most_common()),        # contributions by speakers' age on the day
+        "tenure": dict(tenures.most_common()),         # MPs' contributions: first term or re-elected, on the day
+        "majority_bands": dict(majorities.most_common()),  # MPs' contributions by majority at the time
         "imbalance": imbalance(parties, len(records)),
     }
 

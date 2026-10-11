@@ -347,9 +347,15 @@ export default function App() {
               evidence={t.evidence}
               demographics={
                 !!t.plan &&
-                ((t.plan.group_by ?? "role") !== "role" ||
+                (["gender", "age"].includes(t.plan.group_by ?? "role") ||
                   !!t.plan.filters.genders?.length ||
                   !!t.plan.filters.age_bands?.length)
+              }
+              seats={
+                !!t.plan &&
+                (["tenure", "majority"].includes(t.plan.group_by ?? "role") ||
+                  !!t.plan.filters.tenure?.length ||
+                  !!t.plan.filters.majority_bands?.length)
               }
             />
             {t.status === "planning" && <p className="status" role="status">Interpreting the question…</p>}

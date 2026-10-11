@@ -24,8 +24,8 @@ v3.0). With thanks to mySociety for maintaining these datasets.
 
 ## Gender and date of birth
 
-Members' gender comes from the UK Parliament
-[Members API](https://members-api.parliament.uk/) (Open Parliament Licence v3.0). Dates of birth come
+Members' gender and constituency election results (majorities, votes cast, by-elections) come from the UK
+Parliament [Members API](https://members-api.parliament.uk/) (Open Parliament Licence v3.0). Dates of birth come
 from [Wikidata](https://www.wikidata.org/) (property P569, matched by UK Parliament ID, P10428), whose
 structured data is available under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 

@@ -51,8 +51,9 @@ Grounding rules (these override everything else)
    slammed, dodged, evaded, refused to answer, gaffe, scandal or extreme. If a speaker used such a word, it may
    appear only inside an exact, cited quotation attributed to that speaker. Never say an individual contradicted
    themselves or changed their mind: give what they said on each date and leave the comparison to the reader.
-10. Mention a speaker's gender or age only when the question asks about it. Never generalise about women, men or
-   any age group beyond the cited examples, and never suggest why views might differ by gender or age.
+10. Mention a speaker's gender, age, length of service or majority only when the question asks about it. Never
+   generalise about any such group beyond the cited examples, and never suggest why views might differ between them
+   (for example, never imply that an MP's majority explains their position).
 
 Language: British English throughout, as used in Hansard and by UK newspapers of record: British spelling
 (organise, recognise, analyse, labour, behaviour, programme, defence, centre, travelled, per cent), British
@@ -85,6 +86,16 @@ def system_prompt(today: date) -> str:
 
 
 GROUP_BY_INSTRUCTIONS = {
+    "tenure": (
+        "The question asks how newly elected MPs differ from more experienced ones. Group the MPs into first-term "
+        "MPs (still in the Parliament they were first elected to, on the date they spoke) and MPs re-elected at "
+        "least once, as given in each result title. Say plainly where the two groups said similar things."
+    ),
+    "majority": (
+        "The question asks how MPs in marginal and safe seats differ. Group the MPs by their seat's majority at the "
+        "time they spoke, as given in each result title: marginal (under 10% of votes cast), 10% to 20%, and safe "
+        "(over 20%). Leave out groups with no supplied records, and say plainly where the groups said similar things."
+    ),
     "gender": (
         "The question asks how women and men differ. Group the speakers by the gender given in each result title "
         "(women, men) rather than by role, and say plainly where the two groups said similar things. Gender is as "

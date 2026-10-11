@@ -93,6 +93,25 @@ def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[d
     return load_demographics(demographics_path(settings)), status
 
 
+def elections_path(settings: Settings) -> Path:
+    return settings.data_dir / "raw" / "elections.json"
+
+
+def refresh_elections_data(settings: Settings, members_dir: Path, fetch: bool = True
+                           ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Seats and election results for every MP since 2010 (refreshed weekly when ``fetch``), and what happened."""
+    from hansard.sources.elections import commons_member_ids, load_elections, refresh_elections
+
+    status: dict[str, Any] = {"status": "not fetched"}
+    if fetch and settings.section("elections").get("enabled", True):
+        try:
+            status = refresh_elections(elections_path(settings), commons_member_ids(members_dir / "people.json"))
+        except Exception as exc:  # never let this stop a sync
+            log.warning("election results refresh failed: %s", exc)
+            status = {"status": "failed", "error": repr(exc)}
+    return load_elections(elections_path(settings)), status
+
+
 def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | None) -> dict[str, Any]:
     from hansard.sources import parlparse
 
@@ -103,16 +122,22 @@ def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | No
         sha = parlparse.ensure_checkout(settings.sources["parlparse_repo"], settings.parlparse_dir,
                                         settings.sources.get("parlparse_branch", "master"))
         members_dir = parlparse.members_dir(settings.parlparse_dir)
-        if (sha == state.get("parlparse_sha") and (settings.reference_dir / "persons.parquet").exists()
-                and demo_status.get("status") not in ("updated", "partial")):
-            return {"parlparse_sha": sha, "reference_changed": False, "people_changed": [],
-                    "demographics": demo_status}
+    elections, elec_status = refresh_elections_data(settings, members_dir, fetch=fetch)
+    unchanged = (fetch and sha == state.get("parlparse_sha")
+                 and (settings.reference_dir / "persons.parquet").exists()
+                 and (settings.reference_dir / "election_results.parquet").exists()
+                 and demo_status.get("status") not in ("updated", "partial")
+                 and elec_status.get("status") != "updated")
+    if unchanged:
+        return {"parlparse_sha": sha, "reference_changed": False, "people_changed": [],
+                "demographics": demo_status, "elections": elec_status}
     ref = build_reference(members_dir, STATIC_DIR / "geo" / "constituencies.csv",
                           Path(settings.config_path).parent / "overrides" / "constituency_names.csv",
-                          demographics)
+                          demographics, elections)
     people = install_reference(settings, state, ref, sha)
     return {"parlparse_sha": sha, "reference_changed": True, "people_changed": sorted(people),
-            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", []), "demographics": demo_status}
+            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", []), "demographics": demo_status,
+            "elections": elec_status}
 
 
 def install_reference(settings: Settings, state: StateDB, ref: ReferenceData, sha: str | None) -> set[str]:

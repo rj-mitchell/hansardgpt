@@ -24,6 +24,19 @@ export interface Speaker {
   age?: number | null;                // on the date of the record, not today
   age_approximate?: boolean | null;   // only the year of birth is known
   age_band?: string | null;
+  first_elected?: string | null;       // first elected to the Commons
+  first_term?: boolean | null;         // still in the Parliament they were first elected to, on the date
+  majority_band?: string | null;
+  majority_then?: Majority | null;     // from the last election in their seat before the date
+  majority_now?: (Majority & { constituency: string }) | null;
+}
+
+export interface Majority {
+  majority: number;
+  pct: number | null;
+  band: string | null;
+  election: string;
+  date: string;
 }
 
 export interface Ranking {
@@ -89,6 +102,8 @@ export interface Filters {
   record_types: string[];
   genders?: string[];
   age_bands?: string[];
+  tenure?: string[];
+  majority_bands?: string[];
 }
 
 export interface Plan {
@@ -101,7 +116,7 @@ export interface Plan {
   unresolved_speakers: string[];
   interpretation: string;
   parser: string;
-  group_by?: "role" | "gender" | "age";
+  group_by?: "role" | "gender" | "age" | "tenure" | "majority";
 }
 
 export interface Segment {
@@ -148,6 +163,8 @@ export interface Evidence {
   genders?: Record<string, number>;
   age_bands?: Record<string, number>;
   imbalance?: { party: string; count: number; total: number } | null;
+  tenure?: Record<string, number>;
+  majority_bands?: Record<string, number>;
 }
 
 export type TurnStatus = "planning" | "searching" | "answering" | "verifying" | "done" | "error";

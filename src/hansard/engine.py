@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 WRITTEN_SOURCES = {"wrans", "lordswrans", "wms", "lordswms"}
 PBC_SOURCES = {"standing"}
 ORAL_SOURCES = {"debates", "westminhall", "lordspages"}
-GROUP_BY = ("role", "gender", "age")
+GROUP_BY = ("role", "gender", "age", "tenure", "majority")
 ARCHIVE_START = date(2010, 5, 6)
 
 
@@ -45,6 +45,8 @@ class Filters:
     record_types: list[str] = field(default_factory=list)    # speech/question/answer/statement
     genders: list[str] = field(default_factory=list)         # "F", "M" (as recorded by Parliament)
     age_bands: list[str] = field(default_factory=list)       # see sources.demographics.AGE_BANDS; age on the day
+    tenure: list[str] = field(default_factory=list)          # "first-term", "returning" (MPs, on the day)
+    majority_bands: list[str] = field(default_factory=list)  # "marginal", "middle", "safe" (MPs, on the day)
 
     def as_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -150,9 +152,11 @@ class Engine:
         people who were in an age band at some point in the date range, and each record is then checked against
         the speaker's age on the day it was spoken.
         """
-        if not filters.genders and not filters.age_bands:
+        if not (filters.genders or filters.age_bands or filters.tenure or filters.majority_bands):
             return None, {}
         clauses, params = ["m.\"end\" >= ?"], [filters.date_from or ARCHIVE_START]
+        if filters.tenure or filters.majority_bands:
+            clauses.append("m.house = 'commons'")  # first terms and majorities apply to MPs
         if filters.date_to:
             clauses.append("m.start <= ?")
             params.append(filters.date_to)
@@ -189,25 +193,51 @@ class Engine:
         r = self.settings.ranking
         if filters.parties:
             filters = Filters(**{**filters.__dict__, "parties": self.expand_parties(filters.parties)})
-        people, births = self.demographic_people(filters)
+        post_filters = bool(filters.age_bands or filters.tenure or filters.majority_bands)
+        if (filters.tenure or filters.majority_bands) and not (filters.genders or filters.age_bands):
+            # First terms and majorities depend on the day, so each candidate is checked below; listing every MP
+            # in the search itself would only slow it down. Limiting it to the Commons is enough.
+            people, births = None, {}
+            if not filters.houses:
+                filters = Filters(**{**filters.__dict__, "houses": ["commons"]})
+        else:
+            people, births = self.demographic_people(filters)
         if people is not None:
             # an impossible id keeps the search empty when nobody matches
             filters = Filters(**{**filters.__dict__, "person_ids": people or ["-none-"]})
         bands = set(filters.age_bands)
+        tenure, majority = set(filters.tenure), set(filters.majority_bands)
+        facts: dict[tuple[str, date], dict[str, Any]] = {}
+
+        def seat(pid: str, on: date) -> dict[str, Any]:
+            if (pid, on) not in facts:
+                facts[(pid, on)] = self.resolver.seat_facts(pid, on)
+            return facts[(pid, on)]
 
         def age_ok(hit: dict[str, Any]) -> bool:
-            if not bands:
-                return True
-            birth = births.get(hit.get("person_id"))
-            return birth is not None and age_band(age_on(birth, hit["date"])) in bands
+            """The checks that depend on the date of the record: age, first term, majority at the time."""
+            pid = hit.get("person_id")
+            if bands:
+                birth = births.get(pid)
+                if birth is None or age_band(age_on(birth, hit["date"])) not in bands:
+                    return False
+            if tenure or majority:
+                f = seat(pid, hit["date"]) if pid else {}
+                if tenure and {True: "first-term", False: "returning"}.get(f.get("first_term")) not in tenure:
+                    return False
+                if majority and f.get("majority_band") not in majority:
+                    return False
+            return True
 
         where = build_where(filters, scope)
-        bm = self.index.bm25(query, where, int(r.get("candidates_bm25", 300)))
+        # checks made after the search discard some candidates, so fetch more to start with
+        widen = 2 if post_filters else 1
+        bm = self.index.bm25(query, where, int(r.get("candidates_bm25", 300)) * widen)
         vec_hits: list[dict[str, Any]] = []
         semantic = self.index.stats()["vectors"] > 0 and self.embedder is not None
         if semantic:
             vec_hits = self.index.vector(self.embedder.embed_query(query), where,
-                                         int(r.get("candidates_vector", 300)))
+                                         int(r.get("candidates_vector", 300)) * widen)
 
         cands: dict[str, Candidate] = {}
 
