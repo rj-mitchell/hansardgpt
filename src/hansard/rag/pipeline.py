@@ -85,6 +85,16 @@ def plan_facets(plan: QueryPlan) -> set[str]:
     return out
 
 
+def rerank_query(plan: QueryPlan, how: str | None) -> str:
+    """What the re-ranker compares passages with: the question as asked, the search keywords, or both
+    (the keywords carry the topic of a follow-up such as "what about the Lords?")."""
+    if how == "keywords":
+        return plan.search_text
+    if how == "question":
+        return plan.question
+    return f"{plan.question} ({plan.search_text})"
+
+
 class Pipeline:
     def __init__(self, settings: Settings, engine: Engine | None = None, client=None, today: date | None = None):
         self.settings = settings
@@ -151,7 +161,8 @@ class Pipeline:
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))
         result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
-                                    req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by)
+                                    req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by,
+                                    rerank_query=rerank_query(plan, self.settings.ranking.get("rerank_query")))
         divisions = []
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)

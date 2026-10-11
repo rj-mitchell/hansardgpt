@@ -72,7 +72,7 @@ from hansard.config import REPO_ROOT, Settings, load_settings
 from hansard.engine import Engine, Scope
 from hansard.rag import prompts
 from hansard.rag.pipeline import AskRequest, Pipeline
-from hansard.rag.query_parse import ITL1_REGIONS, QueryPlan
+from hansard.rag.query_parse import ITL1_REGIONS, QueryPlan, parse_model
 from hansard.reference.portfolios import PORTFOLIOS
 from hansard.store.state import StateDB
 
@@ -319,7 +319,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                     if ev["type"] == "error":
                         record_failure(state, "briefing", body.question, ev.get("message", ""))
                     if ev["type"] == "plan" and ev.get("usage"):
-                        record_usage(state, uid, "parse", settings.answer.get("model"), ev["usage"], settings.usage,
+                        record_usage(state, uid, "parse", parse_model(settings), ev["usage"], settings.usage,
                                      visitor)
                     if ev["type"] == "final" and ev.get("usage"):
                         record_usage(state, uid, "answer", ev.get("model"), ev["usage"], settings.usage, visitor)

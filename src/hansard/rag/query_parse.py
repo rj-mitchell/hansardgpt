@@ -29,6 +29,8 @@ ITL1_REGIONS = [
     "North East", "North West", "Yorkshire and The Humber", "East Midlands", "West Midlands",
     "East of England", "London", "South East", "South West", "Scotland", "Wales", "Northern Ireland",
 ]
+Region = Literal["North East", "North West", "Yorkshire and The Humber", "East Midlands", "West Midlands",
+                 "East of England", "London", "South East", "South West", "Scotland", "Wales", "Northern Ireland"]
 Office = Literal["gov", "shadow", "chair", "backbench"]
 House = Literal["commons", "lords"]
 Gender = Literal["F", "M"]
@@ -45,7 +47,7 @@ class ParsedQuery(BaseModel):
     date_from: str | None = Field(description="YYYY-MM-DD or null")
     date_to: str | None = Field(description="YYYY-MM-DD or null")
     houses: list[House]
-    regions: list[str]
+    regions: list[Region]
     parties: list[str]
     speakers: list[str]
     offices: list[Office]
@@ -277,8 +279,10 @@ Rules:
 - date_from/date_to: ISO dates for explicit or clearly implied periods ("between 2018 and 2022" ->
   2018-01-01 to 2022-12-31; "since the 2024 election" -> 2024-07-04).
 - houses: "commons" for MPs/House of Commons/constituencies, "lords" for peers/House of Lords.
-- regions: ITL1 regions for questions about where MPs' seats are. Named groups:
+- regions: ITL1 regions, only for questions about where MPs' seats are, listed individually by name. A named group
+  stands for all its regions, so list each of them:
 {groups}
+  Choose exactly the places asked about: "Scottish MPs" -> ["Scotland"], "Welsh MPs" -> ["Wales"].
   Region filters apply to MPs only (peers have no constituency), so also set houses to ["commons"].
 - parties: party ids from this list: {party_list}
 - speakers: full names of specific people the question asks about, as written.
@@ -305,6 +309,26 @@ Rules:
   dates written as 9 October 2026)."""
 
 
+def expand_regions(names: list[str], groups: dict[str, list[str]]) -> list[str]:
+    """ITL1 region names, in the standard order; a named group ("northern") becomes its regions."""
+    lower = {r.lower(): r for r in ITL1_REGIONS}
+    out: set[str] = set()
+    for n in names:
+        key = n.strip()
+        group = groups.get(key) or groups.get(key.lower().replace(" ", "_"))
+        out.update(group or ([lower[key.lower()]] if key.lower() in lower else []))
+    return [r for r in ITL1_REGIONS if r in out]
+
+
+def _open_end(d: date | None, today: date) -> date | None:
+    """An end date of today or later is the same as no end date (and reads better as a filter)."""
+    return None if d is not None and d >= today else d
+
+
+def parse_model(settings) -> str:
+    return settings.answer.get("query_parse_model") or settings.answer.get("model", "claude-opus-5-5")
+
+
 def parse_with_model(client, settings, question: str, history: list[dict[str, str]] | None,
                      parties: list[tuple[str, str]], today: date | None = None) -> tuple[QueryPlan, Any]:
     from hansard.rag.answer import cached_system
@@ -315,7 +339,7 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
         convo = "Earlier questions in this conversation (for resolving references like 'what about the Lords?'):\n"
         convo += "\n".join(f"- {h['question']}" for h in history[-4:]) + "\n\n"
     resp = client.messages.parse(
-        model=settings.answer.get("model", "claude-opus-5-5"),
+        model=parse_model(settings),
         max_tokens=2000,
         system=cached_system(system_prompt(settings.regions, parties, today)),
         messages=[{"role": "user", "content": f"{convo}Question: {question}"}],
@@ -331,8 +355,8 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
         question=question,
         search_text=p.search_text.strip() or question,
         filters=Filters(
-            date_from=_iso(p.date_from), date_to=_iso(p.date_to), houses=sorted(set(p.houses)),
-            regions=[r for r in p.regions if r in ITL1_REGIONS],
+            date_from=_iso(p.date_from), date_to=_open_end(_iso(p.date_to), today),
+            houses=sorted(set(p.houses)), regions=expand_regions(p.regions, settings.regions),
             parties=[x for x in p.parties if x in known_parties], offices=sorted(set(p.offices)),
             genders=sorted(set(p.genders)) if p.group_by != "gender" else [],
             age_bands=[b for b in AGE_BAND_KEYS if b in p.age_bands] if p.group_by != "age" else [],

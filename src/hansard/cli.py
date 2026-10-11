@@ -17,6 +17,8 @@ from hansard.config import STATIC_DIR, Settings, load_settings
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="Where They Stand: sourced briefings on the record of the UK Parliament.")
 user_app = typer.Typer(no_args_is_help=True, help="Manage invite-only user accounts.")
 app.add_typer(user_app, name="user")
+eval_app = typer.Typer(no_args_is_help=True, help="Score the site against the test set (eval/questions.toml).")
+app.add_typer(eval_app, name="eval")
 
 log = logging.getLogger("hansard")
 
@@ -361,6 +363,109 @@ def user_disable(email: str):
         con.execute("UPDATE users SET disabled = 1 WHERE email = ?", (email,))
         con.execute("DELETE FROM sessions WHERE user_id IN (SELECT user_id FROM users WHERE email = ?)", (email,))
     typer.echo(f"disabled {email}")
+
+
+# ---- the test set ------------------------------------------------------------------------------------------------
+
+EVAL_DIR = Path("eval")
+
+
+def _eval_setup(questions: Path, only: str | None):
+    from hansard.evaluate import load_questions
+
+    today, qs = load_questions(questions)
+    if only:
+        keep = set(only.split(","))
+        qs = [q for q in qs if q.id in keep]
+    return today, qs
+
+
+def _client():
+    from hansard.rag.answer import make_client
+
+    return make_client()
+
+
+def _load_plans(path: Path) -> dict[str, dict]:
+    run = json.loads(path.read_text(encoding="utf-8"))
+    return {r["id"]: r["plan"] for r in run["rows"] if r.get("plan")}
+
+
+@eval_app.command("plans")
+def eval_plans(model: str = typer.Option(None, help="model that reads the questions (default: the configured one)"),
+               effort: str = typer.Option(None, help="low, medium or high"),
+               questions: Path = typer.Option(EVAL_DIR / "questions.toml"), only: str = typer.Option(None),
+               out: Path = typer.Option(EVAL_DIR / "runs")):
+    """Score how each question is read (the filters chosen). Costs a little: one model call per question."""
+    from hansard.evaluate import run_plans, save
+    from hansard.rag.pipeline import Pipeline
+
+    settings = _settings()
+    today, qs = _eval_setup(questions, only)
+    parties = Pipeline(settings).parties()
+    res = run_plans(settings, qs, today, _client(), parties, model, effort)
+    path = save(out, f"plans-{res['model']}", res)
+    typer.echo(json.dumps(res["summary"], indent=1))
+    typer.echo(f"saved {path}")
+
+
+@eval_app.command("sources")
+def eval_sources(plans: Path = typer.Option(..., help="a saved plans run: the filters each question was read as"),
+                 variant: list[str] = typer.Option(["baseline"], help="baseline or rerank:<model>[:question|keywords|both[:weight]]"),
+                 judge: str = typer.Option("claude-haiku-5-5", help="model that grades relevance"),
+                 questions: Path = typer.Option(EVAL_DIR / "questions.toml"), only: str = typer.Option(None),
+                 out: Path = typer.Option(EVAL_DIR / "runs"),
+                 judgments: Path = typer.Option(EVAL_DIR / "judgments.jsonl")):
+    """Compare ranking variants on the relevance and balance of the sources they choose."""
+    from hansard.evaluate import (
+        judge_sources,
+        judgments_load,
+        parse_variant,
+        run_sources,
+        save,
+        summarise_sources,
+    )
+
+    settings = _settings()
+    today, qs = _eval_setup(questions, only)
+    plan_map = _load_plans(plans)
+    runs = []
+    for v in variant:
+        typer.echo(f"{v}:")
+        run = run_sources(settings, plan_map, qs, today, parse_variant(v))
+        save(out, f"sources-{v.replace(':', '_').replace('/', '-')}", run)
+        runs.append(run)
+    graded = judge_sources(settings, _client(), qs, runs, judgments, judge)
+    known = judgments_load(judgments)
+    summaries = [summarise_sources(r, known) for r in runs]
+    for sm in summaries:
+        typer.echo(json.dumps({k: v for k, v in sm.items() if k != "per_question"}))
+    typer.echo(f"grading cost ${graded['cost_usd']} ({graded['graded']} passages graded)")
+    save(out, "sources-summary", {"summaries": summaries, "grading": graded})
+
+
+@eval_app.command("briefings")
+def eval_briefings(plans: Path = typer.Option(...), model: list[str] = typer.Option(["claude-opus-5-5"]),
+                   judge: str = typer.Option("claude-opus-5-5", help="model for the side-by-side judgement"),
+                   questions: Path = typer.Option(EVAL_DIR / "questions.toml"), only: str = typer.Option(None),
+                   out: Path = typer.Option(EVAL_DIR / "runs")):
+    """Write briefings with each model (about $0.06-0.15 each) and compare them; the first model is the baseline."""
+    from hansard.evaluate import compare_briefings, run_briefings, save
+
+    settings = _settings()
+    today, qs = _eval_setup(questions, only)
+    plan_map, client = _load_plans(plans), _client()
+    runs = []
+    for m in model:
+        typer.echo(f"{m}:")
+        run = run_briefings(settings, plan_map, qs, today, client, m)
+        save(out, f"briefings-{m}", run)
+        typer.echo(json.dumps(run["summary"]))
+        runs.append(run)
+    for other in runs[1:]:
+        cmp = compare_briefings(settings, client, runs[0], other, judge)
+        save(out, f"compare-{runs[0]['model']}-{other['model']}", cmp)
+        typer.echo(json.dumps({k: cmp[k] for k in ("a", "b", "tally", "cost_usd")}))
 
 
 def main() -> None:  # pragma: no cover

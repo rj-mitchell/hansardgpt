@@ -20,6 +20,7 @@ from hansard.embed.base import Embedder, get_embedder
 from hansard.index.lance import SearchIndex, date_lit, sql_list, sql_str
 from hansard.rank.composite import Candidate, RankParams, Scored, rank
 from hansard.rank.evidence import evidence_summary, select_evidence
+from hansard.rank.rerank import Reranker, get_reranker, rerank
 from hansard.reference.profiles import ProfileResolver
 from hansard.sources.demographics import AGE_BANDS, age_band, age_on, assumed_birth, band_dates
 from hansard.store.parquet import read_partition_rows
@@ -115,8 +116,11 @@ def build_where(filters: Filters, scope: Scope) -> str:
 
 
 class Engine:
-    def __init__(self, settings: Settings, embedder: Embedder | None = None, today: date | None = None):
+    def __init__(self, settings: Settings, embedder: Embedder | None = None, today: date | None = None,
+                 reranker: Reranker | None | bool = True):
         self.settings = settings
+        # True: load the model named in the settings when first needed; None or False: no re-ranking
+        self._reranker: Reranker | None | bool = reranker
         dim = int(settings.embedding.get("dim", 384))
         self.index = SearchIndex(settings.index_dir, dim)
         self.resolver = ProfileResolver(settings.reference_dir)
@@ -134,6 +138,12 @@ class Engine:
                 log.warning("embedder unavailable (%s); using keyword search only", exc)
                 return None
         return self._embedder
+
+    @property
+    def reranker(self) -> Reranker | None:
+        if self._reranker is True:
+            self._reranker = get_reranker(self.settings)  # None if switched off or the model cannot be loaded
+        return self._reranker or None
 
     def expand_parties(self, parties: list[str]) -> list[str]:
         """'labour' also matches Labour/Co-operative members (same whip)."""
@@ -188,7 +198,7 @@ class Engine:
     def search(self, query: str, filters: Filters | None = None, scope: Scope | None = None,
                portfolios: list[str] | None = None, recency: float | None = None,
                role_weight: float | None = None, limit: int = 12, diversify: bool = False,
-               group_by: str = "role") -> SearchResult:
+               group_by: str = "role", rerank_query: str | None = None) -> SearchResult:
         filters, scope = filters or Filters(), scope or Scope()
         r = self.settings.ranking
         if filters.parties:
@@ -267,6 +277,8 @@ class Engine:
                 c.best_passage_id = h["passage_id"]
         for h in vec_hits:
             c = cand_for(h)
+            if h.get("text"):
+                c.data["passages"].setdefault(h["passage_id"], {"text": h["text"], "heading": h.get("heading")})
             sim = 1.0 - float(h["_distance"])
             if c.cosine is None or sim > c.cosine:
                 c.cosine = sim
@@ -279,6 +291,9 @@ class Engine:
             semantic_floor=r.get("semantic_floor", floor), semantic_ceiling=r.get("semantic_ceiling", ceiling),
             **({"today": self.today} if self.today else {}))
         scored = rank(list(cands.values()), set(portfolios or []), params)
+        if self.reranker is not None and scored:
+            scored = rerank(scored, rerank_query or query, self.reranker, top=int(r.get("rerank_top", 150)),
+                            weight=float(r.get("rerank_weight", 0.6)))
         best_cos = max((c.cosine or 0.0 for c in cands.values()), default=0.0)
         no_records = not scored or (semantic and best_cos < float(r.get("no_records_cosine", 0.0))
                                     and not any(c.bm25 for c in cands.values()))

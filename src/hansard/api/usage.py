@@ -18,10 +18,20 @@ from typing import Any
 from hansard.store.state import StateDB, utcnow
 
 
-def cost_usd(usage: dict[str, int] | None, prices: dict[str, Any]) -> float:
+def prices_for(prices: dict[str, Any], model: str | None) -> dict[str, Any]:
+    """The [usage] prices, with any per-model prices (``[usage.models."<model>"]``) on top."""
+    per_model = prices.get("models") or {}
+    for name, own in per_model.items():
+        if model and (model == name or model.startswith(name)):
+            return {**prices, **own}
+    return prices
+
+
+def cost_usd(usage: dict[str, int] | None, prices: dict[str, Any], model: str | None = None) -> float:
     """Cost of one call. Cache writes cost 1.25x the input price; cache reads are priced separately."""
     if not usage:
         return 0.0
+    prices = prices_for(prices, model)
     price_in = float(prices.get("price_input_per_mtok", 4.0))
     writes = usage.get("cache_write_tokens", 0)
     return round(
@@ -52,7 +62,7 @@ def visitor_key(state: StateDB, address: str | None, day: str | None = None) -> 
 
 def record_usage(state: StateDB, user_id: int | None, kind: str, model: str | None,
                  usage: dict[str, int] | None, prices: dict[str, Any], visitor: str | None = None) -> float:
-    cost = cost_usd(usage, prices)
+    cost = cost_usd(usage, prices, model)
     u = usage or {}
     with state.connect() as con:
         con.execute(
