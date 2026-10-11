@@ -74,6 +74,34 @@ def record_usage(state: StateDB, user_id: int | None, kind: str, model: str | No
     return cost
 
 
+def new_briefings_today(state: StateDB, visitor: str) -> int:
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
+    with state.connect() as con:
+        return con.execute("SELECT count(*) FROM usage WHERE visitor = ? AND kind = 'answer' AND at >= ?",
+                           (visitor, day)).fetchone()[0]
+
+
+def _supporter_key(visitor: str) -> str:
+    return f"supporter:{datetime.now(UTC).strftime('%Y-%m-%d')}:{visitor}"
+
+
+def mark_supporter(state: StateDB, visitor: str) -> None:
+    """The visitor went through to the donation page: no more reminders today (visitor codes change daily)."""
+    with state.connect() as con:
+        con.execute("INSERT OR REPLACE INTO kv (key, value) VALUES (?, '1')", (_supporter_key(visitor),))
+        con.execute("DELETE FROM kv WHERE key LIKE 'supporter:%' AND key NOT LIKE ?",
+                    (f"supporter:{datetime.now(UTC).strftime('%Y-%m-%d')}:%",))
+
+
+def support_reminder_due(state: StateDB, visitor: str | None, every: int) -> int:
+    """After every ``every``-th new briefing a visitor has had written today, how many that is (else 0); never
+    once they have gone through to donate today."""
+    if not visitor or every <= 0:
+        return 0
+    n = new_briefings_today(state, visitor)
+    return n if n > 0 and n % every == 0 and state.get(_supporter_key(visitor)) is None else 0
+
+
 def check_caps(state: StateDB, user_id: int | None, limits: dict[str, Any], visitor: str | None = None) -> str | None:
     """Return a plain-English reason if this person may not have another briefing written now."""
     now = datetime.now(UTC)
@@ -88,7 +116,7 @@ def check_caps(state: StateDB, user_id: int | None, limits: dict[str, Any], visi
         elif visitor is not None:
             asked = con.execute("SELECT count(*) FROM usage WHERE visitor = ? AND kind = 'answer' AND at >= ?",
                                 (visitor, day)).fetchone()[0]
-            if asked >= int(limits.get("per_visitor_daily_questions", 15)):
+            if asked >= int(limits.get("per_visitor_daily_questions", 40)):
                 return ("You have reached today's limit for new briefings. It resets at midnight UTC; "
                         "briefings others have already asked for still load.")
         spent_today = con.execute("SELECT coalesce(sum(cost_usd), 0) FROM usage WHERE at >= ?", (day,)).fetchone()[0]

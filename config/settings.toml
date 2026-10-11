@@ -77,7 +77,11 @@ batch_size = 8
 
 [usage]
 # The site is public; each new model-written briefing costs money.
-per_visitor_daily_questions = 15   # anonymous visitors (keyed by a salted hash of their IP address)
+# Every this many new briefings in a day, a visitor is shown a short note on what the site costs, with the donation
+# link (only when [site] donate_url is set). Going through to the donation page stops it for the rest of the day.
+support_reminder_every = 10
+# A backstop against automated use, not an everyday limit (the reminder above does that job).
+per_visitor_daily_questions = 40   # anonymous visitors (keyed by a salted hash of their IP address)
 per_user_daily_questions = 60      # signed-in users, when invite-only sign-in is on
 requests_per_minute = 20           # questions and searches per visitor
 answer_cache_hours = 168           # identical questions are not re-run until new records arrive (or a week)

@@ -461,3 +461,23 @@ def test_cache_writes_and_reads_are_priced(tmp_path):
     prices = {"price_input_per_mtok": 4.0, "price_output_per_mtok": 20.0, "price_cache_read_per_mtok": 0.2}
     assert cost_usd({"input_tokens": 1_000_000, "cache_write_tokens": 1_000_000}, prices) == 5.0
     assert cost_usd({"input_tokens": 0, "cache_read_tokens": 1_000_000}, prices) == 0.2
+
+
+def test_support_reminder_every_n_new_briefings(indexed_settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("HANSARD_DONATE_URL", "https://ko-fi.com/example")
+    app, state, _ = make_app(indexed_settings, tmp_path, auth=False, support_reminder_every=2,
+                             per_visitor_daily_questions=10)
+    client = TestClient(app)
+
+    def final(q):
+        return [e for e in events(client.post("/api/ask", json={"question": q})) if e["type"] == "final"][-1]
+
+    assert "support_reminder" not in final("trial by jury")
+    second = final("onshore wind farms")
+    assert second["support_reminder"] == 2  # every second new briefing, with the count so far
+    assert "support_reminder" not in final("trial by jury")  # an earlier briefing again: no new cost, no reminder
+    # the shared copy of a briefing never carries the reminder
+    assert "support_reminder" not in client.get(f"/api/briefings/{second['briefing_id']}").text
+    assert client.post("/api/support-clicked").status_code == 200
+    final("rail fares")
+    assert "support_reminder" not in final("prison places")  # went to donate: no more reminders today

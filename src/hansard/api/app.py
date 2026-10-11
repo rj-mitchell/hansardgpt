@@ -57,6 +57,8 @@ from hansard.api.usage import (
     cached_events,
     check_caps,
     count_question,
+    mark_supporter,
+    support_reminder_due,
     popular_questions,
     recent_failures,
     record_failure,
@@ -264,6 +266,14 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         """Small, public settings for the static pages."""
         return {"donate_url": donate_url(settings)}
 
+    @app.post("/api/support-clicked")
+    def support_clicked(request: Request, user=Depends(current_user)):
+        """The reader went through to the donation page from the reminder: no more reminders for them today."""
+        visitor, _ = requester(request, user)
+        if visitor:
+            mark_supporter(state, visitor)
+        return {"ok": True}
+
     @app.get("/api/health")
     def health():
         return {"ok": True}
@@ -311,6 +321,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 return
             kept: list[dict[str, Any]] = []
             text: list[str] = []
+            remind = 0  # > 0: show this reader the note on costs, with the number of briefings so far today
             try:
                 for ev in p.run(req):
                     if ev["type"] == "plan" and ev.get("parse_error"):
@@ -323,6 +334,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                                      visitor)
                     if ev["type"] == "final" and ev.get("usage"):
                         record_usage(state, uid, "answer", ev.get("model"), ev["usage"], settings.usage, visitor)
+                        if uid is None and donate_url(settings):
+                            remind = support_reminder_due(state, visitor,
+                                                          int(settings.usage.get("support_reminder_every", 10)))
                     if ev["type"] == "final" and key:
                         ev = {**ev, "briefing_key": key}  # lets the reader's feedback refer to this briefing
                     if ev["type"] == "final" and ev.get("answer") and not ev["answer"].get("no_records"):
@@ -331,7 +345,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                         text.append(ev["text"])
                     else:
                         kept.append(ev)
-                    yield ev
+                    # the reminder goes to this reader only: never into saved, shared or cached copies
+                    yield {**ev, "support_reminder": remind} if ev["type"] == "final" and remind else ev
             except Exception as exc:  # never leave the client hanging
                 log.exception("ask failed")
                 record_failure(state, "briefing", body.question, f"{type(exc).__name__}: {exc}")

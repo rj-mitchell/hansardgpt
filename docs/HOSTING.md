@@ -231,5 +231,6 @@ docker compose start app
 
 ## Spending limits
 
-The defaults are 15 new briefings per visitor a day, and $10 a day and $150 a month for the whole site. To change
-them, edit the `[usage]` section of `config/settings.toml`, then install it as a new version (see the table).
+Every 10 new briefings in a day, a visitor sees a short note on what the site costs, with your Ko-fi link; if they
+go through to Ko-fi, they are not reminded again that day. As a backstop against automated use, a visitor can have
+at most 40 new briefings a day. The whole site has budgets of $10 a day and $150 a month. To change any of these, edit the `[usage]` section of `config/settings.toml`, then install it as a new version (see the table).

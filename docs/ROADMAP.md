@@ -6,6 +6,8 @@ Last updated 11 October 2026, the day the site went live.
 it is given in days of development work. Your own time is usually just merging the change on GitHub and running the
 update script. Running costs are for the Anthropic API unless stated.
 
+What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
+
 **Done** items are marked ✓ and kept here so the list shows what has been built.
 
 ---

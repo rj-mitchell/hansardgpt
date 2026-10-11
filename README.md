@@ -238,8 +238,10 @@ to 4 hours.
 **Open access and cost control.** The site is public. Searching costs nothing, but each new briefing is
 written by Claude and costs money. So, in `config/settings.toml`, `[usage]`:
 
-* each visitor may have 15 new briefings a day. Visitors are told apart by a salted hash of their IP address;
-  the address itself is never stored;
+* every 10 new briefings in a day, a visitor is shown a short note on the site's costs with the donation link
+  (`support_reminder_every`); going through to donate stops it for the day;
+* each visitor may have 40 new briefings a day, as a backstop against automated use. Visitors are told apart by a
+  salted hash of their IP address; the address itself is never stored;
 * each visitor may make 20 requests a minute;
 * the whole site has a daily budget ($10) and a monthly budget ($150). When one is reached, briefings pause,
   and source search keeps working;

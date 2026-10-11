@@ -6,6 +6,7 @@ import { Login } from "./components/Login";
 import { PlanChips } from "./components/PlanChips";
 import { EvidenceBar } from "./components/Evidence";
 import { SourceDrawer, SourceList } from "./components/Sources";
+import { SupportReminder } from "./components/SupportReminder";
 import { ATTRIBUTION } from "./attribution";
 import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
@@ -82,6 +83,7 @@ export default function App() {
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const [drawer, setDrawer] = useState<{ turn: string; h: Highlight } | null>(null);
   const [showControls, setShowControls] = useState(false);
+  const [supportCount, setSupportCount] = useState(0); // > 0: show the note on what the site costs
   const abortRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
@@ -198,6 +200,7 @@ export default function App() {
             status: "done",
           });
         else if (ev.type === "error") update(id, { status: "error", error: ev.message as string });
+        if (ev.type === "final" && typeof ev.support_reminder === "number") setSupportCount(ev.support_reminder);
         if (ev.type === "final" && typeof ev.briefing_id === "string") {
           // the address bar becomes this briefing's permanent link
           window.history.replaceState(null, "", `/b/${ev.briefing_id}`);
@@ -305,6 +308,9 @@ export default function App() {
         </div>
       </header>
 
+      {supportCount > 0 && meta?.donate_url && (
+        <SupportReminder count={supportCount} donateUrl={meta.donate_url} onClose={() => setSupportCount(0)} />
+      )}
       {showControls && (
         <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />
       )}
