@@ -24,7 +24,7 @@ from hansard.rag.neutral import flag_loaded
 from hansard.rag.prompts import NO_RECORDS
 from hansard.rag.query_parse import QueryPlan, parse_offline, parse_with_model, resolve_speakers
 from hansard.rag.sources import build_sources
-from hansard.rag.verify import verify
+from hansard.rag.verify import check_quotes, verify
 from hansard.sources.demographics import AGE_BAND_LABEL, GENDER_LABEL
 from hansard.sources.elections import MAJORITY_BAND_LABEL, TENURE_LABEL
 from hansard.votes import VoteFinder
@@ -203,6 +203,7 @@ class Pipeline:
         report = verify(final["blocks"], sources)
         britishise_segments(report.segments)  # the model's own words only; quotations stay verbatim
         flag_loaded(report.segments)          # judgemental words in its own voice are highlighted, not hidden
+        check_quotes(report, sources)         # quotations not found word for word in their sources are marked
         yield {"type": "final", "answer": report.to_dict(), "usage": final["usage"], "model": final["model"],
                "stop_reason": final["stop_reason"]}
 

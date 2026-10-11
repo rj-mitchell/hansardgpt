@@ -67,38 +67,50 @@ starting point and the speed. Turning it on is one line (`reranker` in `[ranking
 of the time, and never differed by more than one step. Haiku is a little more generous with "related". Every ranking
 is graded by the same grader, so the comparisons are fair even where the absolute numbers are a little high.
 
-## 3. Briefings: Opus or Sonnet
+## 3. Briefings: Opus or Sonnet, and tighter citations
 
-Ten varied questions, each answered from the same sources. **The comparison is unfinished:** the Anthropic account ran
-out of credit after Opus's ten briefings and two of Sonnet's.
+Ten varied questions, each answered by both models from the same sources.
 
-**Opus 5.5 (the current model), 10 briefings:**
+| Measure | Opus 5.5 | Sonnet 5.5 |
+|---|---|---|
+| Quotations not found word for word in the speech cited | 0 of 108 | 0 of 124 |
+| Citations not found in their source | 0 | 1 (removed automatically) |
+| Share of the text backed by a citation | 76% | 76% |
+| Loaded words in the briefing's own voice | 0 | 0 |
+| Cost per briefing | 11p | 5p |
+| Time | 21 s | 13 s |
+| Blind side-by-side judgement, overall (Opus judging) | better in 4 | better in 2 (4 ties) |
+| …accuracy | better in 2 | better in 2 (6 ties) |
+| …coverage of the arguments | better in 5 | better in 4 |
 
-| Measure | Result |
-|---|---|
-| Quotations not found word for word in their source | 0 |
-| Loaded words in the briefing's own voice | 0 |
-| Share of the text backed by a citation | 76% on average (48% to 100%) |
-| Sentences shown to readers as unsupported | 30 in total (3 per briefing) |
-| Share of the sources given that were cited | 47% |
-| Length | about 520 words |
-| Cost | 11p each on average (9p to 14p) |
-| Time | about 21 seconds |
+**Decision: Opus stays for briefings.** Both are equally accurate; Opus covers a little more and reads a little
+better, at twice the price. The judge was Opus itself, which may favour its own writing. If costs need cutting,
+switching is one line (`model` in `[answer]`).
 
-The briefings read well: balanced, with accurate quotes, and with differences within parties noted. The uncited text
-is mostly the briefing's own summing-up, for example "The split is not clean" or "the records do not separate seat
-type from party". The site already marks these to readers as unsupported. **Next step:** test a small change to the
-instructions asking for every summing-up sentence to cite its examples or be left out, and check that it raises the
-cited share without making the briefings stilted.
+A lesson from the first attempt at judging: the judge was given shortened extracts to save money, and then
+"found" invented quotations that were really in the full speeches. The judge now sees the full sources, and,
+better, **every quotation in every briefing is now checked automatically**, word for word, against the speech it is
+attributed to (free). Any quotation that cannot be found is shaded for readers.
 
-**Sonnet 5.5:** the two briefings written cost 4.7p and 3.1p (about half of Opus) and were 67% and 90% cited. Too
-few to judge; the side-by-side comparison will be run when there is credit:
+**Tighter citations (new instructions).** Most uncited text was of two kinds: notes about the evidence ("the records
+span 2013 to 2026") scattered through the briefing, and summaries of a group's view without an example. The
+instructions now ask for every such summary to carry its quoted, cited example, and for notes about the evidence to
+go in a closing "About the evidence:" paragraph, which is not counted as a claim (unless it reports what someone
+said). Opus, same ten questions:
 
-    hansard eval briefings --plans eval/runs/<opus plans file> --model claude-opus-5-5 --model claude-sonnet-5-5 \
-      --only wind,nhs-waiting,assisted-dying,labour-tuition,northern-rail,since-2024-election,ministers-energy,benn-ni,gender-compare,loaded
+| | Before | After |
+|---|---|---|
+| Share of the text backed by a citation | 76% | 83% or more |
+| Passages flagged to readers as unsupported | 30 | 12 |
+| Quotations not found in their source | 0 of 108 | 0 of 108 |
+| Cost per briefing | 11p | 11p |
+
+(The 83% was measured before a final refinement that stops a closing note being flagged merely for containing the
+word "said", so the live figure should be a little higher.)
 
 ## Cost of this round of testing
 
-About **$2.10** in all: reading the questions with each model about $0.54; grading sources about $0.11; checking the
-grader with Sonnet about $0.15; briefings about $1.30 (including about $0.10 lost to a bug in the scoring script,
-since fixed).
+About **$5.10** in all. First round about $2.10: reading the questions with each model about $0.54; grading sources
+about $0.11; checking the grader with Sonnet about $0.15; Opus briefings about $1.30 (including about $0.10 lost to
+a bug in the scoring script). Second round about $3.00: Sonnet briefings $0.52; two side-by-side judgements $1.33
+(the first, with shortened sources, had to be redone); Opus briefings with the new instructions $1.14.

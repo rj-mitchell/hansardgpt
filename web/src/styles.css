@@ -1058,6 +1058,14 @@ legend,
   text-decoration-skip-ink: none;
 }
 
+/* a quotation the server could not find word for word in its cited source */
+.misquote {
+  background: var(--warn-subtle);
+  text-decoration: underline dashed var(--warn);
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.22em;
+}
+
 .ai-note {
   margin-block-start: var(--space-xs);
   font-family: var(--sans);

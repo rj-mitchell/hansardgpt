@@ -10,11 +10,19 @@ const U_CLOSE = "⁣⟦/U⟧⁣";
 const L_OPEN = "⁣⟦L⟧⁣";
 const L_CLOSE = "⁣⟦/L⟧⁣";
 
-/** Mark judgemental words the server flagged in the briefing's own voice (offsets into the segment text). */
+const Q_OPEN = "⁣⟦Q⟧⁣";
+const Q_CLOSE = "⁣⟦/Q⟧⁣";
+
+/** Mark judgemental words in the briefing's own voice, and quotations not found in their sources (offsets into
+ * the segment text, from the server). Loaded words are only flagged outside quotations, so the two never nest. */
 function markLoaded(s: Segment): string {
   let text = s.text;
-  for (const f of [...(s.loaded ?? [])].sort((a, b) => b.start - a.start)) {
-    text = text.slice(0, f.start) + L_OPEN + text.slice(f.start, f.end) + L_CLOSE + text.slice(f.end);
+  const marks = [
+    ...(s.loaded ?? []).map((f) => ({ ...f, open: L_OPEN, close: L_CLOSE })),
+    ...(s.misquotes ?? []).map((f) => ({ ...f, open: Q_OPEN, close: Q_CLOSE })),
+  ].sort((a, b) => b.start - a.start);
+  for (const f of marks) {
+    text = text.slice(0, f.start) + f.open + text.slice(f.start, f.end) + f.close + text.slice(f.end);
   }
   return text;
 }
@@ -53,7 +61,9 @@ export function renderAnswer(md: string): string {
     .replace(/⁣⟦U⟧⁣/g, '<span class="unsupported" title="Not directly supported by a cited source">')
     .replace(/⁣⟦\/U⟧⁣/g, "</span>")
     .replace(/⁣⟦L⟧⁣/g, '<span class="loaded" title="A judgemental word in the briefing\'s own voice, not a quotation">')
-    .replace(/⁣⟦\/L⟧⁣/g, "</span>");
+    .replace(/⁣⟦\/L⟧⁣/g, "</span>")
+    .replace(/⁣⟦Q⟧⁣/g, '<span class="misquote" title="These words were not found word for word in the cited source">')
+    .replace(/⁣⟦\/Q⟧⁣/g, "</span>");
   return DOMPurify.sanitize(html, { ADD_ATTR: ["data-source", "aria-label"] });
 }
 

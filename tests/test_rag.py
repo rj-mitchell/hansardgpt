@@ -224,3 +224,39 @@ def test_briefing_instructions_require_neutral_wording():
     for loaded in ("lied", "misled", "U-turn", "admitted"):
         assert loaded in text  # named as forbidden in the model's own voice
     assert "exact, cited quotation" in text
+
+
+def test_quotations_are_checked_word_for_word():
+    from hansard.rag.sources import Source
+    from hansard.rag.verify import Segment, Verification, check_quotes
+
+    src = [Source(1, "record", "t", "u", ["I very much support renewable energy, but we now have our fair share of "
+                                          "onshore wind. I warmly welcome the hon. and learned Gentleman's point."], {})]
+    segs = [Segment('Lamont said "I very much support renewable energy" ', [], status="connective"),
+            Segment('and "we now have our fair share … onshore wind."', [1]),
+            Segment(' He "warmly welcome[d] the hon. and learned Gentleman".', [1]),
+            Segment(' He also said "wind farms are a blight on the landscape".', [1]),
+            Segment(' The term "net zero" is not a quotation.', [], status="connective")]
+    report = Verification(segs, False, 3, 0, 0, 10)
+    assert check_quotes(report, src) == 1
+    assert (report.quotes_total, report.quotes_unverified) == (4, 1)
+    assert segs[3].misquotes == [{"start": 14, "end": 56, "text": "wind farms are a blight on the landscape"}]
+    assert report.to_dict()["quotes_unverified"] == 1
+
+
+def test_pipeline_reports_checked_quotations(indexed_settings):
+    out = answer_once(pipeline(indexed_settings, FakeClient()), AskRequest("What has been said about trial by jury?"))
+    assert out["final"]["answer"]["quotes_unverified"] == 0
+
+
+def test_the_closing_note_about_the_evidence_is_not_a_claim():
+    from hansard.rag.verify import _classify_uncited
+
+    note = _classify_uncited("\n**About the evidence:** the records span 2013 to 2026 and include no divisions.\n", False)
+    assert [s.status for s in note] == ["connective"]
+    note = _classify_uncited("\nAbout the evidence: the records show what was said, but nothing said by Hilary Benn "
+                             "before 2026.\n", False)
+    assert [s.status for s in note] == ["connective"]
+    claim = _classify_uncited("\nAbout the evidence: Jane Smith said the policy had failed families across the "
+                              "country.\n", False)
+    assert "unsupported" in [s.status for s in claim]  # a claim about what someone said still needs a citation

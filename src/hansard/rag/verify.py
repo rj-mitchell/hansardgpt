@@ -32,10 +32,11 @@ class Segment:
     cited: list[dict[str, Any]] = field(default_factory=list)
     status: str = "cited"                                   # cited | connective | unsupported | invalid
     loaded: list[dict[str, Any]] = field(default_factory=list)  # judgemental words outside quotes (neutral.py)
+    misquotes: list[dict[str, Any]] = field(default_factory=list)  # quotations not found in their sources
 
     def to_dict(self) -> dict[str, Any]:
         return {"text": self.text, "sources": self.sources, "cited": self.cited, "status": self.status,
-                "loaded": self.loaded}
+                "loaded": self.loaded, "misquotes": self.misquotes}
 
 
 @dataclass
@@ -46,6 +47,8 @@ class Verification:
     citations_invalid: int
     unsupported_chars: int
     cited_chars: int
+    quotes_total: int = 0
+    quotes_unverified: int = 0
 
     @property
     def grounded_ratio(self) -> float:
@@ -71,6 +74,8 @@ class Verification:
             "grounded_ratio": round(self.grounded_ratio, 3),
             "unsupported_segments": sum(1 for s in self.segments if s.status == "unsupported"),
             "loaded_words": sum(len(s.loaded) for s in self.segments),
+            "quotes_total": self.quotes_total,
+            "quotes_unverified": self.quotes_unverified,
         }
 
 
@@ -91,7 +96,12 @@ _EVIDENCE_NOTE = re.compile(
     r"\b(records? (retrieved|supplied|shown)|(retrieved|supplied) (records|results|sources)|in the records|"
     r"no (division|voting) records|evidence (base|is|set)|gaps?\b|caveats?\b|cannot be (reported|attributed)|"
     r"(were|was) not relevant|been excluded|the records (are|were|contain|include|cover)|little (was|is) (found|said)|"
-    r"nothing (was|is) found|no stated position|written questions only)", re.I)
+    r"nothing (was|is) found|no stated position|written questions only|"
+    r"^\W*(about the evidence|notes?)\b\W*:)", re.I)
+# a note about the evidence that reports what someone said ("Smith said", "he argued") is a claim, not a note;
+# "what was said" or "nothing said by Benn" is not
+_SOMEONE_SAID = re.compile(r"\b(?:[A-Z][\w'-]+|[Hh]e|[Ss]he|[Tt]hey)\s+(?:also\s+)?"
+                           r"(?:said|argued|claimed|stated|told|described|called)\b")
 _SENTENCE_END = re.compile(r"[.!?][\"')\]]*\s+\S")
 _ATTRIBUTION_MAX = 220
 
@@ -113,7 +123,7 @@ def _classify_uncited(text: str, next_is_cited: bool) -> list[Segment]:
         lead_in = (last and next_is_cited and len(body) <= _ATTRIBUTION_MAX
                    and not _SENTENCE_END.search(body.rstrip()) and not body.endswith("."))
         if (_is_connective(line) or _LABEL.match(line) or lead_in
-                or (_EVIDENCE_NOTE.search(body) and not re.search(r"\bsaid\b|\bargued\b|\bclaimed\b", body))):
+                or (_EVIDENCE_NOTE.search(body) and not _SOMEONE_SAID.search(body))):
             status = "connective"
         else:
             status = "unsupported"
@@ -153,3 +163,59 @@ def verify(blocks: list[dict[str, Any]], sources: list[Source]) -> Verification:
     unsupported = sum(len(s.text) for s in segments if s.status in ("unsupported", "invalid"))
     cited = sum(len(s.text) for s in segments if s.status == "cited")
     return Verification(segments, full.startswith(NO_RECORDS), total, invalid, unsupported, cited)
+
+
+# ---- quotations ------------------------------------------------------------------------------------------------
+# Words the briefing puts in quotation marks must appear, word for word, in the record it attributes them to.
+# A citation proves its own cited passage exists; this also checks the quotation written around it.
+
+_QUOTE = re.compile(r'["\u201c]([^"\u201c\u201d\n]{6,}?)["\u201d]|\u2018([^\u2018\u2019\n]{6,}?)\u2019(?![a-z])')
+# gaps a quotation may contain: an ellipsis, or an editorial insertion in square brackets ("welcome[d]")
+_ELLIPSIS = re.compile(r"\s*(?:\.\.\.|\u2026|\[[^\]]{0,40}\])\s*")
+_WORDS = re.compile(r"[^a-z0-9]+")
+
+
+def _words(text: str) -> str:
+    """Lower-case words only: punctuation, quote marks and spacing are not what a quotation is checked on."""
+    return " " + _WORDS.sub(" ", text.lower().replace("\u2019", "'").replace("'", "")).strip() + " "
+
+
+def _found(quote: str, haystack: str) -> bool:
+    parts = [p for p in _ELLIPSIS.split(quote) if len(_words(p).split()) >= 2]
+    # the last word may run on in the record ("Gentleman" quoted from "Gentleman's")
+    return all(_words(p).rstrip() in haystack for p in parts) if parts else True
+
+
+def check_quotes(report: Verification, sources: list[Source]) -> int:
+    """Mark quotations that cannot be found in the sources cited for them; returns how many were not found."""
+    # the speech and its title line (debate headings are quoted too)
+    texts = {s.n: _words("\n\n".join([s.title, str(s.meta.get("heading") or ""), *s.blocks])) for s in sources}
+    everything = " ".join(texts.values())
+    starts, pos = [], 0
+    for seg in report.segments:
+        starts.append(pos)
+        pos += len(seg.text)
+    full = "".join(seg.text for seg in report.segments)
+    total = bad = 0
+    for m in _QUOTE.finditer(full):
+        quote = m.group(1) or m.group(2)
+        if len(_words(quote).split()) < 3:  # a word or two in quotes is a term, not a quotation
+            continue
+        total += 1
+        a, b = m.span()
+        # the sources cited for the quotation: segments it overlaps, or the citation straight after it
+        cited: set[int] = set()
+        for i, seg in enumerate(report.segments):
+            s0, s1 = starts[i], starts[i] + len(seg.text)
+            if s0 < b and a < s1 or (s0 >= b and s0 - b <= 3 and seg.sources):
+                cited.update(seg.sources)
+        haystack = " ".join(texts[n] for n in cited if n in texts) or everything
+        if _found(quote, haystack):
+            continue
+        bad += 1
+        for i, seg in enumerate(report.segments):
+            s0, s1 = starts[i], starts[i] + len(seg.text)
+            if s0 < b and a < s1:
+                seg.misquotes.append({"start": max(a, s0) - s0, "end": min(b, s1) - s0, "text": quote})
+    report.quotes_total, report.quotes_unverified = total, bad
+    return bad

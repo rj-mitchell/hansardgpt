@@ -125,6 +125,8 @@ export interface Segment {
   cited: { source: number; cited_text: string }[];
   status: "cited" | "connective" | "unsupported" | "invalid";
   loaded?: { start: number; end: number; word: string }[];
+  /** quotations not found word for word in the sources cited for them */
+  misquotes?: { start: number; end: number; text: string }[];
 }
 
 export interface Answer {
@@ -136,6 +138,8 @@ export interface Answer {
   grounded_ratio: number;
   unsupported_segments: number;
   loaded_words?: number;
+  quotes_total?: number;
+  quotes_unverified?: number;
 }
 
 export interface Scope {

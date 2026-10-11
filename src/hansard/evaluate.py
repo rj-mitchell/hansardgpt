@@ -344,6 +344,8 @@ class Verdict(BaseModel):
     reason: str
 
 
+JUDGE_CHARS = 8000  # per source; nearly every speech is shorter
+
 COMPARE_SYSTEM = """You compare two briefings written for a neutral research service on the UK Parliament. Both were
 written from the same numbered sources (verbatim Hansard extracts), and should use nothing else.
 Judge each criterion, choosing A, B or tie:
@@ -384,8 +386,10 @@ def run_briefings(settings: Settings, plans: dict[str, dict[str, Any]], question
             "citations_total": ans.get("citations_total"), "citations_invalid": ans.get("citations_invalid"),
             "unsupported_segments": ans.get("unsupported_segments"),
             "loaded_words": ans.get("loaded_words", 0),
+            "quotes_total": ans.get("quotes_total"), "quotes_unverified": ans.get("quotes_unverified"),
             "sources_given": len(cards), "sources_cited": len(cited),
-            "source_text": [{"n": c.get("n"), "speaker": c.get("title"), "text": (c.get("text") or "")[:900]}
+            # the judge must see what the model saw: a cut-down extract makes accurate quotes look invented
+            "source_text": [{"n": c.get("n"), "speaker": c.get("title"), "text": (c.get("text") or "")[:JUDGE_CHARS]}
                             for c in cards],
         })
         progress(f"  {q.id:22} {secs:5.1f}s ${rows[-1]['cost']:.3f} grounded {ans.get('grounded_ratio')}")

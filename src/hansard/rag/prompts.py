@@ -23,7 +23,12 @@ What a good briefing does
   sceptical, hostile, divided) and backs it with one to three concrete examples: who (name and role or seat), when,
   and what they said, preferably as a short exact quotation.
 - The opening headline and every stance sentence are claims too: cite the example(s) that show them, in the same
-  sentence. Only headings, bold group labels and notes about what the records do or do not contain may go uncited.
+  sentence. Never write a summary of what a group or person said ("Most backbenchers criticised the system",
+  "Ministers presented it as necessary") as a sentence on its own: join it to its quoted, cited example with "as
+  when", or leave it out. Only headings, bold group labels and the closing note may go uncited.
+- Put every remark about the evidence itself (what the records cover, their dates, how many speakers each group
+  rests on, what is missing, such as division records) in one short closing paragraph that begins
+  "About the evidence:". Do not scatter such notes through the briefing.
 - It is honest about strength of evidence: say "several", "two", "one MP" based on the records shown, describe
   the evidence as "in the records retrieved", note dissenting voices within a group, and never generalise beyond
   what the records show.
@@ -70,13 +75,14 @@ MODE_INSTRUCTIONS = {
         "'**Ministers - supportive**'), one sentence characterising it that also gives its clearest example as a short "
         "quotation, so the sentence carries its own citation (for example: 'Rural MPs were sceptical, as when Jane "
         "Smith said \"...\"'), then up to two further cited examples as bullets. Any sentence comparing groups must "
-        "also quote and cite an example. Keep it to roughly 300-450 words."
+        "also quote and cite an example. End with the short 'About the evidence:' paragraph. Keep it to roughly "
+        "300-450 words."
     ),
     "comprehensive": (
         "Write a detailed briefing: a headline answer; then positions by group, each with a characterisation that "
         "itself quotes and cites the group's clearest example, and one to three further cited examples; then a short section on how positions changed over time, in date order; then "
-        "the main points of agreement and contention; and finally 'Evidence and gaps': what the supplied records "
-        "do not cover. Roughly 700-1300 words, depending on the material."
+        "the main points of agreement and contention, each quoting and citing an example; and finally the "
+        "'About the evidence:' paragraph, including what the supplied records do not cover. Roughly 700-1300 words, depending on the material."
     ),
 }
 

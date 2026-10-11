@@ -23,6 +23,22 @@ describe("answer rendering", () => {
     expect(html).toContain('class="unsupported"');
   });
 
+  it("marks quotations not found in their sources, and loaded words, in the same segment", () => {
+    const text = 'He said "we will never do that" and called it a disgrace.';
+    const seg: Segment = {
+      text,
+      sources: [1],
+      cited: [],
+      status: "cited",
+      misquotes: [{ start: 8, end: 31, text: "we will never do that" }],
+      loaded: [{ start: 49, end: 57, word: "disgrace" }],
+    };
+    const html = renderAnswer(segmentsToMarkdown([seg]));
+    expect(html).toContain('<span class="misquote"');
+    expect(html).toContain('"we will never do that"</span>');
+    expect(html).toContain('<span class="loaded"');
+  });
+
   it("sanitises model output", () => {
     const html = renderAnswer(segmentsToMarkdown([seg('<img src=x onerror="alert(1)"> text', "cited", [1])]));
     expect(html).not.toContain("onerror");
