@@ -1175,6 +1175,37 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                         f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
                         media_type="application/xml")
 
+    def sitemap(urls: list[str]) -> Response:
+        body = "".join(f"<url><loc>{u}</loc></url>" for u in urls[:50000])
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
+                        f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>', media_type="application/xml")
+
+    @app.get("/sitemap-committees.xml", include_in_schema=False)
+    def sitemap_committees(request: Request):
+        base = str(request.base_url).rstrip("/")
+        try:
+            cs, iq = get_committees().sitemap_ids()
+        except HTTPException:
+            cs, iq = [], []
+        return sitemap([f"{base}/committees/{c}" for c in cs] + [f"{base}/inquiries/{i}" for i in iq])
+
+    @app.get("/sitemap-edms.xml", include_in_schema=False)
+    def sitemap_edms(request: Request):
+        base = str(request.base_url).rstrip("/")
+        with get_edms().connect() as con:
+            ids = [r[0] for r in con.execute("SELECT id FROM edms ORDER BY date_tabled DESC LIMIT 50000")]
+        return sitemap([f"{base}/edms/{i}" for i in ids])
+
+    @app.get("/sitemap-devolved.xml", include_in_schema=False)
+    def sitemap_devolved(request: Request):
+        from hansard.devolved import LEGISLATURES
+
+        base = str(request.base_url).rstrip("/")
+        store, _ = get_devolved()
+        with store.connect() as con:
+            keys = con.execute("SELECT legislature, key FROM files ORDER BY date DESC").fetchall()
+        return sitemap([f"{base}/devolved/{leg}/{key}" for leg, key in keys if leg in LEGISLATURES])
+
     # ---- RSS feeds -------------------------------------------------------------------------
     def feed(request: Request, path: str, title: str, link: str, description: str, items: list) -> Response:
         base = str(request.base_url).rstrip("/")

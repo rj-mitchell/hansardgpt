@@ -401,6 +401,14 @@ class Committees:
                 GROUP BY s.id ORDER BY s.date DESC LIMIT ?""", (mnis, limit)).fetchall()
         return [dict(r) | {"url": links("session", r["id"])} for r in rows]
 
+    def sitemap_ids(self) -> tuple[list[int], list[int]]:
+        """(committees, inquiries) with something to show: current committees, inquiries with sessions or reports."""
+        with self.connect() as con:
+            cs = [r[0] for r in con.execute("SELECT id FROM committees WHERE end IS NULL")]
+            iq = [r[0] for r in con.execute("""SELECT DISTINCT inquiry_id FROM session_inquiries
+                                               UNION SELECT DISTINCT inquiry_id FROM publication_inquiries""")]
+        return cs, iq
+
     def recent_publications(self, limit: int = 40) -> list[dict[str, Any]]:
         """The newest reports, special reports and government responses, with their committee and inquiry."""
         with self.connect() as con:

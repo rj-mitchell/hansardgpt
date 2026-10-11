@@ -124,3 +124,23 @@ def test_reports_feed(indexed_settings, tmp_path):
         assert client.get("/feeds/edms.xml").status_code == 200
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_sitemaps(indexed_settings, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from hansard.sync import committees_path
+
+    from .test_api import make_app
+
+    path = committees_path(indexed_settings)
+    app, _, _ = make_app(indexed_settings, tmp_path, auth=False)
+    client = TestClient(app)
+    try:
+        build(path, fake_api(), no_wait)
+        body = client.get("/sitemap-committees.xml").text
+        assert "/committees/10</loc>" in body and "/inquiries/900</loc>" in body and "/committees/11<" not in body
+        for p in ("/sitemap-edms.xml", "/sitemap-devolved.xml"):
+            assert client.get(p).status_code == 200
+    finally:
+        path.unlink(missing_ok=True)
