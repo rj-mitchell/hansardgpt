@@ -63,7 +63,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | ✓ **Your MP**: enter a postcode to see your MP, ask about them, see what they've said on a topic and their votes | M | Done 11 October: uses Parliament's own postcode look-up. No AI cost |
 | **Comparisons**: two MPs, parties or nations side by side on the same question | M | Costs the same as one or two briefings |
 | **Charts**: how much a subject was debated over time, by party, House and nation | M | No AI cost. Must show context with every number (the lesson from the NZ site's expenses) |
-| **Topic briefings**: regularly refreshed briefings on the issues in the news, on permanent pages | S–M | About $5 to start, then a few dollars a month. Also brings in search-engine traffic |
+| ✓ **Topic briefings**: regularly refreshed briefings on the issues in the news, on permanent pages | S–M | Done 11 October: 16 topics in `config/topics.toml`. Rewritten only when due and the evidence has changed: about £2 to start, then roughly £2–6 a month |
 | **1997–2010** records | M–L | Needs the older boundary sets; disk use roughly doubles |
 | **Early Day Motions**: who signed which motions | M | Good cross-party evidence of support |
 | **Select committee evidence and reports** | L | Different source and format |
@@ -111,7 +111,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | **Download as PDF or Word** button (print already works) | S | For briefing packs and meetings |
 | **Embeddable briefing card** for journalists and bloggers | S–M | Spreads the site with a link back |
 | **RSS feeds** for topic briefings, the changelog and corrections | S | |
-| **Featured briefings** page: a few good briefings chosen by you, indexable by search engines | S | Discovery and search traffic (saved briefings are hidden from search engines by default) |
+| ✓ **Featured briefings**: a few good briefings chosen by you, indexable by search engines | S | Done: "Feature" on the admin page; listed on /topics |
 
 **Quality and trust**
 | Item | Effort | What it gives |
@@ -204,8 +204,9 @@ data, which makes this much easier than starting from scratch.
    balance warning.
 2. ✓ **Your MP** and **MP pages**: the most-asked-for features, and the base for the activity feed and voting
    summaries. Also done: election results and majorities, the beta label and the Other resources page.
-3. **Test set**, then cheaper models and re-ranking: lower costs and better briefings.
-4. **Topic briefings** and **featured briefings**: content to point people and search engines at.
+3. ✓ **Test set**, then cheaper models and re-ranking: done, except the Opus/Sonnet briefing comparison and a
+   citation tweak, which wait for API credit (see `docs/EVALUATION.md`).
+4. ✓ **Topic briefings** and **featured briefings**: content to point people and search engines at.
 5. **Charts, comparisons, bill pages, timelines.**
 6. **More of the record**, starting with Early Day Motions.
 7. **From section D**, quickest and most useful first: vote types and the procedural-vote rule (about 2 days),

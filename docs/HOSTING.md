@@ -187,6 +187,10 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 | Change the API key | the command below |
 | Change the "Support this site" link (it points to https://ko-fi.com/wheretheystand) | add `HANSARD_DONATE_URL=https://…` to `/opt/hansardgpt/deploy/.env`, then `docker compose up -d` in the same folder |
 | List recent briefings | `curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" https://wheretheystand.uk/api/admin/briefings` |
+| Feature a briefing (listed on the Topics page and found by search engines) | the admin page: "Feature" next to a recent briefing, or paste its address under "Featured briefings" |
+| Write the topic briefings now, rather than waiting for the twice-daily update (about 11p each) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard topics refresh` (add `--only cost-of-living` for one) |
+| See each topic's state | the admin page, or `docker compose exec app hansard topics list` |
+| Add, change or remove a topic | edit `config/topics.toml` in the code (ask me), then install it as a new version. Never change a published topic's `slug`: it is its address |
 | Withdraw a briefing (after a complaint, say) | `curl -X POST -H "Authorization: Bearer YOUR_ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"reason": "complaint about attribution"}' https://wheretheystand.uk/api/admin/briefings/THE_ID/withdraw` |
 
 Your admin token is in `/opt/hansardgpt/deploy/.env` (`HANSARD_ADMIN_TOKEN=`).
