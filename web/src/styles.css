@@ -3064,3 +3064,15 @@ main:focus {
     inset-inline-start: 0;
   }
 }
+
+/* on touch screens, menu and footer links get a comfortable tap area (32px tall) */
+@media (pointer: coarse) {
+  .page-nav a,
+  .nav-more > summary,
+  .nav-more-list a,
+  .footer-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 2rem;
+  }
+}

@@ -8,6 +8,7 @@ set -euo pipefail
 DIR="${DIR:-/opt/hansardgpt}"
 
 echo "==> Fetching the latest version"
+caddy_before=$(sha1sum "$DIR/deploy/Caddyfile" | cut -d' ' -f1)
 git -C "$DIR" pull --ff-only
 
 cd "$DIR/deploy"
@@ -18,6 +19,10 @@ systemctl enable --now hansard-sync.timer hansard-backup.timer >/dev/null
 
 echo "==> Rebuilding and restarting the site"
 docker compose up -d --build
+if [[ "$(sha1sum Caddyfile | cut -d' ' -f1)" != "$caddy_before" ]]; then
+  echo "==> The web server's settings changed: restarting it"
+  docker compose up -d --force-recreate --no-deps caddy  # a file mounted into the container is re-read only on a fresh start
+fi
 
 echo "==> Clearing out old build files"
 docker image prune -f >/dev/null

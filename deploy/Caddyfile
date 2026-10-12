@@ -1,5 +1,8 @@
 {$DOMAIN} {
-	encode gzip
+	encode zstd gzip
+	# built files have a fingerprint in their name, so a browser can keep them for a year without asking again
+	@fingerprinted path /assets/*
+	header @fingerprinted Cache-Control "public, max-age=31536000, immutable"
 	# flush_interval -1 streams answers to the browser as they are written (server-sent events)
 	reverse_proxy app:8000 {
 		flush_interval -1

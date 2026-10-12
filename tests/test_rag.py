@@ -260,3 +260,12 @@ def test_the_closing_note_about_the_evidence_is_not_a_claim():
     claim = _classify_uncited("\nAbout the evidence: Jane Smith said the policy had failed families across the "
                               "country.\n", False)
     assert "unsupported" in [s.status for s in claim]  # a claim about what someone said still needs a citation
+
+
+def test_a_lead_in_after_an_uncited_sentence_is_not_flagged_but_the_sentence_is():
+    from hansard.rag.verify import _classify_uncited
+
+    segs = _classify_uncited("Labour MPs criticised the government. Jane Smith said on 4 May that ", True)
+    assert [(s.status, s.text) for s in segs] == [("unsupported", "Labour MPs criticised the government. "),
+                                                   ("connective", "Jane Smith said on 4 May that ")]
+    assert [s.status for s in _classify_uncited("- Keir Mather (Selby), 10 August 2026, said ", True)] == ["connective"]

@@ -19,6 +19,7 @@ from the compacted file when its new per-key file is written.
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ from typing import Any
 import duckdb
 import pyarrow as pa
 import pyarrow.compute  # noqa: F401  (pa.compute)
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 RECORD_SCHEMA = pa.schema([
@@ -142,6 +144,79 @@ def remove_keys_from_compacted(root: Path, table: str, part: str, year: int, key
     return removed
 
 
+# Records are read a few at a time (the sources of a search or briefing), so a year's file is written in small
+# date-ordered blocks: a lookup unpacks only the blocks holding the dates it needs, not the whole year.
+ROW_GROUP = 2_000
+
+
+def needs_regroup(path: Path) -> bool:
+    """A compacted file written before records were stored in small blocks."""
+    try:
+        m = pq.ParquetFile(path).metadata
+    except (OSError, pa.ArrowInvalid):
+        return False
+    return any(m.row_group(i).num_rows > ROW_GROUP * 2 for i in range(m.num_row_groups))
+
+
+def regroup(path: Path) -> None:
+    tmp = path.with_name(f".{path.name}.tmp")
+    pq.write_table(pq.read_table(path), tmp, compression="zstd", row_group_size=ROW_GROUP)
+    tmp.replace(path)
+
+
+_BLOCKS: dict[tuple[str, float], tuple[list[str], list[tuple[Any, Any]]]] = {}
+_BLOCKS_LOCK = threading.Lock()
+
+
+def _blocks(path: Path) -> tuple[list[str], list[tuple[Any, Any]]]:
+    """The file's columns and each block's (first date, last date), read once per version of the file."""
+    key = (str(path), path.stat().st_mtime)
+    with _BLOCKS_LOCK:
+        hit = _BLOCKS.get(key)
+    if hit is not None:
+        return hit
+    m = pq.ParquetFile(path).metadata
+    names = m.schema.names
+    col = names.index("date") if "date" in names else None
+    spans = []
+    for i in range(m.num_row_groups):
+        st = m.row_group(i).column(col).statistics if col is not None else None
+        spans.append((st.min, st.max) if st is not None and st.has_min_max else (None, None))
+    with _BLOCKS_LOCK:
+        if len(_BLOCKS) > 4000:
+            _BLOCKS.clear()
+        _BLOCKS[key] = (names, spans)
+    return names, spans
+
+
+def read_records(root: Path, part: str, year: int, record_ids: set[str], dates: set[Any],
+                 keys: set[str]) -> list[dict[str, Any]]:
+    """The records with these IDs (on these dates, from these source files) from one source and year, reading only
+    the day files and the blocks of the merged file that can hold them. Missing columns (older files) come back as
+    None, as DuckDB's union_by_name does."""
+    d = partition_dir(root, "records", part, year)
+    if not d.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    columns: set[str] = set()
+    for f in sorted(d.glob("*.parquet")):
+        if f.name != COMPACTED and f.stem not in keys:
+            continue  # a day file is named after the source file it holds
+        names, spans = _blocks(f)
+        columns.update(names)
+        groups = [i for i, (lo, hi) in enumerate(spans)
+                  if lo is None or any(lo <= x <= hi for x in dates)]
+        if not groups:
+            continue
+        tbl = pq.ParquetFile(f).read_row_groups(groups)
+        tbl = tbl.filter(pc.is_in(tbl["record_id"], value_set=pa.array(sorted(record_ids), pa.string())))
+        out.extend(tbl.to_pylist())
+    for row in out:
+        for c in columns:
+            row.setdefault(c, None)
+    return out
+
+
 def compact(root: Path, cutoff_year_month: str) -> dict[str, int]:
     """Merge per-key files older than ``cutoff`` (YYYY-MM-DD) into compacted.parquet per partition.
 
@@ -155,6 +230,9 @@ def compact(root: Path, cutoff_year_month: str) -> dict[str, int]:
         for part_dir in sorted(base.glob("*=*/year=*")):
             files = [f for f in part_dir.glob("*.parquet") if f.name != COMPACTED and f.stem[-10:] < cutoff_year_month]
             if not files:
+                if table == "records" and needs_regroup(part_dir / COMPACTED):
+                    regroup(part_dir / COMPACTED)
+                    stats["regrouped"] = stats.get("regrouped", 0) + 1
                 continue
             existing = part_dir / COMPACTED
             tables = [pq.read_table(f) for f in files]
@@ -163,7 +241,8 @@ def compact(root: Path, cutoff_year_month: str) -> dict[str, int]:
             merged = pa.concat_tables(tables, promote_options="default")
             sort_cols = [c for c in ("date", "source_key", "division_id") if c in merged.column_names]
             merged = merged.sort_by([(c, "ascending") for c in sort_cols])
-            pq.write_table(merged, part_dir / f".{COMPACTED}.tmp", compression="zstd", row_group_size=100_000)
+            pq.write_table(merged, part_dir / f".{COMPACTED}.tmp", compression="zstd",
+                           row_group_size=ROW_GROUP if table == "records" else 100_000)
             (part_dir / f".{COMPACTED}.tmp").replace(existing)
             for f in files:
                 f.unlink()
