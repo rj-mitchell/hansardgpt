@@ -3,6 +3,20 @@
 Loose ends that need a person (an email, a decision or a check), newest first. Tick them off or delete them
 when done.
 
+## Click-check a few links to other sites
+
+*Added 12 October 2026.*
+
+- **What it is.** The site now links to other free sites wherever they do something it does not. Most of those
+  sites block automated checks, so Claude could not open the deep links.
+- **To do.** After deploying, click each of these once. If any lands on an error or the wrong page, tell Claude;
+  it will switch that link to the site's front page.
+  - On a briefing: "Hansard search" (it should open Hansard's results for the same words and dates).
+  - On a bill page: "Parliament's bills site" (it should show a search for that bill).
+  - On an MP's page: "Parliament's profile", "TheyWorkForYou" and "email alerts".
+  - On a peer's page: "official register" under Registered interests (the Register of Lords' Interests).
+  - On an MSP's and an MLA's page: "official register" under Registered interests.
+
 ## Electoral Commission: confirm the licence for the register of donations
 
 *Added 12 October 2026.*
