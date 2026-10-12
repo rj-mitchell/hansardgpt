@@ -17,6 +17,9 @@ cp hansard-sync.service hansard-sync.timer hansard-backup.service hansard-backup
 systemctl daemon-reload
 systemctl enable --now hansard-sync.timer hansard-backup.timer >/dev/null
 
+echo "==> Making sure the server has swap space (spare memory on disk for large updates)"
+bash "$DIR/deploy/swap.sh" || echo "WARNING: could not add swap; carrying on."
+
 echo "==> Rebuilding and restarting the site"
 docker compose up -d --build
 if [[ "$(sha1sum Caddyfile | cut -d' ' -f1)" != "$caddy_before" ]]; then

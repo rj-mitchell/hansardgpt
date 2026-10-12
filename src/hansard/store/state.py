@@ -269,6 +269,14 @@ class StateDB:
             cur = con.execute("INSERT INTO sync_log (kind, started_at) VALUES (?, ?)", (kind, utcnow()))
             return int(cur.lastrowid)
 
+    def close_unfinished_runs(self) -> int:
+        """Mark runs left 'running' by a process that was killed (only one update runs at a time)."""
+        with self.connect() as con:
+            cur = con.execute("UPDATE sync_log SET status='failed', finished_at=?, "
+                              "error='stopped before finishing (killed, perhaps out of memory)' "
+                              "WHERE status='running'", (utcnow(),))
+            return cur.rowcount
+
     def finish_run(self, run_id: int, stats: dict[str, Any], error: str | None = None) -> None:
         with self.connect() as con:
             con.execute("UPDATE sync_log SET finished_at=?, status=?, stats=?, error=? WHERE run_id=?",

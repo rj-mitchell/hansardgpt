@@ -280,3 +280,38 @@ def test_backup_is_a_checked_copy_and_restores(settings, tmp_path):
     state.set("marker", "after")
     restore_backup(settings, dest / "where-they-stand-2026-10-03.tar.gz")
     assert StateDB(settings.state_db).get("marker") == "before"
+
+
+def test_an_update_killed_before_merging_is_finished_by_the_next(settings, xml_mirror, tmp_path):
+    members = tmp_path / "members"
+    shutil.copytree(MEMBERS, members)
+    kw = dict(fetch=False, members_dir=members, embedder=HashingEmbedder(64), embed_minutes=None, workers=1,
+              today=date(2026, 10, 1))
+    run_sync(settings, **kw)
+    # an update that added passages and was killed before merging them into the keyword index
+    _republish_answer(xml_mirror)
+    idx = SearchIndex(settings.index_dir, 64)
+    state = StateDB(settings.state_db)
+    state.start_run("sync")
+    from hansard.ingest import ingest
+
+    ingest(settings, workers=1, state=state)
+    Indexer(settings, idx, state).index_pending()
+    assert idx.unmerged() > 0
+    out = run_sync(settings, **kw)
+    assert out["index"]["passages_written"] == 0  # nothing new to add: only the merge was left
+    assert idx.unmerged() == 0
+    killed = state.runs(5)[1]
+    assert killed["status"] == "failed" and "stopped before finishing" in killed["error"]
+
+
+def test_only_one_update_runs_at_a_time(settings):
+    import fcntl
+
+    from hansard.sync import SyncRunning
+
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    with open(settings.data_dir / "sync.lock", "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(SyncRunning):
+            run_sync(settings, fetch=False, embed_minutes=0)
