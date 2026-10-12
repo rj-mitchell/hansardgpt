@@ -11,11 +11,14 @@ from hansard.engine import Engine, Filters
 from hansard.rag.query_parse import QueryPlan, parse_offline
 from hansard.rag.sources import group_label, speaker_label
 from hansard.sources.elections import (
+    add_library_results,
     commons_member_ids,
     first_term,
     general_elections,
+    library_results,
     majority_band,
     refresh_elections,
+    seat_key,
 )
 from tests.conftest import BENN, CAMERON, MEMBERS
 
@@ -69,9 +72,25 @@ def test_offline_parser_reads_new_mps_and_marginal_seats():
     assert again.group_by == "majority"
 
 
-def test_member_ids_come_from_commons_memberships_since_2010():
+def test_member_ids_come_from_commons_memberships_since_1997():
     ids = commons_member_ids(MEMBERS / "people.json")
     assert "1467" in ids and "413" in ids  # Cameron, Benn
+    assert set(commons_member_ids(MEMBERS / "people.json", since="2010-05-06")) < set(ids)
+
+
+def test_results_before_2010_come_from_the_commons_library_by_seat_name():
+    assert seat_key("LIVERPOOL, WEST DERBY") == seat_key("Liverpool West Derby")
+    assert seat_key("BEDFORDSHIRE MID") == seat_key("Mid Bedfordshire")
+    assert seat_key("Ynys Môn") == seat_key("YNYS MON") and seat_key("Richmond (Yorks)") == seat_key("RICHMOND")
+    library = library_results()
+    assert library[(seat_key("Mitcham and Morden"), "1997-05-01")]["majority"] == 13741
+    assert library[(seat_key("Tatton"), "1997-05-01")]["majority"] is None, "won by an independent: not knowable"
+    reps = {"193": [{"id": 1986, "name": "Mitcham and Morden", "start": "1997-05-01", "end": "2010-05-06"}],
+            "9": [{"id": 50, "name": "Peckham", "start": "1992-04-09", "end": "1997-05-01"}]}  # abolished in 1997
+    results: dict = {}
+    assert add_library_results(reps, results, library) == 3
+    assert [r["date"] for r in results["1986"]] == ["1997-05-01", "2001-06-07", "2005-05-05"]
+    assert "50" not in results, "a seat that ended at the 1997 election did not fight it"
 
 
 def test_refresh_keeps_the_old_copy_when_the_api_fails(tmp_path):
@@ -91,6 +110,12 @@ def test_refresh_keeps_the_old_copy_when_the_api_fails(tmp_path):
     down = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     assert refresh_elections(cache, ["1"], force=True, client=down)["status"] == "failed"
     assert '"majority": 100' in cache.read_text()
+    calls: list[str] = []
+    counting = httpx.Client(transport=httpx.MockTransport(lambda r: calls.append(r.url.path) or handler(r)))
+    assert refresh_elections(cache, ["1"], client=counting)["status"] == "fresh"
+    assert refresh_elections(cache, ["1", "2"], client=counting)["status"] == "updated", \
+        "members the copy never looked up (the record grew) are fetched straight away"
+    assert calls
 
 
 @pytest.fixture(scope="module")

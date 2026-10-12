@@ -16,7 +16,7 @@ import type { VoteType } from "./types";
 interface Result {
   election: string;
   date: string;
-  majority: number;
+  majority: number | null;
   pct: number | null;
   band: string | null;
   party: string | null;
@@ -160,14 +160,17 @@ function Person({ number }: { number: string }) {
                 <ul>
                   {s.results.map((r) => (
                     <li key={r.date}>
-                      {r.election[0].toUpperCase() + r.election.slice(1)}: majority {r.majority.toLocaleString("en-GB")}
+                      {r.election[0].toUpperCase() + r.election.slice(1)}:{" "}
+                      {r.majority != null
+                        ? `majority ${r.majority.toLocaleString("en-GB")}`
+                        : "won (majority not known: the source counts smaller parties and independents together)"}
                       {r.pct != null && `, ${r.pct}% of votes cast`}
                       {r.band && <span className="muted"> · {BAND[r.band]}</span>}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="muted small">Election results before 2010 are not included.</p>
+                <p className="muted small">No result is held for this seat (by-elections before 2010 are not included).</p>
               )}
             </div>
           ))}
