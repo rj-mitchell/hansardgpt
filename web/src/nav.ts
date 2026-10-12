@@ -43,3 +43,6 @@ export const FOOTER: NavLink[] = [
   { href: "/terms", label: "Terms" },
   { href: "https://github.com/rj-mitchell/hansardgpt", label: "Source code" },
 ];
+
+/** Set by the Compare page just before it opens the comparison on the main page, which then starts it at once. */
+export const COMPARE_HANDOVER = "wts.compare";

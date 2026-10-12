@@ -1,6 +1,7 @@
-/** The Compare page: choose what to compare and the topic; the question then opens on the main page. */
+/** The Compare page: choose what to compare and the topic; the comparison is then written on the main page. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { COMPARE_HANDOVER } from "./nav";
 import "./pages";
 
 type Kind = "party" | "person" | "nation";
@@ -100,6 +101,11 @@ function Compare() {
         const names = chosen.map(name);
         const q = `How do ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} compare on ${topic.trim()}?`;
         const sides = chosen.map((o) => `${kind}:${o.id}`).join(",");
+        try {
+          sessionStorage.setItem(COMPARE_HANDOVER, q); // the main page starts this comparison straight away
+        } catch {
+          /* storage unavailable: the question is filled in, ready to ask */
+        }
         window.location.href = `/?q=${encodeURIComponent(q)}&compare=${encodeURIComponent(sides)}&sides=${encodeURIComponent(names.join("|"))}`;
       }}
     >
@@ -137,7 +143,8 @@ function Compare() {
       </div>
       {!distinct && <p className="form-error">Choose different sides.</p>}
       <p className="muted small">
-        Opens on the main page, where the briefing is written (it costs the site about the same as any other briefing).
+        The comparison is written straight away on the main page (it costs the site about the same as any other
+        briefing).
         Comparisons of members work best for people who have both spoken on the topic.
       </p>
     </form>

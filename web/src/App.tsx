@@ -14,7 +14,7 @@ import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
 import { SiteFooter } from "./components/SiteFooter";
-import { MORE, NAV } from "./nav";
+import { COMPARE_HANDOVER, MORE, NAV } from "./nav";
 import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
@@ -107,6 +107,7 @@ export default function App() {
     }
   })();
   const questionRef = useRef<HTMLTextAreaElement>(null);
+  const compareStarted = useRef(false);
   const [drawer, setDrawer] = useState<{ turn: string; h: Highlight } | null>(null);
   const [showControls, setShowControls] = useState(false);
   const [supportCount, setSupportCount] = useState(0); // > 0: show the note on what the site costs
@@ -259,7 +260,10 @@ export default function App() {
     abortRef.current = ctrl;
     try {
       const sides = plan ? [] : compare;
-      if (sides.length) setCompare([]); // the comparison applies to the question it came with
+      if (sides.length) {
+        setCompare([]); // the comparison applies to the question it came with
+        update(id, { comparing: compareLabels.length === sides.length ? compareLabels : [] });
+      }
       for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly, sides), ctrl.signal)) {
         if (ev.type === "plan") update(id, { plan: ev.plan as Plan, status: "searching" });
         else if (ev.type === "sources")
@@ -302,6 +306,24 @@ export default function App() {
     setQuestion("");
     void run(q, undefined, undefined, sourcesOnly);
   }
+
+  // a comparison chosen on the Compare page starts at once. Only from there: a shared link with the same
+  // parameters fills in the question but waits for Ask, so following a link never spends money by itself.
+  useEffect(() => {
+    if (compareStarted.current || auth !== "in" || !meta || compare.length < 2) return;
+    let pending: string | null = null;
+    try {
+      pending = sessionStorage.getItem(COMPARE_HANDOVER);
+      sessionStorage.removeItem(COMPARE_HANDOVER);
+    } catch {
+      pending = null;
+    }
+    const q = question.trim();
+    if (!pending || pending !== q) return;
+    compareStarted.current = true;
+    setQuestion("");
+    void run(q);
+  }, [auth, meta, compare, question]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (auth === "unknown") return <div className="loading">Loading…</div>;
   if (auth === "out") return <Login onDone={() => void refresh()} />;
@@ -430,9 +452,11 @@ export default function App() {
               Ask about the record of Parliament <span className="ai-tag">AI-powered</span>
             </h2>
             <p>
-              Ask a question in your own words. The site finds the most relevant speeches, answers, statements and
-              votes in the official record since 1997, and AI (Claude) writes a short briefing from them: who said
-              what, and where they stand, with every statement cited to the exact words in Hansard.
+              Ask a question in your own words. Unlike Hansard's search, it does not just match the exact words you
+              type: it works out what you are asking about and finds the MPs and peers who spoke on it, even when they
+              put it differently. Then AI (Claude) pulls the speeches, answers, statements and votes since 1997 into
+              one short briefing, so you do not have to read through results date by date: who said what, and where
+              they stand, with every statement cited to the exact words in Hansard.
             </p>
             {composer("composer composer-inline")}
             <p className="ai-caution">
@@ -460,9 +484,9 @@ export default function App() {
             <h3 className="examples-head">How this differs from a search</h3>
             <ul className="ask-why">
               <li>
-                <strong>Answers, not a list of hits.</strong> Hansard's own search and TheyWorkForYou find every
-                mention of the words you type, and leave you to read through them. Here you ask a question; the site
-                finds the contributions that answer it, even when they use different words, and sums them up.
+                <strong>Answers, not a list of hits.</strong> Hansard's own search and TheyWorkForYou list every
+                mention of the words you type, in date order, for you to read through. Here the contributions that
+                answer your question are found by meaning and brought together in one briefing.
               </li>
               <li>
                 <strong>Balanced by design.</strong> Each briefing draws on ministers and the opposition, backbenchers
@@ -479,6 +503,12 @@ export default function App() {
         {turns.map((t) => (
           <article key={t.id} className="turn">
             {t.topic && <TopicHeader topic={t.topic} preparedAt={t.preparedAt} recordsUpTo={t.recordsUpTo} />}
+            {t.comparing !== undefined && (
+              <p className="eyebrow">
+                Comparison{t.comparing.length ? `: ${t.comparing.join(" and ")}` : ""} ·{" "}
+                <a href="/compare">Compare something else</a>
+              </p>
+            )}
             <h2 className="question">{t.question}</h2>
             {t.shared && t.preparedAt && (
               <p className="shared-note">
