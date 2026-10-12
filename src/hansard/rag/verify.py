@@ -116,13 +116,24 @@ def _classify_uncited(text: str, next_is_cited: bool) -> list[Segment]:
     * anything else (a claim with no citation) is ``unsupported``.
     """
     lines = text.splitlines(keepends=True)
+    claims: set[int] = set()  # whole sentences split off a lead-in: never a mere transition, however short
+    if next_is_cited and lines:
+        # "Some answers said the data was not held. Stephen Kinnock said on 24 March that " + quotation: the
+        # last sentence leads in to the citation that follows; only the sentence before it is a claim
+        ends = list(_SENTENCE_END.finditer(lines[-1]))
+        if ends:
+            cut = ends[-1].end() - 1
+            tail = lines[-1][cut:]
+            if len(tail.strip()) <= _ATTRIBUTION_MAX and not tail.rstrip().endswith("."):
+                lines[-1:] = [lines[-1][:cut], tail]
+                claims.add(len(lines) - 2)
     out: list[Segment] = []
     for i, line in enumerate(lines):
         last = i == len(lines) - 1
         body = re.sub(r"^[\s\-*•\d.)]+", "", line).strip()
         lead_in = (last and next_is_cited and len(body) <= _ATTRIBUTION_MAX
                    and not _SENTENCE_END.search(body.rstrip()) and not body.endswith("."))
-        if (_is_connective(line) or _LABEL.match(line) or lead_in
+        if ((_is_connective(line) and i not in claims) or _LABEL.match(line) or lead_in
                 or (_EVIDENCE_NOTE.search(body) and not _SOMEONE_SAID.search(body))):
             status = "connective"
         else:

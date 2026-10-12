@@ -380,20 +380,42 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
 
 
 def resolve_speakers(resolver_con, names: list[str], f: Filters) -> tuple[list[dict[str, str]], list[str]]:
-    """Map names the user mentioned to person ids, preferring people active in the date range."""
+    """Map names the user mentioned to person ids. Every word of the name must be a word of the member's name (a
+    first name may be a short form: "Ed Davey" is Edward Davey; "Benn" is Hilary Benn, not Andrew Bennett). Among
+    several, a full-name match comes first, then people who sat in the dates asked about (or lately), then the
+    better known (government posts count most, then shadow posts, then committee chairs)."""
+    from hansard.sources.donations import _same_first
+
     found, missing = [], []
+    lo, hi = f.date_from or date(1997, 5, 1), f.date_to or date.today()
     for name in names:
+        want = re.findall(r"[\w'’-]+", name.lower())
+        if not want:
+            missing.append(name)
+            continue
         rows = resolver_con.execute(
-            """SELECT n.person_id, n.name, max(n."end") AS last_end FROM ref_names n
-               WHERE lower(n.name) = lower(?) OR lower(n.name) LIKE '%' || lower(?) || '%'
-               GROUP BY ALL ORDER BY (lower(n.name) = lower(?)) DESC, last_end DESC LIMIT 5""",
-            [name, name, name]).fetchall()
+            """SELECT n.person_id, n.name,
+                      (SELECT max(m."end") FROM ref_memberships m WHERE m.person_id = n.person_id) AS last_sat,
+                      EXISTS (SELECT 1 FROM ref_memberships m WHERE m.person_id = n.person_id
+                              AND m.start <= ? AND m."end" >= ?) AS sat_then,
+                      (SELECT coalesce(sum(CASE o.kind WHEN 'gov' THEN 3 WHEN 'shadow' THEN 2 WHEN 'chair' THEN 1
+                                            ELSE 0 END), 0)
+                       FROM ref_offices o WHERE o.person_id = n.person_id) AS posts
+               FROM ref_names n WHERE lower(n.name) LIKE '%' || ? || '%'
+               GROUP BY n.person_id, n.name LIMIT 500""", [hi, lo, want[-1]]).fetchall()
+
+        def matches(row: tuple, want: list[str] = want) -> bool:
+            words = re.findall(r"[\w'’-]+", row[1].lower())
+            if want[-1] not in words:
+                return False
+            return all(any(w == x or _same_first(w, x) for x in words) for w in want[:-1])
+
+        rows = [r for r in rows if matches(r)]
         if not rows:
             missing.append(name)
             continue
-        if f.date_from:
-            rows.sort(key=lambda r: r[2] >= f.date_from, reverse=True)
-        found.append({"person_id": rows[0][0], "name": rows[0][1], "query": name})
+        best = max(rows, key=lambda r: (r[1].lower() == name.lower(), r[3], r[4], r[2] or date.min))
+        found.append({"person_id": best[0], "name": best[1], "query": name})
     return found, missing
 
 
