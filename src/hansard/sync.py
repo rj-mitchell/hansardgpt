@@ -32,7 +32,12 @@ from hansard.config import STATIC_DIR, Settings
 from hansard.index.build import Indexer, embed_pending
 from hansard.index.lance import SearchIndex
 from hansard.ingest import ingest
-from hansard.reference.build import ReferenceData, build_reference, write_reference
+from hansard.reference.build import (
+    REFERENCE_VERSION,
+    ReferenceData,
+    build_reference,
+    write_reference,
+)
 from hansard.store.parquet import compact
 from hansard.store.state import StateDB
 
@@ -151,7 +156,7 @@ def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | No
                                         settings.sources.get("parlparse_branch", "master"))
         members_dir = parlparse.members_dir(settings.parlparse_dir)
     elections, elec_status = refresh_elections_data(settings, members_dir, fetch=fetch)
-    unchanged = (fetch and sha == state.get("parlparse_sha")
+    unchanged = (fetch and sha == state.get("parlparse_sha") and state.get("reference_version") == REFERENCE_VERSION
                  and (settings.reference_dir / "persons.parquet").exists()
                  and (settings.reference_dir / "election_results.parquet").exists()
                  and demo_status.get("status") not in ("updated", "partial")
@@ -187,6 +192,7 @@ def install_reference(settings: Settings, state: StateDB, ref: ReferenceData, sh
         tmp.rename(settings.reference_dir)
     if sha:
         state.set("parlparse_sha", sha)
+    state.set("reference_version", REFERENCE_VERSION)
     return people
 
 

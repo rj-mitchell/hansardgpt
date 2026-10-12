@@ -175,6 +175,8 @@ def load_overrides(path: Path | None) -> dict[str, str]:
                 for r in csv.DictReader(fh) if r.get("parlparse_name")}
 
 
+# Raised whenever the way the reference is built changes, so the next sync rebuilds it even if the member data has not.
+REFERENCE_VERSION = "2026-10-12"
 EARLIEST_SEATS = date(1997, 5, 1)  # seats are resolved for memberships from the 1997 general election on
 PRE2010_CSV = STATIC_DIR / "geo" / "pre2010_regions.csv"
 
