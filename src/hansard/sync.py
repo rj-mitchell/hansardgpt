@@ -261,20 +261,27 @@ def _run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | 
         t = time.time()
         first_build = not idx.has_data()
         passages = indexer.index_pending()
-        people = pending_people(state)
-        if people and not first_build:
-            log.info("updating speaker details (party, seat, roles) for %d member(s) whose records changed", len(people))
-        reenriched = indexer.reenrich_people(people) if people and not first_build else 0
-        state.set(PENDING_PEOPLE, "[]")
+        if idx.ensure_vector_ids():
+            log.info("built the vectors table's passage index")
         log.info("checking for passages waiting to be merged into the search indices")
         waiting = 0 if first_build else idx.unmerged()  # includes rows an earlier, stopped update added
         if first_build and passages:
             idx.build_indices()
-        elif passages or reenriched or waiting:
+        elif passages or waiting:
+            # before updating speaker details below: those updates find passages through these indices
             log.info("merging %d new passages into the search indices", waiting or passages)
             t_merge = time.time()
             idx.optimize()  # merges new rows into the BM25 and scalar indices incrementally
             log.info("merged in %.0fs", time.time() - t_merge)
+        people = pending_people(state)
+        reenriched = 0
+        if people and not first_build:
+            log.info("updating speaker details (party, seat, roles) for %d member(s) whose records changed", len(people))
+            reenriched = indexer.reenrich_people(people)
+            log.info("speaker details changed on %d passages", reenriched)
+            if reenriched:
+                idx.optimize()
+        state.set(PENDING_PEOPLE, "[]")
         stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
 
@@ -471,6 +478,10 @@ def _run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | 
                               max_seconds=embed_minutes * 60 if embed_minutes else None)
             stats["embed"] = {"passages_embedded": n, "files_remaining": len(state.unembedded()),
                               "seconds": round(time.time() - t, 1)}
+            if n:  # index the new vectors now, so later look-ups by passage never read them all into memory
+                idx.ensure_vector_ids()
+                log.info("indexing %d new vectors", n)
+                idx.optimize()
 
         if settings.section("topics").get("enabled", True) and fetch:
             t = time.time()

@@ -240,11 +240,14 @@ class Indexer:
         people = sorted(person_ids)
         for i in range(0, len(people), batch):
             part = people[i:i + batch]
+            if i and i % 250 == 0:
+                log.info("speaker details: %d/%d members checked", i, len(people))
             rows = tbl.search().where(f"person_id IN ({', '.join(sql_str(p) for p in part)})") \
-                .select(["passage_id", "person_id", "date"]).limit(None).to_arrow()
+                .select(["passage_id", "person_id", "date", *speaker_cols]).limit(None).to_arrow()
             if rows.num_rows == 0:
                 continue
             pids, persons, dates = (rows.column(c).to_pylist() for c in ("passage_id", "person_id", "date"))
+            stored = {c: rows.column(c).to_pylist() for c in speaker_cols}
             uniq = sorted(set(zip(persons, dates, strict=True)))
             self.con.register("recs", pa.table({
                 "record_id": pa.array([f"{p}|{d.isoformat()}" for p, d in uniq], pa.string()),
@@ -262,13 +265,15 @@ class Indexer:
                     **office_columns(e["offices"] or []),
                 }
             out = {c: [] for c in ["passage_id", *speaker_cols]}
-            for pid, person, d in zip(pids, persons, dates, strict=True):
+            for n, (pid, person, d) in enumerate(zip(pids, persons, dates, strict=True)):
                 v = values.get(f"{person}|{d.isoformat()}")
-                if v is None:
-                    continue
+                if v is None or all(_same(v[c], stored[c][n]) for c in speaker_cols):
+                    continue  # unchanged: most of a member's passages, when what changed is one post or one year
                 out["passage_id"].append(pid)
                 for c in speaker_cols:
                     out[c].append(v[c])
+            if not out["passage_id"]:
+                continue
             schema = pa.schema([PASSAGE_SCHEMA.field(c) for c in ["passage_id", *speaker_cols]])
             table = pa.Table.from_pydict(out, schema=schema)
             tbl.merge_insert("passage_id").when_matched_update_all().execute(table)
@@ -277,6 +282,13 @@ class Indexer:
                     table.select(["passage_id", *vector_cols]))
             updated += table.num_rows
         return updated
+
+
+def _same(new: Any, old: Any) -> bool:
+    """Equal as stored (lists and None compare as written; empty and missing lists are the same)."""
+    if isinstance(new, (list, tuple)) or isinstance(old, (list, tuple)):
+        return list(new or []) == list(old or [])
+    return new == old
 
 
 def embed_pending(settings: Settings, index: SearchIndex, state: StateDB, embedder: Embedder, *,

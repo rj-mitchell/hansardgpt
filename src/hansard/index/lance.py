@@ -158,6 +158,7 @@ class SearchIndex:
         tbl.create_index("search_text", config=FTS(with_position=False, stem=True, remove_stop_words=True),
                          replace=True)
         self.build_scalar_indices(tbl)
+        self.ensure_vector_ids()
         if VECTORS in self._names():
             vt = self.vectors()
             n = vt.count_rows()
@@ -166,6 +167,17 @@ class SearchIndex:
 
                 vt.create_index("vector", config=IvfPq(distance_type="cosine",
                                                        num_sub_vectors=max(1, self.dim // 8)), replace=True)
+
+    def ensure_vector_ids(self) -> bool:
+        """An index on the vectors table's passage_id. Without it, updating speaker details on a few passages reads
+        every vector into memory (gigabytes, once there are millions). Returns True if it had to be built."""
+        if VECTORS not in self._names():
+            return False
+        vt = self.vectors()
+        if vt.count_rows() == 0 or any("passage_id" in (ix.columns or []) for ix in vt.list_indices()):
+            return False
+        vt.create_index("passage_id", config=BTree(), replace=True)
+        return True
 
     def build_scalar_indices(self, tbl) -> None:
         """Indices that let filtered (prefilter) searches skip non-matching rows."""
