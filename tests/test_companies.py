@@ -137,3 +137,25 @@ def test_member_page_and_index(indexed_settings, tmp_path):
         assert client.get("/api/directorships", params={"q": "widgets"}).json()["total_companies"] == 1
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_key_check_says_why_without_showing_the_key():
+    from hansard.sources.companies import check_key
+
+    good = "0123abcd-0123-4567-89ab-0123456789ab"
+
+    def client(live, test):
+        def respond(request: httpx.Request) -> httpx.Response:
+            code = test if "sandbox" in request.url.host else live
+            return httpx.Response(code, json={"error": "Invalid Authorization"} if code != 200 else {"items": []})
+        return httpx.Client(transport=httpx.MockTransport(respond))
+
+    ok = check_key(good, client(200, 401))
+    assert ok["ok"] and ok["verdict"] == "The key works." and good not in str(ok)
+    test_app = check_key(good, client(401, 200))
+    assert not test_app["ok"] and "Test application" in test_app["verdict"]
+    pasted = check_key(f'"{good}"', client(401, 401))
+    assert pasted["spaces_or_quotes"] and "cut short" in pasted["verdict"]
+    refused = check_key(good, client(401, 401))
+    assert "Restricted IPs" in refused["verdict"] and refused["live_says"].startswith("{")
+    assert "not set" in check_key("", client(200, 200))["problem"]

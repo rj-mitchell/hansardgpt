@@ -25,8 +25,9 @@ licence checks.*
 
   Don't paste the key anywhere else, Claude included.
 - [ ] **4. Try it on 20 members:** `cd /opt/hansardgpt/deploy && docker compose exec app hansard directorships --count 20`
-  - It should end with `"checked": 20`. If it says the key was refused, make the key again (step 2) and repeat
-    step 3.
+  - It should end with `"checked": 20`. If it says the key was refused, run
+    `docker compose exec app hansard directorships --check`: it says why (for example a key made for a Test
+    application rather than Live) without showing the key. Paste its output to Claude if unsure.
   - Then `docker compose exec app hansard directorships --show "a"` lists what it found for those 20. Paste that
     output to Claude if you'd like the matches checked; it contains no key.
 - [ ] **5. Look up everyone now**, rather than a few hundred members per update over a week or two (free; about
