@@ -12,7 +12,9 @@ import os
 import re
 import secrets
 import threading
-from collections.abc import Iterator
+import time
+from collections import OrderedDict
+from collections.abc import Callable, Iterator
 from datetime import date
 from pathlib import Path
 from typing import Any, Literal
@@ -176,6 +178,11 @@ def _public_run(run: dict[str, Any]) -> dict[str, Any]:
     return {"finished_at": run.get("finished_at"), "status": run.get("status")}
 
 
+def server_timing(timings: dict[str, float]) -> str:
+    """'keyword;dur=812.4, meaning;dur=40.1': how long each stage took, readable in the browser's network panel."""
+    return ", ".join(f"{k};dur={v * 1000:.1f}" for k, v in timings.items())
+
+
 def create_app(settings: Settings | None = None, pipeline: Pipeline | None = None,
                state: StateDB | None = None) -> FastAPI:
     settings = settings or load_settings()
@@ -191,6 +198,25 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     holder: dict[str, Pipeline] = {}
     if pipeline is not None:
         holder["p"] = pipeline
+
+    # Answers that change only when the record or member data is updated (twice a day, by a separate process) are
+    # kept for ten minutes, so a page opened again, or by the next reader, comes straight from memory.
+    remembered_answers: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+    remembered_lock = threading.Lock()
+
+    def remembered(key: str, compute: Callable[[], Any], ttl: float = 600.0) -> Any:
+        now = time.time()
+        with remembered_lock:
+            hit = remembered_answers.get(key)
+        if hit is not None and now - hit[0] < ttl:
+            return hit[1]
+        value = compute()
+        with remembered_lock:
+            remembered_answers[key] = (now, value)
+            remembered_answers.move_to_end(key)
+            while len(remembered_answers) > 2000:
+                remembered_answers.popitem(last=False)
+        return value
 
     def get_pipeline() -> Pipeline:
         with lock:
@@ -687,6 +713,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     @app.get("/api/week")
     def week_detail(start: str | None = None):
         """One sitting week (Monday to Sunday; the latest if no start is given). Free: no AI."""
+        return remembered(f"week:{start}", lambda: week_data(start))
+
+    def week_data(start: str | None):
         w = find_week(start)
         if w is None:
             raise HTTPException(404, "Parliament did not sit that week, or the week is outside the record.")
@@ -725,7 +754,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     def public_search(request: Request, q: str = "", date_from: str | None = None, date_to: str | None = None,
                       house: str | None = None, party: str | None = None, written: bool = True,
                       limit: int = 20, user=Depends(current_user)):
-        """Search the Westminster record since 2010, ranked by relevance. Free; no AI. See /developers."""
+        """Search the Westminster record since 1997, ranked by relevance. Free; no AI. See /developers."""
         from hansard.engine import Filters
 
         requester(request, user)
@@ -752,8 +781,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                         "column": r.get("colnum"), "uin": r.get("uin"),
                         "url": r.get("official_url") or r.get("twfy_url"), "twfy_url": r.get("twfy_url"),
                         "relevance": round(r["ranking"]["relevance"], 4) if r.get("ranking") else None})
-        return {"query": q, "results": out, "count": len(out),
+        body = {"query": q, "results": out, "count": len(out),
                 "licence": "Contains Parliamentary information licensed under the Open Parliament Licence v3.0."}
+        return JSONResponse(body, headers={"Server-Timing": server_timing(res.timings)})
 
     # ---- the devolved parliaments --------------------------------------------------------------
     def get_devolved():
@@ -1019,6 +1049,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     def groups_index(q: str = "", parliament: str = "uk"):
         """All-party parliamentary groups (or a devolved parliament's cross-party groups), and their biggest
         registered funders. Free: no AI."""
+        return remembered(f"groups:{parliament}:{q[:200]}", lambda: groups_index_data(q, parliament))
+
+    def groups_index_data(q: str, parliament: str):
         from hansard.sources.appgs import PARLIAMENTS
 
         if parliament not in PARLIAMENTS:
@@ -1059,6 +1092,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     def donations_index():
         """The biggest donors to MPs in the last five years and the latest donations, as registered with the
         Electoral Commission and matched to MPs. Free: no AI."""
+        return remembered("donations", donations_index_data)
+
+    def donations_index_data():
         out = get_donations().index()
         people = get_people()
         for r in out.get("recent", []):
@@ -1253,6 +1289,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
 
     @app.get("/api/people/{number}")
     def person(number: int):
+        return remembered(f"person:{number}", lambda: person_page_data(number))
+
+    def person_page_data(number: int):
         pp = get_people()
         pid = pp.resolve(number)
         page = pp.page(pid) if pid else None
@@ -1297,8 +1336,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):
         requester(request, user)
-        try:
-            found = get_people().by_postcode(postcode)
+        key = "postcode:" + re.sub(r"\s+", "", postcode).upper()[:10]
+        try:  # seats change only at boundary reviews; kept in memory for a day, never written down
+            found = remembered(key, lambda: get_people().by_postcode(postcode), ttl=86400)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
         except Exception:  # Parliament's service could not be reached
@@ -1572,4 +1612,22 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             missing = dist / "404.html"
             return FileResponse(missing if missing.is_file() else dist / "index.html", status_code=404)
 
+    if os.environ.get("HANSARD_WARM_UP") == "1":
+        # Load the search models and the commonly used tables now, in the background, so the first reader after a
+        # restart does not wait for them. Anything that fails here simply loads on first use as before.
+        def warm_up() -> None:
+            t = time.time()
+            try:
+                from hansard.engine import Filters
+
+                engine = get_pipeline().engine
+                engine.search("cost of living", Filters(), Scope(written=True), [], 0.0, 1.0, 5)
+                get_people()
+                get_weeks().latest()
+                get_bills()
+                log.info("warmed up in %.1fs", time.time() - t)
+            except Exception as exc:  # never stop the site starting
+                log.warning("warm-up incomplete: %s", exc)
+
+        threading.Thread(target=warm_up, name="warm-up", daemon=True).start()
     return app

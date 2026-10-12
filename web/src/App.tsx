@@ -495,7 +495,8 @@ export default function App() {
               </li>
               <li>
                 <strong>Checkable.</strong> Every statement links to the record it comes from, with the speaker's
-                party, seat and role on the day. Statements the record does not support are removed.
+                party, seat and role on the day. Anything not tied to a cited source is highlighted, so you can see
+                what to check.
               </li>
             </ul>
           </section>

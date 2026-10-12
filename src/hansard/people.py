@@ -177,15 +177,24 @@ class People:
         if "records" not in self.stores:
             return []
         xml = self._xml_ids(person_id)
-        year = (self.today or date.today()).year
+        today = self.today or date.today()
+        first, last = self.con.execute(
+            'SELECT min(start), max("end") FROM ref_memberships WHERE person_id = ?', [person_id]).fetchone()
+        if first is None:
+            return []
+        # only the years they sat (the record has nothing else of theirs): the last year or two first, then the
+        # last five, then all of them. Reading years they were not in Parliament would scan millions of records.
+        end_year = min(last, today).year
+        start_year = max(first.year, self.settings.archive_start.year)
         rows: list[tuple] = []
-        for since in (year - 1, year - 5, 0):  # look at recent years first: most people have spoken lately
+        for since in (end_year - 1, end_year - 5, start_year):
+            since = max(since, start_year)
             rows = self.con.execute(
                 f"""SELECT DISTINCT ON (record_id) record_id, date, chamber, record_type, major_heading, minor_heading,
                            left(text, 320) AS excerpt, twfy_url, official_url, source, bill
-                    FROM records WHERE year >= {int(since)} AND list_contains(?, xml_person_id)
+                    FROM records WHERE year BETWEEN {int(since)} AND {int(end_year)} AND list_contains(?, xml_person_id)
                     ORDER BY record_id, date DESC""", [xml]).fetchall()
-            if len(rows) >= limit or since == 0:
+            if len(rows) >= limit or since == start_year:
                 break
         rows.sort(key=lambda r: (r[1], r[0]), reverse=True)
         cols = ["record_id", "date", "chamber", "record_type", "major_heading", "minor_heading", "excerpt",

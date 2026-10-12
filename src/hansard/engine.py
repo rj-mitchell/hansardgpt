@@ -9,6 +9,8 @@ and its output is shown to the user as editable chips.
 from __future__ import annotations
 
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from typing import Any
@@ -17,13 +19,13 @@ import duckdb
 
 from hansard.config import Settings
 from hansard.embed.base import Embedder, get_embedder
-from hansard.index.lance import SearchIndex, date_lit, sql_list, sql_str
+from hansard.index.lance import SearchIndex, date_lit, sql_str
 from hansard.rank.composite import Candidate, RankParams, Scored, rank
 from hansard.rank.evidence import evidence_summary, select_evidence
 from hansard.rank.rerank import Reranker, get_reranker, rerank
 from hansard.reference.profiles import ProfileResolver
 from hansard.sources.demographics import AGE_BANDS, age_band, age_on, assumed_birth, band_dates
-from hansard.store.parquet import read_partition_rows
+from hansard.store.parquet import read_records
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +86,7 @@ class SearchResult:
     semantic_available: bool
     where: str | None
     evidence: dict[str, Any] = field(default_factory=dict)
+    timings: dict[str, float] = field(default_factory=dict)  # seconds per stage, for the Server-Timing header
 
 
 def build_where(filters: Filters, scope: Scope) -> str:
@@ -130,6 +133,13 @@ class Engine:
         self.today = today
         self.con = duckdb.connect()
         self.con.execute("SET enable_object_cache = true")  # cache Parquet footers between queries
+        self._has_vectors = False
+
+    def has_vectors(self) -> bool:
+        """Whether meaning-based search has anything to search yet (once true, it stays true: vectors only grow)."""
+        if not self._has_vectors:
+            self._has_vectors = self.index.stats()["vectors"] > 0
+        return self._has_vectors
 
     @property
     def embedder(self) -> Embedder | None:
@@ -242,14 +252,26 @@ class Engine:
             return True
 
         where = build_where(filters, scope)
+        timings: dict[str, float] = {}
+        clock = time.perf_counter()
+
+        def lap(stage: str) -> None:
+            nonlocal clock
+            now = time.perf_counter()
+            timings[stage] = timings.get(stage, 0.0) + now - clock
+            clock = now
+
         # checks made after the search discard some candidates, so fetch more to start with
         widen = 2 if post_filters else 1
         bm = self.index.bm25(query, where, int(r.get("candidates_bm25", 300)) * widen)
+        lap("keyword")
         vec_hits: list[dict[str, Any]] = []
-        semantic = self.index.stats()["vectors"] > 0 and self.embedder is not None
+        semantic = self.has_vectors() and self.embedder is not None
         if semantic:
-            vec_hits = self.index.vector(self.embedder.embed_query(query), where,
-                                         int(r.get("candidates_vector", 300)) * widen)
+            vec = self.embedder.embed_query(query)
+            lap("embed")
+            vec_hits = self.index.vector(vec, where, int(r.get("candidates_vector", 300)) * widen)
+            lap("meaning")
 
         cands: dict[str, Candidate] = {}
 
@@ -293,9 +315,11 @@ class Engine:
             semantic_floor=r.get("semantic_floor", floor), semantic_ceiling=r.get("semantic_ceiling", ceiling),
             **({"today": self.today} if self.today else {}))
         scored = rank(list(cands.values()), set(portfolios or []), params)
+        lap("rank")
         if self.reranker is not None and scored:
             scored = rerank(scored, rerank_query or query, self.reranker, top=int(r.get("rerank_top", 150)),
                             weight=float(r.get("rerank_weight", 0.6)))
+            lap("rerank")
         best_cos = max((c.cosine or 0.0 for c in cands.values()), default=0.0)
         no_records = not scored or (semantic and best_cos < float(r.get("no_records_cosine", 0.0))
                                     and not any(c.bm25 for c in cands.values()))
@@ -308,8 +332,10 @@ class Engine:
                                   min_relevance_ratio=float(r.get("min_relevance_ratio", 0.25)))
         else:
             top = scored[:limit]
+        lap("select")
         records = self.records_for(top) if top else []
-        return SearchResult(top, records, no_records, len(cands), semantic, where, evidence_summary(records))
+        lap("records")
+        return SearchResult(top, records, no_records, len(cands), semantic, where, evidence_summary(records), timings)
 
     # ---- full records for display / grounding ---------------------------------
     def records_for(self, scored: list[Scored]) -> list[dict[str, Any]]:
@@ -317,16 +343,19 @@ class Engine:
         for s in scored:
             by_part.setdefault((s.candidate.data["source"], s.candidate.date.year), []).append(s)
         found: dict[tuple[str, str], dict[str, Any]] = {}
-        for (source, year), items in by_part.items():
-            ids = [s.candidate.record_id for s in items]
-            keys = sorted({s.candidate.data["source_key"] for s in items})
-            dates = sorted({s.candidate.date for s in items})
-            # date and source_key predicates let DuckDB skip row groups of the date-sorted files
-            where = (f"date BETWEEN DATE '{dates[0].isoformat()}' AND DATE '{dates[-1].isoformat()}' "
-                     f"AND source_key IN {sql_list(keys)} AND record_id IN {sql_list(ids)}")
-            for rec in read_partition_rows(self.con, self.settings.parquet_dir, "records", source, year, where):
-                # the indexed copy: other files may hold older copies, and an ID can repeat within a file
-                found.setdefault((rec["record_id"], rec["source_key"]), rec)
+
+        def read(part: tuple[str, int]) -> list[dict[str, Any]]:
+            items = by_part[part]
+            return read_records(self.settings.parquet_dir, part[0], part[1],
+                                {s.candidate.record_id for s in items}, {s.candidate.date for s in items},
+                                {s.candidate.data["source_key"] for s in items})
+
+        # each source and year is read on its own thread (reading and unpacking Parquet releases the GIL)
+        with ThreadPoolExecutor(max_workers=min(4, len(by_part) or 1)) as pool:
+            for recs in pool.map(read, sorted(by_part)):
+                for rec in recs:
+                    # the indexed copy: other files may hold older copies, and an ID can repeat within a file
+                    found.setdefault((rec["record_id"], rec["source_key"]), rec)
         rows = {s.candidate.record_id: found[key] for s in scored
                 if (key := (s.candidate.record_id, s.candidate.data["source_key"])) in found}
         passages = {pid: p for s in scored for pid, p in s.candidate.data.get("passages", {}).items()}

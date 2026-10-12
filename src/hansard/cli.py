@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import sys
 import time
@@ -449,6 +450,7 @@ def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False,
     import uvicorn
 
     _setup_logging()
+    os.environ.setdefault("HANSARD_WARM_UP", "1")  # load the search models at start, not on the first question
     uvicorn.run("hansard.api.app:create_app", host=host, port=port, factory=True, reload=reload,
                 proxy_headers=behind_proxy, forwarded_allow_ips="*" if behind_proxy else None,
                 access_log=access_log)
