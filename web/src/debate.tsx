@@ -43,6 +43,8 @@ interface DebateData {
   date: string;
   chamber: string;
   chamber_name: string;
+  kind?: "debate" | "statement";
+  department?: string | null;
   house: string;
   official_url: string | null;
   contributions: number;
@@ -98,28 +100,39 @@ function Debate({ path }: { path: string }) {
     );
   if (!d) return <p className="muted">Loading…</p>;
   const headings = d.items.filter((i) => i.kind === "heading");
-  const question = `What was said in the ${d.chamber_name} debate on ${d.title} on ${fmtDate(d.date)}?`;
+  const statement = d.kind === "statement";
+  const question = statement
+    ? `What did the government say in its written statement on ${d.title} on ${fmtDate(d.date)}?`
+    : `What was said in the ${d.chamber_name} debate on ${d.title} on ${fmtDate(d.date)}?`;
   return (
     <article className="debate">
       <p className="eyebrow">
-        {d.chamber_name} · <time dateTime={d.date}>{fmtDate(d.date)}</time>
+        {statement ? `Written statement to the ${d.chamber_name}` : d.chamber_name}
+        {d.department && ` · ${d.department}`} · <time dateTime={d.date}>{fmtDate(d.date)}</time>
       </p>
       <h1>{d.title}</h1>
-      <p className="lede">
-        {d.contributions} contribution{d.contributions === 1 ? "" : "s"} from {d.speakers} member
-        {d.speakers === 1 ? "" : "s"}, as recorded in Hansard. Each speaker is shown with their party, seat and role
-        on the day.
-      </p>
+      {statement ? (
+        <p className="lede">
+          A written ministerial statement: how the government tells Parliament about a decision or development without
+          a debate. The minister is shown with their party, seat and role on the day.
+        </p>
+      ) : (
+        <p className="lede">
+          {d.contributions} contribution{d.contributions === 1 ? "" : "s"} from {d.speakers} member
+          {d.speakers === 1 ? "" : "s"}, as recorded in Hansard. Each speaker is shown with their party, seat and role
+          on the day.
+        </p>
+      )}
       <p className="small">
         {d.official_url && (
           <a href={d.official_url} target="_blank" rel="noreferrer">
-            The official record for this day
+            {statement ? "The statement on Parliament's website" : "The official record for this day"}
           </a>
         )}
       </p>
 
       <form className="ask-about" action="/" method="get">
-        <label htmlFor="debate-q">Ask about this debate</label>
+        <label htmlFor="debate-q">Ask about this {statement ? "statement" : "debate"}</label>
         <div className="ask-row">
           <input id="debate-q" name="q" defaultValue={question} />
           <button type="submit" className="primary">
@@ -205,7 +218,8 @@ function Debate({ path }: { path: string }) {
       {d.same_day.length > 0 && (
         <details className="same-day">
           <summary>
-            Also in the {d.chamber_name} on {fmtDate(d.date)} ({d.same_day.length})
+            {statement ? "Other written statements" : `Also in the ${d.chamber_name}`} on {fmtDate(d.date)} (
+            {d.same_day.length})
           </summary>
           <ul>
             {d.same_day.map((o) => (

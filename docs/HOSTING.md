@@ -203,7 +203,7 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 | See the company roles found for members whose name contains some text | `cd /opt/hansardgpt/deploy && docker compose exec app hansard directorships --show "Smith"` |
 | Remove a company role wrongly matched to a member | ask Claude: it adds the Companies House record to `data_static/directorships_exclude.csv`, removed at the next update |
 | Check that early day motions can be read from Parliament (free) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard edms --check` |
-| Collect all early day motions since 2010 in one go, in the background (free; about 4–5 hours, one request at a time) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard edms --months 200 --signatures 25000` |
+| Collect all early day motions since 1997 in one go, in the background (free; about 8–10 hours the first time, one request at a time) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard edms --months 400 --signatures 60000` |
 | Add, change or remove a topic | edit `config/topics.toml` in the code (ask me), then install it as a new version. Never change a published topic's `slug`: it is its address |
 | Withdraw a briefing (after a complaint, say) | `curl -X POST -H "Authorization: Bearer YOUR_ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"reason": "complaint about attribution"}' https://wheretheystand.uk/api/admin/briefings/THE_ID/withdraw` |
 

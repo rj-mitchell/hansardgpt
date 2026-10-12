@@ -74,6 +74,15 @@ STATUSES = {"active": "active", "dissolved": "dissolved", "liquidation": "in liq
             "removed": "removed", "closed": "closed", "open": "open"}
 
 
+# A company in one of these states has no current officers, though Companies House records no resignation
+CLOSED = {"dissolved", "closed", "removed"}
+
+
+def ended(a: dict[str, Any]) -> bool:
+    """The role is over: resigned, or the company has closed."""
+    return bool(a.get("until")) or a.get("status") in CLOSED
+
+
 def api_key() -> str | None:
     return (os.environ.get(KEY_ENV) or "").strip() or None
 
@@ -175,7 +184,8 @@ class Client:
             if resp.status_code == 404:
                 return None
             if resp.status_code in (401, 403):
-                raise PermissionError("Companies House refused the API key")
+                raise PermissionError(f"Companies House refused the API key ({resp.status_code}: "
+                                      f"{resp.text[:200].strip()}); run `hansard directorships --check`")
             resp.raise_for_status()
             return resp.json()
         raise RuntimeError("Companies House rate limit")
@@ -183,6 +193,57 @@ class Client:
     def close(self) -> None:
         if self.own:
             self.http.close()
+
+
+SANDBOX = "https://api-sandbox.company-information.service.gov.uk"
+
+
+def check_key(key: str | None = None, client: httpx.Client | None = None) -> dict[str, Any]:
+    """Why a key is or isn't accepted, without revealing it: its shape, and one request each to the live service
+    and to the test ("sandbox") service, which only accepts keys made for a Test application."""
+    key = key if key is not None else os.environ.get(KEY_ENV)
+    if not key:
+        return {"ok": False, "problem": f"no key: {KEY_ENV} is not set inside the app (see FOLLOW_UP.md)"}
+    raw = key
+    key = key.strip()
+    out: dict[str, Any] = {
+        "key_length": len(key),
+        "looks_like_a_rest_key": bool(re.fullmatch(r"[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", key)),
+        "spaces_or_quotes": raw != key or any(c in key for c in " \t\"'"),
+    }
+    http = client or httpx.Client(timeout=30, headers={"User-Agent": USER_AGENT})
+    try:
+        for name, base in (("live", API), ("test", SANDBOX)):
+            try:
+                resp = http.get(base + "/search/companies", params={"q": "tesco", "items_per_page": 1},
+                                auth=(key, ""))
+                out[name] = resp.status_code
+                if resp.status_code != 200:
+                    out[f"{name}_says"] = resp.text[:200].strip()
+            except httpx.HTTPError as exc:
+                out[name] = f"not reachable: {exc}"[:200]
+    finally:
+        if client is None:
+            http.close()
+    live, test = out.get("live"), out.get("test")
+    out["ok"] = live == 200
+    if live == 200:
+        out["verdict"] = "The key works."
+    elif test == 200:
+        out["verdict"] = ("The key was made for a Test application: it works only on the test service. Make a new "
+                          "application with Environment: Live, make a REST key in it, and put that on the server.")
+    elif isinstance(live, str):
+        out["verdict"] = "The server cannot reach Companies House: check its network."
+    elif out["spaces_or_quotes"] or not out["looks_like_a_rest_key"]:
+        out["verdict"] = ("The key does not look like a Companies House REST key (36 letters, digits and dashes): "
+                          "it may have been cut short or pasted with extra characters, or be a key of another type "
+                          "(choose REST, not Stream). Copy it again and put it on the server again.")
+    else:
+        out["verdict"] = ("Companies House refuses the key. If it was made in the last few minutes, wait ten minutes "
+                          "and try again. Otherwise check, in the application on the Companies House developer site, "
+                          "that the key type is REST and that 'Restricted IPs' is empty (or lists this server's IP "
+                          "address), or make a new key.")
+    return out
 
 
 def _appointment(a: dict[str, Any], spans: list[tuple[str, str]]) -> dict[str, Any]:
@@ -372,8 +433,9 @@ class Directorships:
                 if k in seen:
                     continue
                 seen.add(k)
-                apps.append({**a, "company_url": f"{SITE}/company/{a['number']}" if a["number"] else None})
-        apps.sort(key=lambda a: (a["until"] is not None, -(int((a["until"] or a["from"] or "0")[:4]) or 0),
+                apps.append({**a, "company_url": f"{SITE}/company/{a['number']}" if a["number"] else None,
+                             "current": not ended(a)})
+        apps.sort(key=lambda a: (not a["current"], -(int((a["until"] or a["from"] or "0")[:4]) or 0),
                                  a["company"] or ""))
         return {"appointments": apps, "checked": rec["checked"], "source": SOURCE,
                 "officers": [{"name": o["name"], "url": o["url"]} for o in rec["officers"]]}
@@ -390,7 +452,7 @@ class Directorships:
                    "current": bool(rec.get("current"))}
             for o in rec["officers"]:
                 for a in o["appointments"]:
-                    if a["until"] or not a["number"]:
+                    if ended(a) or not a["number"]:
                         continue
                     if qk and qk not in _key(a["company"]) and qk not in _key(who["name"]):
                         continue

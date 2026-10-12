@@ -306,7 +306,8 @@ def whips(count: int = typer.Option(1500, help="votes to check in this run")):
 
 @app.command()
 def directorships(count: int = typer.Option(400, help="members to look up in this run"),
-                  show: str = typer.Option("", help="print what is held for members whose name contains this")):
+                  show: str = typer.Option("", help="print what is held for members whose name contains this"),
+                  check: bool = typer.Option(False, "--check", help="check the API key (never prints it)")):
     """Look up MPs' and peers' company directorships at Companies House (also done by sync, a slice at a time).
     Needs HANSARD_COMPANIES_HOUSE_KEY."""
     _setup_logging()
@@ -314,6 +315,11 @@ def directorships(count: int = typer.Option(400, help="members to look up in thi
     from hansard.sources.companies import Directorships, refresh
     from hansard.sync import directorships_path
 
+    if check:
+        from hansard.sources.companies import check_key
+
+        typer.echo(json.dumps(check_key(), indent=2))
+        return
     settings = _settings()
     path = directorships_path(settings)
     if show:
@@ -323,10 +329,15 @@ def directorships(count: int = typer.Option(400, help="members to look up in thi
                 d = Directorships(path).for_person(pid) or {}
                 typer.echo(f"{rec['name']} ({len(d.get('officers', []))} Companies House record(s))")
                 for a in d.get("appointments", []):
-                    typer.echo(f"  {a['role']}, {a['company']} ({a['status']}), {a['from'] or '?'} to {a['until'] or 'now'}")
+                    typer.echo(f"  {a['role']}, {a['company']} ({a['status']}), {a['from'] or '?'} to "
+                               f"{a['until'] or ('the company closed' if not a['current'] else 'now')}")
         return
-    typer.echo(json.dumps(refresh(path, settings.reference_dir,
-                                  parlparse.members_dir(settings.parlparse_dir) / "people.json", per_run=count), indent=2))
+    try:
+        out = refresh(path, settings.reference_dir, parlparse.members_dir(settings.parlparse_dir) / "people.json",
+                      per_run=count)
+    except PermissionError as exc:
+        raise typer.Exit(f"{exc}\nRun: docker compose exec app hansard directorships --check") from None
+    typer.echo(json.dumps(out, indent=2))
 
 
 @app.command()

@@ -13,6 +13,8 @@ import { ATTRIBUTION } from "./attribution";
 import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
+import { SiteFooter } from "./components/SiteFooter";
+import { COMPARE_HANDOVER, MORE, NAV } from "./nav";
 import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
@@ -105,6 +107,7 @@ export default function App() {
     }
   })();
   const questionRef = useRef<HTMLTextAreaElement>(null);
+  const compareStarted = useRef(false);
   const [drawer, setDrawer] = useState<{ turn: string; h: Highlight } | null>(null);
   const [showControls, setShowControls] = useState(false);
   const [supportCount, setSupportCount] = useState(0); // > 0: show the note on what the site costs
@@ -257,7 +260,10 @@ export default function App() {
     abortRef.current = ctrl;
     try {
       const sides = plan ? [] : compare;
-      if (sides.length) setCompare([]); // the comparison applies to the question it came with
+      if (sides.length) {
+        setCompare([]); // the comparison applies to the question it came with
+        update(id, { comparing: compareLabels.length === sides.length ? compareLabels : [] });
+      }
       for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly, sides), ctrl.signal)) {
         if (ev.type === "plan") update(id, { plan: ev.plan as Plan, status: "searching" });
         else if (ev.type === "sources")
@@ -300,6 +306,24 @@ export default function App() {
     setQuestion("");
     void run(q, undefined, undefined, sourcesOnly);
   }
+
+  // a comparison chosen on the Compare page starts at once. Only from there: a shared link with the same
+  // parameters fills in the question but waits for Ask, so following a link never spends money by itself.
+  useEffect(() => {
+    if (compareStarted.current || auth !== "in" || !meta || compare.length < 2) return;
+    let pending: string | null = null;
+    try {
+      pending = sessionStorage.getItem(COMPARE_HANDOVER);
+      sessionStorage.removeItem(COMPARE_HANDOVER);
+    } catch {
+      pending = null;
+    }
+    const q = question.trim();
+    if (!pending || pending !== q) return;
+    compareStarted.current = true;
+    setQuestion("");
+    void run(q);
+  }, [auth, meta, compare, question]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (auth === "unknown") return <div className="loading">Loading…</div>;
   if (auth === "out") return <Login onDone={() => void refresh()} />;
@@ -352,24 +376,31 @@ export default function App() {
         <p className="phase-banner">
           <strong className="phase-tag">Beta</strong>{" "}
           <span>
-            This is a new service and it is still being tested. Briefings can contain mistakes, so check the cited
-            sources. <a href="/corrections#report">Tell us about a problem</a>.
+            This is a new service and it is still being tested. <a href="/corrections#report">Tell us about a problem</a>.
           </span>
         </p>
         <div className="running-head">
           <span>
-            Debates, written answers and divisions{meta ? ` · ${meta.archive_start.slice(0, 4)} to date` : ""}
+            Parliament's record{meta ? ` since ${meta.archive_start.slice(0, 4)}` : ""}: debates, questions, statements,
+            votes, bills, committees and members' interests
           </span>
           <span className="masthead-actions">
             <nav className="page-nav" aria-label="Site">
-              <a href="/this-week">This week</a>
-              <a href="/topics">Topics</a>
-              <a href="/people">MPs and peers</a>
-              <a href="/bills">Bills</a>
-              <a href="/charts">Charts</a>
-              <a href="/compare">Compare</a>
-              <a href="/timeline">Timelines</a>
-              <a href="/about">About</a>
+              {NAV.map((n) => (
+                <a key={n.href} href={n.href} aria-current={n.href === "/" ? "page" : undefined}>
+                  {n.label}
+                </a>
+              ))}
+              <details className="nav-more">
+                <summary>More</summary>
+                <div className="nav-more-list">
+                  {MORE.map((n) => (
+                    <a key={n.href} href={n.href}>
+                      {n.label}
+                    </a>
+                  ))}
+                </div>
+              </details>
             </nav>
             <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
               Settings
@@ -417,23 +448,26 @@ export default function App() {
       <main className="thread" id="main" tabIndex={-1}>
         {turns.length === 0 && (
           <section className="empty">
-            <h2>Research the record of Parliament</h2>
+            <h2>
+              Ask about the record of Parliament <span className="ai-tag">AI-powered</span>
+            </h2>
             <p>
-              Put a question and receive a briefing on the positions taken by ministers, the opposition, city, town
-              and rural MPs, and peers, drawn only from the Official Report. The service expresses no view of its own.
-              Each statement is cited to the verbatim record, with the speaker's office and constituency on that date
-              and the column or question reference.
+              Ask a question in your own words. Unlike Hansard's search, it does not just match the exact words you
+              type: it works out what you are asking about and finds the MPs and peers who spoke on it, even when they
+              put it differently. Then AI (Claude) pulls the speeches, answers, statements and votes since 1997 into
+              one short briefing, so you do not have to read through results date by date: who said what, and where
+              they stand, with every statement cited to the exact words in Hansard.
             </p>
-            <p className="muted small">
-              Where They Stand is in beta: it is new and still being tested, so check the cited sources. Looking for
-              every mention of a word?{" "}
+            {composer("composer composer-inline")}
+            <p className="ai-caution">
+              AI can make mistakes: check the cited sources before relying on a briefing. Prefer no AI? Choose
+              &ldquo;Sources only&rdquo; to see the most relevant records without a written briefing, or use{" "}
               <a href="https://hansard.parliament.uk/search" target="_blank" rel="noreferrer">
                 Hansard's own search
               </a>{" "}
-              does that best, and the <a href="/resources">other resources</a> page lists more sites worth using
-              alongside this one.
+              to find every mention of a word. The <a href="/resources">other resources</a> page lists more sites
+              worth using alongside this one.
             </p>
-            {composer("composer composer-inline")}
             <h3 className="examples-head">Example questions</h3>
             <ol className="examples">
               {examplesFor(new Date()).map((ex) => (
@@ -447,11 +481,34 @@ export default function App() {
                 </li>
               ))}
             </ol>
+            <h3 className="examples-head">How this differs from a search</h3>
+            <ul className="ask-why">
+              <li>
+                <strong>Answers, not a list of hits.</strong> Hansard's own search and TheyWorkForYou list every
+                mention of the words you type, in date order, for you to read through. Here the contributions that
+                answer your question are found by meaning and brought together in one briefing.
+              </li>
+              <li>
+                <strong>Balanced by design.</strong> Each briefing draws on ministers and the opposition, backbenchers
+                and peers, across parties and parts of the country, and shows that spread. It takes no view of its
+                own.
+              </li>
+              <li>
+                <strong>Checkable.</strong> Every statement links to the record it comes from, with the speaker's
+                party, seat and role on the day. Statements the record does not support are removed.
+              </li>
+            </ul>
           </section>
         )}
         {turns.map((t) => (
           <article key={t.id} className="turn">
             {t.topic && <TopicHeader topic={t.topic} preparedAt={t.preparedAt} recordsUpTo={t.recordsUpTo} />}
+            {t.comparing !== undefined && (
+              <p className="eyebrow">
+                Comparison{t.comparing.length ? `: ${t.comparing.join(" and ")}` : ""} ·{" "}
+                <a href="/compare">Compare something else</a>
+              </p>
+            )}
             <h2 className="question">{t.question}</h2>
             {t.shared && t.preparedAt && (
               <p className="shared-note">
@@ -531,41 +588,12 @@ export default function App() {
 
       <SourceDrawer source={drawerSource} quotes={drawer?.h.quotes ?? []} onClose={() => setDrawer(null)} />
 
-      <footer className="footer full-width">
-        <p className="independence">{BRAND.independence}</p>
+      <SiteFooter donateUrl={meta?.donate_url} attribution={meta?.attribution ?? ATTRIBUTION}>
         <p className="print-only">
           From {BRAND.name} (beta), wheretheystand.uk. Briefings are written by AI from the cited Hansard records; check the
           sources.
         </p>
-        <nav className="footer-nav" aria-label="About this site">
-          <a href="/about">About</a>
-          <a href="/topics">Topics</a>
-          <a href="/timeline">Timelines</a>
-          <a href="/bills">Bills</a>
-          <a href="/charts">Charts</a>
-          <a href="/compare">Compare</a>
-          <a href="/methodology">Methodology</a>
-          <a href="/resources">Other resources</a>
-          <a href="/changelog">Changelog</a>
-          <a href="/status">Status</a>
-          <a href="/corrections">Corrections</a>
-          <a href="/corrections#report">Report a problem</a>
-          <a href="/accessibility">Accessibility</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/terms">Terms</a>
-          <a href="https://github.com/rj-mitchell/hansardgpt">Source code</a>
-          {meta?.donate_url && <a href={meta.donate_url}>Support this site</a>}
-        </nav>
-        <p className="licence">
-          Briefings are licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>; see the{" "}
-          <a href="/terms">terms</a> for reuse.
-        </p>
-        {(meta?.attribution ?? ATTRIBUTION).map((a) => (
-          <a key={a.url} href={a.url} target="_blank" rel="noreferrer">
-            {a.text}
-          </a>
-        ))}
-      </footer>
+      </SiteFooter>
     </div>
   );
 }

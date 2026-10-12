@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import { ATTRIBUTION } from "../attribution";
+import { SiteFooter } from "./SiteFooter";
 import { BRAND } from "../brand";
 import { Mark } from "./Mark";
 
@@ -55,14 +55,7 @@ export function Login({ onDone }: { onDone: () => void }) {
         </button>
         <p className="muted small">Accounts are by invitation. Ask the administrator for access.</p>
       </form>
-      <footer className="footer">
-        <p className="independence">{BRAND.independence}</p>
-        {ATTRIBUTION.map((a) => (
-          <a key={a.url} href={a.url} target="_blank" rel="noreferrer">
-            {a.text}
-          </a>
-        ))}
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

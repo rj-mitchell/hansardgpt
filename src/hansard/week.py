@@ -50,6 +50,26 @@ class Weeks:
         row = self.con.execute("SELECT max(date) FROM records WHERE source IN ('debates', 'lordspages')").fetchone()
         return monday(row[0]) if row and row[0] else None
 
+    def pause(self, today: date) -> dict[str, Any] | None:
+        """When neither House has sat for over a week: the last sitting days, and whether the record is still being
+        updated (written answers keep coming in a recess). None while Parliament is sitting."""
+        if "records" not in self.stores:
+            return None
+        commons, lords, newest = self.con.execute("""
+            SELECT max(date) FILTER (WHERE source = 'debates'), max(date) FILTER (WHERE source = 'lordspages'),
+                   max(date) FROM records""").fetchone()
+        last = max((d for d in (commons, lords) if d), default=None)
+        if last is None or (today - last).days <= 6:
+            return None
+        since = dict(self.con.execute("""
+            SELECT source, count(DISTINCT record_id) FROM records
+            WHERE date > ? AND source IN ('wrans', 'lordswrans', 'wms', 'lordswms') GROUP BY 1""", [last]).fetchall())
+        return {"last_sat": last.isoformat(), "commons_last_sat": commons.isoformat() if commons else None,
+                "lords_last_sat": lords.isoformat() if lords else None, "record_to": newest.isoformat(),
+                "recess": (today - newest).days <= 7,  # the record is up to date, so the Houses are not sitting
+                "written_answers_since": since.get("wrans", 0) + since.get("lordswrans", 0),
+                "written_statements_since": since.get("wms", 0) + since.get("lordswms", 0)}
+
     def get(self, start: date, version: Any = None) -> dict[str, Any] | None:
         start = monday(start)
         key = (str(version), start)
@@ -126,7 +146,8 @@ class Weeks:
         return {"start": start.isoformat(), "end": end.isoformat(), "days": out_days,
                 "divisions": len(divisions),
                 "written_questions": counts.get("wrans", 0) + counts.get("lordswrans", 0),
-                "written_statements": [{"date": d.isoformat(), "title": t, "department": m if m != t else None}
+                "written_statements": [{"date": d.isoformat(), "title": t, "department": m if m != t else None,
+                                        "path": debate_path("wms", d, m, t)}
                                        for d, t, m in statements],
                 "lords_written_statements": counts.get("lordswms", 0),
                 "previous": monday(prev_row[0]).isoformat() if prev_row and prev_row[0] else None,

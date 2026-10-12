@@ -2969,3 +2969,98 @@ main:focus {
 .elsewhere a {
   white-space: normal;
 }
+
+/* the MPs and peers page: each House's full list folds away until opened */
+.people-group > summary {
+  cursor: pointer;
+}
+
+.people-group > summary > h3 {
+  display: inline;
+}
+
+/* the Ask page: say plainly that briefings are written by AI, and what that adds */
+.ai-tag {
+  display: inline-block;
+  vertical-align: middle;
+  font-family: var(--sans);
+  font-size: var(--step--2);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--accent);
+  padding: 0.15em 0.55em;
+  border-radius: var(--radius);
+}
+
+.ask-why {
+  display: grid;
+  gap: var(--space-2xs);
+  padding-inline-start: 1.2em;
+}
+
+.ai-caution {
+  font-family: var(--sans);
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+  border-inline-start: 3px solid var(--gilt);
+  padding-inline-start: var(--space-s);
+}
+
+/* the header's "More" menu: the ways to browse the record */
+.nav-more {
+  position: relative;
+}
+
+.nav-more > summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+  list-style: none;
+}
+
+.nav-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-more > summary::after {
+  content: " ▾";
+}
+
+.nav-more.current > summary {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.nav-more-list {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-2xs));
+  inset-inline-end: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-inline-size: 13rem;
+  max-inline-size: calc(100vw - 2rem);
+  padding: var(--space-xs) var(--space-s);
+  background: var(--paper);
+  border: 1px solid var(--rule, var(--ink-faint));
+  border-radius: var(--radius);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.12);
+  text-align: start;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nav-more > summary:hover {
+    color: var(--accent);
+  }
+}
+
+/* on a phone the menu sits towards the left: open it rightwards so it stays on screen */
+@media (max-width: 40rem) {
+  .nav-more-list {
+    inset-inline-end: auto;
+    inset-inline-start: 0;
+  }
+}

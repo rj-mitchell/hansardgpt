@@ -43,6 +43,7 @@ def handler(seen):
             return httpx.Response(200, json={"items": items, "total_results": len(items)})
         apps = {
             "good1": [appointment(CAMERON_NAME, "Wiltshire Widgets Limited", "01234567"),
+                      appointment(CAMERON_NAME, "Gone Ltd", "05555555", status="dissolved"),  # no resignation
                       appointment(CAMERON_NAME, "Old Co Ltd", "07654321", start="2003-01-01", end="2009-02-01", status="dissolved")],
             "good2": [appointment({"forename": "David", "surname": "Cameron"}, "Old Co Ltd", "07654321", start="2003-01-01",
                                   end="2009-02-01", status="dissolved"),
@@ -88,9 +89,10 @@ def test_refresh_matches_only_name_and_birth_month(tmp_path, reference_dir):
     assert not any("/officers/excluded/" in u for u in seen)
     d = Directorships(path).for_person(CAMERON)
     assert [o["url"].split("/")[-2] for o in d["officers"]] == ["good1", "good2"]
-    assert [(a["company"], a["until"]) for a in d["appointments"]] == [
-        ("Wiltshire Widgets Limited", None), ("Old Co Ltd", "2009-02-01"), ("Witney Trust", "1999-01-01")]
-    widgets, old, trust = d["appointments"]
+    assert [(a["company"], a["until"], a["current"]) for a in d["appointments"]] == [
+        ("Wiltshire Widgets Limited", None, True), ("Gone Ltd", None, False), ("Old Co Ltd", "2009-02-01", False),
+        ("Witney Trust", "1999-01-01", False)], "a dissolved company's directors are no longer directors"
+    widgets, _gone, old, trust = d["appointments"]
     assert widgets["role"] == "Director" and widgets["while_member"] and widgets["company_url"].endswith("/01234567")
     assert old["status"] == "dissolved" and old["while_member"]
     assert trust["role"] == "Secretary" and not trust["while_member"], "before he was elected in 2001"
@@ -137,3 +139,25 @@ def test_member_page_and_index(indexed_settings, tmp_path):
         assert client.get("/api/directorships", params={"q": "widgets"}).json()["total_companies"] == 1
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_key_check_says_why_without_showing_the_key():
+    from hansard.sources.companies import check_key
+
+    good = "0123abcd-0123-4567-89ab-0123456789ab"
+
+    def client(live, test):
+        def respond(request: httpx.Request) -> httpx.Response:
+            code = test if "sandbox" in request.url.host else live
+            return httpx.Response(code, json={"error": "Invalid Authorization"} if code != 200 else {"items": []})
+        return httpx.Client(transport=httpx.MockTransport(respond))
+
+    ok = check_key(good, client(200, 401))
+    assert ok["ok"] and ok["verdict"] == "The key works." and good not in str(ok)
+    test_app = check_key(good, client(401, 200))
+    assert not test_app["ok"] and "Test application" in test_app["verdict"]
+    pasted = check_key(f'"{good}"', client(401, 401))
+    assert pasted["spaces_or_quotes"] and "cut short" in pasted["verdict"]
+    refused = check_key(good, client(401, 401))
+    assert "Restricted IPs" in refused["verdict"] and refused["live_says"].startswith("{")
+    assert "not set" in check_key("", client(200, 200))["problem"]

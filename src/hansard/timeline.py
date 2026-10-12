@@ -1,7 +1,7 @@
 """Timelines: what one member, or one party, has said on a topic, in date order, with their votes in between.
 
 Free to run: a search (no model) for the most relevant contributions, with no preference for recent records or
-office-holders, shown oldest first; and the divisions whose titles match the topic, with how the member voted (or
+office-holders, shown newest first; and the divisions whose titles match the topic, with how the member voted (or
 how the party's members split). Nothing is said about consistency: the reader sees what was said on each date and
 draws their own conclusions.
 """
@@ -85,7 +85,7 @@ def party_votes(people: People, party_id: str, topic: str, limit: int = 20) -> l
 
 def timeline(engine: Engine, people: People, topic: str, *, person_id: str | None = None,
              party_id: str | None = None, limit: int = 30) -> dict[str, Any]:
-    """Contributions and votes on ``topic`` by one member or one party, oldest first."""
+    """Contributions and votes on ``topic`` by one member or one party, newest first."""
     if bool(person_id) == bool(party_id):
         raise ValueError("give a member or a party")
     topic = " ".join(topic.split())[:200]
@@ -100,7 +100,7 @@ def timeline(engine: Engine, people: People, topic: str, *, person_id: str | Non
     said = [_record_item(r) for r in recs]
     votes = member_votes(people, person_id, topic) if person_id else party_votes(people, party_id, topic)
     vote_types(people.settings).annotate(votes)
-    items = sorted(said + votes, key=lambda x: (x["date"], x["kind"] == "voted"))
+    items = sorted(said + votes, key=lambda x: (x["date"], x["kind"] == "voted"), reverse=True)  # newest first
     summary = None
     if person_id and votes:  # a member's votes on the topic, in brief (procedural votes counted separately)
         summary = {"aye": sum(1 for v in votes if v.get("vote") == "aye"),
@@ -108,5 +108,5 @@ def timeline(engine: Engine, people: People, topic: str, *, person_id: str | Non
                    "against_party": sum(1 for v in votes if v.get("against_party")),
                    "procedural": sum(1 for v in votes if (v.get("vote_type") or {}).get("kind") in PROCEDURAL)}
     return {"topic": topic, "items": items, "said": len(said), "votes": len(votes), "vote_summary": summary,
-            "note": "The most relevant contributions found, and the votes whose titles match the topic, in date "
-                    "order. Each is shown as recorded; read them in full before drawing conclusions."}
+            "note": "The most relevant contributions found, and the votes whose titles match the topic, newest "
+                    "first. Each is shown as recorded; read them in full before drawing conclusions."}

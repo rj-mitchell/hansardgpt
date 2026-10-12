@@ -16,7 +16,7 @@ import type { VoteType } from "./types";
 interface Result {
   election: string;
   date: string;
-  majority: number;
+  majority: number | null;
   pct: number | null;
   band: string | null;
   party: string | null;
@@ -160,14 +160,17 @@ function Person({ number }: { number: string }) {
                 <ul>
                   {s.results.map((r) => (
                     <li key={r.date}>
-                      {r.election[0].toUpperCase() + r.election.slice(1)}: majority {r.majority.toLocaleString("en-GB")}
+                      {r.election[0].toUpperCase() + r.election.slice(1)}:{" "}
+                      {r.majority != null
+                        ? `majority ${r.majority.toLocaleString("en-GB")}`
+                        : "won (majority not known: the source counts smaller parties and independents together)"}
                       {r.pct != null && `, ${r.pct}% of votes cast`}
                       {r.band && <span className="muted"> · {BAND[r.band]}</span>}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="muted small">Election results before 2010 are not included.</p>
+                <p className="muted small">No result is held for this seat (by-elections before 2010 are not included).</p>
               )}
             </div>
           ))}
@@ -189,9 +192,6 @@ function Person({ number }: { number: string }) {
 
       <section aria-labelledby="h-recent">
         <h2 id="h-recent">Recent contributions</h2>
-        <p className="small feed-link">
-          <a href={`/feeds/people/${p.number}.xml`}>Follow what {p.name} says in a feed reader (RSS)</a>
-        </p>
         {p.contributions.length === 0 ? (
           <p className="muted">No contributions in the record since 1997.</p>
         ) : (
@@ -325,7 +325,7 @@ function Person({ number }: { number: string }) {
           <h2 id="h-edms">Early day motions</h2>
           <p>
             Tabled {p.edms.tabled.toLocaleString("en-GB")} and signed {p.edms.signed.toLocaleString("en-GB")} early
-            day motion{p.edms.signed === 1 ? "" : "s"} since 2010.{" "}
+            day motion{p.edms.signed === 1 ? "" : "s"} since 1997.{" "}
             <a href={`/edms?person=${p.number}`}>See them all</a>
           </p>
           <h3>Most recent</h3>
@@ -348,6 +348,9 @@ function Person({ number }: { number: string }) {
         <h2 id="h-elsewhere">Elsewhere</h2>
         <Elsewhere label={`More on ${p.name}`} links={elsewhereFor(p)} />
       </section>
+      <p className="small feed-link">
+        <a href={`/feeds/people/${p.number}.xml`}>Follow what {p.name} says in a feed reader (RSS)</a>
+      </p>
       <p className="muted small">
         From Hansard, mySociety's member records and the UK Parliament's Members data. See the{" "}
         <a href="/methodology">methodology</a>.

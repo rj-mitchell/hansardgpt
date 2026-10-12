@@ -224,6 +224,7 @@ export type TurnStatus = "planning" | "searching" | "answering" | "verifying" | 
 export interface Turn {
   id: string;
   question: string;
+  comparing?: string[]; // the sides, when the question came from the Compare page
   settings: Settings;
   plan?: Plan;
   sources: SourceCard[];

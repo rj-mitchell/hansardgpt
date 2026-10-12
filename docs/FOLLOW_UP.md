@@ -25,13 +25,17 @@ licence checks.*
 
   Don't paste the key anywhere else, Claude included.
 - [ ] **4. Try it on 20 members:** `cd /opt/hansardgpt/deploy && docker compose exec app hansard directorships --count 20`
-  - It should end with `"checked": 20`. If it says the key was refused, make the key again (step 2) and repeat
-    step 3.
+  - It should end with `"checked": 20`. If it says the key was refused, run
+    `docker compose exec app hansard directorships --check`: it says why (for example a key made for a Test
+    application rather than Live) without showing the key. Paste its output to Claude if unsure.
   - Then `docker compose exec app hansard directorships --show "a"` lists what it found for those 20. Paste that
     output to Claude if you'd like the matches checked; it contains no key.
 - [ ] **5. Look up everyone now**, rather than a few hundred members per update over a week or two (free; about
   2–3 hours, in the background):
   `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard directorships --count 4000`
+- [ ] **5a. Load early day motions back to 1997** (free; about 3–4 hours in the background, one request at a time;
+  otherwise the updates get there over a couple of weeks):
+  `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard edms --months 400 --signatures 60000`
 - [ ] **6. Click-check the links to other sites** (see below), and the new "Company roles" links on an MP's page.
 
 The server must be able to reach these sites:

@@ -40,7 +40,7 @@ interface TimelineData {
 
 const VOTE: Record<string, string> = { aye: "Aye", no: "No" };
 
-/** A member's or a party's contributions on a topic, and their votes, oldest first. Free: no AI. */
+/** A member's or a party's contributions on a topic, and their votes, newest first. Free: no AI. */
 export function Timeline({ query, showSpeaker }: { query: string; showSpeaker: boolean }) {
   const [data, setData] = useState<TimelineData | null>(null);
   const [error, setError] = useState<string | null>(null);

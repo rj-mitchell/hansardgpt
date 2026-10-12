@@ -22,10 +22,13 @@ from hansard.vote_types import vote_types
 
 # the chamber as it appears in a debate's address, and the record source behind it
 CHAMBERS = {"commons": "debates", "lords": "lordspages", "westminster-hall": "westminhall",
-            "public-bill-committee": "standing"}
+            "public-bill-committee": "standing",
+            "commons-written-statements": "wms", "lords-written-statements": "lordswms"}
+STATEMENTS = {"wms", "lordswms"}  # written ministerial statements: one page per statement
 SOURCES = {v: k for k, v in CHAMBERS.items()}
 CHAMBER_NAMES = {"commons": "House of Commons", "lords": "House of Lords", "westminster-hall": "Westminster Hall",
-                 "public-bill-committee": "Public Bill Committee"}
+                 "public-bill-committee": "Public Bill Committee",
+                 "commons-written-statements": "House of Commons", "lords-written-statements": "House of Lords"}
 _IN_THE_CHAIR = re.compile(r"\s*[—-]\s*\[[^\]]*in the chair\]\s*$", re.I)
 
 
@@ -47,6 +50,8 @@ def title_of(source: str, major: str | None, minor: str | None, bill: str | None
         return _IN_THE_CHAIR.sub("", t) if t else None
     if source in ("debates", "lordspages"):
         return major or minor
+    if source in STATEMENTS:  # the statement's title (the department is its main heading)
+        return minor or major
     return None
 
 
@@ -139,7 +144,7 @@ class Debates:
         used: set[str] = set()
         section = None
         for r in mine:
-            sub = r["minor_heading"] if source != "westminhall" else None
+            sub = r["minor_heading"] if source not in ("westminhall", *STATEMENTS) else None
             if source == "standing" and r["major_heading"] not in (None, "Public Bill Committee"):
                 sub = r["minor_heading"] or r["major_heading"]
             if sub and sub != section:
@@ -168,7 +173,10 @@ class Debates:
         title = titles[debate_slug]
         house = mine[0]["house"]
         others = sorted(((t, s) for s, t in titles.items() if s != debate_slug), key=lambda x: x[0].lower())
+        statement = source in STATEMENTS
         return {"title": title, "date": on.isoformat(), "chamber": chamber, "chamber_name": CHAMBER_NAMES[chamber],
+                "kind": "statement" if statement else "debate",
+                "department": (mine[0]["major_heading"] if statement and mine[0]["major_heading"] != title else None),
                 "house": house, "official_url": next((r["official_url"] for r in mine if r["official_url"]), None),
                 "contributions": sum(1 for i in items if i["kind"] == "said"),
                 "speakers": len({i["speaker"]["name"] for i in items if i["kind"] == "said"}),

@@ -70,7 +70,11 @@ groups. Membership lists found by AI web search are left out; contact details ar
 ## Gender and date of birth
 
 Members' gender and constituency election results (majorities, votes cast, by-elections) come from the UK
-Parliament [Members API](https://members-api.parliament.uk/) (Open Parliament Licence v3.0). Dates of birth come
+Parliament [Members API](https://members-api.parliament.uk/) (Open Parliament Licence v3.0). General election
+results for 1997, 2001 and 2005 come from the House of Commons Library's
+[general election results 1918–2019](https://commonslibrary.parliament.uk/research-briefings/cbp-8647/) (CBP-8647,
+Open Parliament Licence v3.0), kept in `data_static/elections`; matching them to seats by name is this site's own
+work. Dates of birth come
 from [Wikidata](https://www.wikidata.org/) (property P569, matched by UK Parliament ID, P10428), whose
 structured data is available under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). For the few
 members Wikidata has no date for, the date in the birth-date field of their English

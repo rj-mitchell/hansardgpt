@@ -31,10 +31,15 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-function list(title: string, members: Member[]): HTMLElement {
-  const section = document.createElement("section");
+/** One House's members: folded away until opened, except when showing search results. */
+function list(title: string, members: Member[], open: boolean): HTMLElement {
+  const section = document.createElement("details");
+  section.className = "people-group";
+  section.open = open;
+  const summary = document.createElement("summary");
   const h = document.createElement("h3");
   h.textContent = `${title} (${members.length})`;
+  summary.append(h);
   const ul = document.createElement("ul");
   ul.className = "people-list";
   for (const m of members) {
@@ -48,7 +53,7 @@ function list(title: string, members: Member[]): HTMLElement {
     li.append(a, meta);
     ul.append(li);
   }
-  section.append(h, ul);
+  section.append(summary, ul);
   return section;
 }
 
@@ -64,8 +69,8 @@ async function load() {
       const peers = hit.filter((m) => m.house === "lords");
       live.replaceChildren(
         ...(hit.length ? [] : [Object.assign(document.createElement("p"), { textContent: "No current member matches." })]),
-        ...(mps.length ? [list("MPs", mps)] : []),
-        ...(peers.length ? [list("Members of the House of Lords", peers)] : []),
+        ...(mps.length ? [list("MPs", mps, !!q)] : []),
+        ...(peers.length ? [list("Members of the House of Lords", peers, !!q)] : []),
       );
     };
     input.addEventListener("input", render);
