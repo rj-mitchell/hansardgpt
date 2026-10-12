@@ -116,6 +116,11 @@ fi
 echo
 
 echo "Updates, backups and security"
+if [[ -n "$(swapon --show --noheadings 2>/dev/null)" ]]; then
+  ok "swap space is on (memory: $(free -h | awk '/^Mem:/ {print $2}'), swap: $(free -h | awk '/^Swap:/ {print $2}'))"
+else
+  note "no swap space: a large update can run out of memory (to add it: bash $DIR/deploy/swap.sh)"
+fi
 for t in hansard-sync.timer hansard-backup.timer; do
   if systemctl is-enabled --quiet "$t" 2>/dev/null; then
     ok "$t is on (next: $(systemctl show "$t" -p NextElapseUSecRealtime --value 2>/dev/null))"

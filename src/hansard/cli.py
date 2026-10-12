@@ -243,9 +243,12 @@ def sync(embed_minutes: float = typer.Option(60.0, help="time budget for embeddi
          fetch_data: bool = typer.Option(True, "--fetch/--no-fetch")):
     """Daily incremental update: member data, new Hansard, index, embeddings."""
     _setup_logging()
-    from hansard.sync import run_sync
+    from hansard.sync import SyncRunning, run_sync
 
-    stats = run_sync(_settings(), fetch=fetch_data, embed_minutes=embed_minutes)
+    try:
+        stats = run_sync(_settings(), fetch=fetch_data, embed_minutes=embed_minutes)
+    except SyncRunning as exc:
+        raise typer.Exit(f"Not started: {exc}.") from None
     typer.echo(json.dumps(stats, indent=2, default=str))
     if stats.get("error"):
         raise typer.Exit(1)

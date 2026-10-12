@@ -178,6 +178,17 @@ class SearchIndex:
             except Exception as exc:  # scalar indices are an optimisation only
                 log.warning("scalar index on %s skipped: %s", col, exc)
 
+    def unmerged(self) -> int:
+        """Passages not yet in the keyword (BM25) index: added by an update that stopped before merging them."""
+        if PASSAGES not in self._names():
+            return 0
+        tbl = self.passages()
+        for ix in tbl.list_indices():
+            if "search_text" in (ix.columns or []):
+                st = tbl.index_stats(ix.name)
+                return int(st.num_unindexed_rows) if st else 0
+        return 0
+
     def optimize(self) -> None:
         """Merge new rows into the indices, compact small files and drop superseded versions."""
         for name in (PASSAGES, VECTORS):

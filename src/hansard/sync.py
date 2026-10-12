@@ -212,10 +212,32 @@ def refresh_topics_safely(settings: Settings, state: StateDB) -> list[dict[str, 
         return f"error: {type(exc).__name__}: {exc}"
 
 
-def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | None = 60.0,
-             members_dir: Path | None = None, embedder=None, workers: int = 3,
-             today: date | None = None) -> dict[str, Any]:
+class SyncRunning(RuntimeError):
+    """Another update holds the lock."""
+
+
+def run_sync(settings: Settings, **kwargs: Any) -> dict[str, Any]:
+    """One update at a time: a second one started meanwhile (by hand, or a timer firing during a long run) stops
+    straight away rather than writing the same files at once. The lock is released when the process ends, even if
+    it is killed."""
+    import fcntl
+
+    Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
+    with open(Path(settings.data_dir) / "sync.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SyncRunning("another update is already running") from None
+        return _run_sync(settings, **kwargs)
+
+
+def _run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | None = 60.0,
+              members_dir: Path | None = None, embedder=None, workers: int = 3,
+              today: date | None = None) -> dict[str, Any]:
     state = StateDB(settings.state_db)
+    stopped = state.close_unfinished_runs()
+    if stopped:
+        log.warning("%d earlier update(s) stopped before finishing (the server may have run out of memory)", stopped)
     run_id = state.start_run("sync")
     started = time.time()
     stats: dict[str, Any] = {}
@@ -241,10 +263,14 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
         people = pending_people(state)
         reenriched = indexer.reenrich_people(people) if people and not first_build else 0
         state.set(PENDING_PEOPLE, "[]")
+        waiting = 0 if first_build else idx.unmerged()  # includes rows an earlier, stopped update added
         if first_build and passages:
             idx.build_indices()
-        elif passages or reenriched:
+        elif passages or reenriched or waiting:
+            log.info("merging %d new passages into the search indices", waiting or passages)
+            t_merge = time.time()
             idx.optimize()  # merges new rows into the BM25 and scalar indices incrementally
+            log.info("merged in %.0fs", time.time() - t_merge)
         stats["index"] = {"passages_written": passages, "passages_reenriched": reenriched,
                           "people_reenriched": len(people), "seconds": round(time.time() - t, 1), **idx.stats()}
 

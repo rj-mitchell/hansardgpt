@@ -78,6 +78,9 @@ if [[ ! -f .env ]]; then
     "$DOMAIN" "$REDIRECTS" "$KEY" "$(openssl rand -hex 24)" > .env
 fi
 
+echo "==> Adding swap space (spare memory on disk for large updates)"
+bash "$DIR/deploy/swap.sh" || echo "WARNING: could not add swap; carrying on."
+
 echo "==> Building and starting"
 docker compose up -d --build
 
