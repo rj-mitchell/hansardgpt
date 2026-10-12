@@ -74,6 +74,15 @@ STATUSES = {"active": "active", "dissolved": "dissolved", "liquidation": "in liq
             "removed": "removed", "closed": "closed", "open": "open"}
 
 
+# A company in one of these states has no current officers, though Companies House records no resignation
+CLOSED = {"dissolved", "closed", "removed"}
+
+
+def ended(a: dict[str, Any]) -> bool:
+    """The role is over: resigned, or the company has closed."""
+    return bool(a.get("until")) or a.get("status") in CLOSED
+
+
 def api_key() -> str | None:
     return (os.environ.get(KEY_ENV) or "").strip() or None
 
@@ -424,8 +433,9 @@ class Directorships:
                 if k in seen:
                     continue
                 seen.add(k)
-                apps.append({**a, "company_url": f"{SITE}/company/{a['number']}" if a["number"] else None})
-        apps.sort(key=lambda a: (a["until"] is not None, -(int((a["until"] or a["from"] or "0")[:4]) or 0),
+                apps.append({**a, "company_url": f"{SITE}/company/{a['number']}" if a["number"] else None,
+                             "current": not ended(a)})
+        apps.sort(key=lambda a: (not a["current"], -(int((a["until"] or a["from"] or "0")[:4]) or 0),
                                  a["company"] or ""))
         return {"appointments": apps, "checked": rec["checked"], "source": SOURCE,
                 "officers": [{"name": o["name"], "url": o["url"]} for o in rec["officers"]]}
@@ -442,7 +452,7 @@ class Directorships:
                    "current": bool(rec.get("current"))}
             for o in rec["officers"]:
                 for a in o["appointments"]:
-                    if a["until"] or not a["number"]:
+                    if ended(a) or not a["number"]:
                         continue
                     if qk and qk not in _key(a["company"]) and qk not in _key(who["name"]):
                         continue

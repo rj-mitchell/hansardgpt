@@ -329,7 +329,8 @@ def directorships(count: int = typer.Option(400, help="members to look up in thi
                 d = Directorships(path).for_person(pid) or {}
                 typer.echo(f"{rec['name']} ({len(d.get('officers', []))} Companies House record(s))")
                 for a in d.get("appointments", []):
-                    typer.echo(f"  {a['role']}, {a['company']} ({a['status']}), {a['from'] or '?'} to {a['until'] or 'now'}")
+                    typer.echo(f"  {a['role']}, {a['company']} ({a['status']}), {a['from'] or '?'} to "
+                               f"{a['until'] or ('the company closed' if not a['current'] else 'now')}")
         return
     try:
         out = refresh(path, settings.reference_dir, parlparse.members_dir(settings.parlparse_dir) / "people.json",

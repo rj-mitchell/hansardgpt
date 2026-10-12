@@ -43,6 +43,7 @@ def handler(seen):
             return httpx.Response(200, json={"items": items, "total_results": len(items)})
         apps = {
             "good1": [appointment(CAMERON_NAME, "Wiltshire Widgets Limited", "01234567"),
+                      appointment(CAMERON_NAME, "Gone Ltd", "05555555", status="dissolved"),  # no resignation
                       appointment(CAMERON_NAME, "Old Co Ltd", "07654321", start="2003-01-01", end="2009-02-01", status="dissolved")],
             "good2": [appointment({"forename": "David", "surname": "Cameron"}, "Old Co Ltd", "07654321", start="2003-01-01",
                                   end="2009-02-01", status="dissolved"),
@@ -88,9 +89,10 @@ def test_refresh_matches_only_name_and_birth_month(tmp_path, reference_dir):
     assert not any("/officers/excluded/" in u for u in seen)
     d = Directorships(path).for_person(CAMERON)
     assert [o["url"].split("/")[-2] for o in d["officers"]] == ["good1", "good2"]
-    assert [(a["company"], a["until"]) for a in d["appointments"]] == [
-        ("Wiltshire Widgets Limited", None), ("Old Co Ltd", "2009-02-01"), ("Witney Trust", "1999-01-01")]
-    widgets, old, trust = d["appointments"]
+    assert [(a["company"], a["until"], a["current"]) for a in d["appointments"]] == [
+        ("Wiltshire Widgets Limited", None, True), ("Gone Ltd", None, False), ("Old Co Ltd", "2009-02-01", False),
+        ("Witney Trust", "1999-01-01", False)], "a dissolved company's directors are no longer directors"
+    widgets, _gone, old, trust = d["appointments"]
     assert widgets["role"] == "Director" and widgets["while_member"] and widgets["company_url"].endswith("/01234567")
     assert old["status"] == "dissolved" and old["while_member"]
     assert trust["role"] == "Secretary" and not trust["while_member"], "before he was elected in 2001"

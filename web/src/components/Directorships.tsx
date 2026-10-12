@@ -10,6 +10,7 @@ export interface Appointment {
   until: string | null;
   while_member: boolean;
   declared?: boolean;
+  current: boolean;
   company_url: string | null;
 }
 
@@ -24,7 +25,8 @@ function when(a: Appointment): string {
   const from = a.from
     ? `${a.from_before ? "before " : ""}${fmtDate(a.from)}`
     : "date not given";
-  return a.until ? `${from} to ${fmtDate(a.until)}` : `since ${from}`;
+  if (a.until) return `${from} to ${fmtDate(a.until)}`;
+  return a.current ? `since ${from}` : `from ${from} until the company closed`;
 }
 
 export const DIRECTORSHIPS_NOTE =
@@ -87,8 +89,8 @@ export function DirectorshipsSection({
   name: string;
 }) {
   if (d.appointments.length === 0) return null;
-  const now = d.appointments.filter((a) => !a.until);
-  const past = d.appointments.filter((a) => a.until);
+  const now = d.appointments.filter((a) => a.current);
+  const past = d.appointments.filter((a) => !a.current);
   return (
     <section aria-labelledby="h-directorships">
       <h2 id="h-directorships">Company roles</h2>
