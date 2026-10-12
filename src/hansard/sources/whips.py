@@ -49,6 +49,13 @@ def _load(path: Path) -> dict[str, Any]:
         return {"checked": {}, "reports": {}}
 
 
+def _save(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+
+
 def refresh(path: Path, parquet: Path, *, per_run: int = PER_RUN, client: httpx.Client | None = None,
             sleep: Callable[[float], None] = time.sleep, force: bool = False) -> dict[str, Any]:
     """Check the next ``per_run`` divisions for whip reports: at every update until every division has been
@@ -94,14 +101,13 @@ def refresh(path: Path, parquet: Path, *, per_run: int = PER_RUN, client: httpx.
                 stats["with_reports"] += 1
             else:
                 reports.pop(gid, None)
+            if stats["checked"] % 200 == 0:  # keep progress if a long run is interrupted
+                _save(path, data)
     finally:
         if own:
             client.close()
     data["last_run"] = datetime.now(UTC).isoformat(timespec="seconds")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data))
-    tmp.replace(path)
+    _save(path, data)
     stats["still_unchecked"] = sum(1 for d in todo if d[0] not in checked)
     stats["votes_with_reports"] = len(reports)
     return stats
