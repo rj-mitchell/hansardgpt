@@ -1,4 +1,4 @@
-import { fmtDate } from "../render";
+import { fmtDate, LONG } from "../render";
 
 export interface Donation {
   ec_ref: string;
@@ -126,13 +126,13 @@ export function DonationsSection({ donations, name }: { donations: MemberDonatio
         </p>
       )}
       {personal.length > 0 && (
-        <details className="interest-category" open={personal.length <= 10}>
+        <details className="interest-category" open={personal.length <= LONG}>
           <summary>Donations to {name} ({personal.length})</summary>
           <Rows items={personal} />
         </details>
       )}
       {local.length > 0 && (
-        <details className="interest-category">
+        <details className="interest-category" open={local.length <= LONG}>
           <summary>Donations to their local party ({local.length})</summary>
           <p className="muted small">
             Given to their party's local organisation in the constituency they represented, while they were its MP:

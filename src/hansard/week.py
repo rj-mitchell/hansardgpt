@@ -146,7 +146,8 @@ class Weeks:
         return {"start": start.isoformat(), "end": end.isoformat(), "days": out_days,
                 "divisions": len(divisions),
                 "written_questions": counts.get("wrans", 0) + counts.get("lordswrans", 0),
-                "written_statements": [{"date": d.isoformat(), "title": t, "department": m if m != t else None}
+                "written_statements": [{"date": d.isoformat(), "title": t, "department": m if m != t else None,
+                                        "path": debate_path("wms", d, m, t)}
                                        for d, t, m in statements],
                 "lords_written_statements": counts.get("lordswms", 0),
                 "previous": monday(prev_row[0]).isoformat() if prev_row and prev_row[0] else None,

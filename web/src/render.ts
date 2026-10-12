@@ -98,3 +98,6 @@ export function fmtDate(iso: string | null | undefined): string {
   const d = new Date(iso + "T00:00:00Z");
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
+
+/** Lists on member pages are shown open; one longer than this starts folded, with its count in the heading. */
+export const LONG = 25;

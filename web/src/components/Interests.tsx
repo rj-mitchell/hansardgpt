@@ -1,4 +1,4 @@
-import { fmtDate } from "../render";
+import { fmtDate, LONG } from "../render";
 
 export interface InterestItem {
   summary: string;
@@ -51,7 +51,7 @@ function Item({ item }: { item: InterestItem }) {
       )}
       {item.registered && <p className="muted small">Registered {item.registered}</p>}
       {item.children.length > 0 && (
-        <details className="interest-children">
+        <details className="interest-children" open={item.children.length <= LONG}>
           <summary>
             {item.children.length} payment{item.children.length === 1 ? "" : "s"} or specific piece
             {item.children.length === 1 ? "" : "s"} of work
@@ -96,7 +96,7 @@ export function InterestsSection({ interests, name, isMP }: { interests: Interes
       </p>
       {interests.changes && <Changes changes={interests.changes} />}
       {interests.categories.map((c) => (
-        <details key={c.type + c.name} className="interest-category">
+        <details key={c.type + c.name} className="interest-category" open={c.items.length <= LONG}>
           <summary>
             {c.name} ({c.items.length})
           </summary>
@@ -139,7 +139,7 @@ function Changes({ changes }: { changes: NonNullable<Interests["changes"]> }) {
     );
   }
   return (
-    <details className="interest-category">
+    <details className="interest-category" open={added.length + removed.length <= LONG}>
       <summary>
         Changes since {fmtDate(since)}: {added.length} new, {removed.length} no longer listed
       </summary>

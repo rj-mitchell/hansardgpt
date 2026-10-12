@@ -1,4 +1,4 @@
-import { fmtDate } from "../render";
+import { fmtDate, LONG } from "../render";
 
 export interface Appointment {
   company: string | null;
@@ -113,13 +113,13 @@ export function DirectorshipsSection({
         <a href="/corrections#report">tell us</a> if one is not theirs.
       </p>
       {now.length > 0 && (
-        <details className="interest-category" open={now.length <= 10}>
+        <details className="interest-category" open={now.length <= LONG}>
           <summary>Current ({now.length})</summary>
           <Rows items={now} />
         </details>
       )}
       {past.length > 0 && (
-        <details className="interest-category">
+        <details className="interest-category" open={past.length <= LONG}>
           <summary>Earlier ({past.length})</summary>
           <Rows items={past} />
         </details>

@@ -1,3 +1,4 @@
+import { LONG } from "../render";
 /** All-party and cross-party groups a member belongs to, for MP and peer pages. */
 
 export interface MemberGroup {
@@ -53,13 +54,13 @@ export function GroupsSection({ groups, name }: { groups: MemberGroup[]; name: s
         endorsement of its funders. See <a href="/groups">all groups</a>.
       </p>
       {officer.length > 0 && (
-        <details className="interest-category" open={officer.length <= 8}>
+        <details className="interest-category" open={officer.length <= LONG}>
           <summary>Officer ({officer.length})</summary>
           <ul className="interests">{officer.map(item)}</ul>
         </details>
       )}
       {member.length > 0 && (
-        <details className="interest-category">
+        <details className="interest-category" open={member.length <= LONG}>
           <summary>Member ({member.length})</summary>
           <ul className="interests">{member.map(item)}</ul>
         </details>

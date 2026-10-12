@@ -35,7 +35,7 @@ interface WeekData {
   days: Day[];
   divisions: number;
   written_questions: number;
-  written_statements: { date: string; title: string; department: string | null }[];
+  written_statements: { date: string; title: string; department: string | null; path: string | null }[];
   lords_written_statements: number;
   previous: string | null;
   next: string | null;
@@ -181,7 +181,7 @@ function Week({ start }: { start: string | null }) {
           <ul>
             {w.written_statements.map((s) => (
               <li key={s.date + s.title}>
-                {fmtDate(s.date)}: {s.title}
+                {fmtDate(s.date)}: {s.path ? <a href={s.path}>{s.title}</a> : s.title}
                 {s.department && <span className="muted"> ({s.department})</span>}
               </li>
             ))}

@@ -13,6 +13,7 @@ import { ATTRIBUTION } from "./attribution";
 import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
+import { NAV } from "./nav";
 import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
@@ -362,14 +363,11 @@ export default function App() {
           </span>
           <span className="masthead-actions">
             <nav className="page-nav" aria-label="Site">
-              <a href="/this-week">This week</a>
-              <a href="/topics">Topics</a>
-              <a href="/people">MPs and peers</a>
-              <a href="/bills">Bills</a>
-              <a href="/charts">Charts</a>
-              <a href="/compare">Compare</a>
-              <a href="/timeline">Timelines</a>
-              <a href="/about">About</a>
+              {NAV.map((n) => (
+                <a key={n.href} href={n.href} aria-current={n.href === "/" ? "page" : undefined}>
+                  {n.label}
+                </a>
+              ))}
             </nav>
             <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
               Settings

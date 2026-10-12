@@ -652,8 +652,12 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             return Response(page_with_meta(page, title="Debate not found — Where They Stand",
                                            description="There is no debate at this address.", url=url, image=None),
                             status_code=404, media_type="text/html")
-        description = (f"{d['title']}: the debate in the {d['chamber_name']} on {fmt_date(d['date'])}, as recorded "
-                       f"in Hansard, with {d['contributions']} contributions from {d['speakers']} members.")
+        if d.get("kind") == "statement":
+            description = (f"{d['title']}: a written statement to the {d['chamber_name']} on {fmt_date(d['date'])}"
+                           + (f" ({d['department']})" if d.get("department") else "") + ", as published by Parliament.")
+        else:
+            description = (f"{d['title']}: the debate in the {d['chamber_name']} on {fmt_date(d['date'])}, as "
+                           f"recorded in Hansard, with {d['contributions']} contributions from {d['speakers']} members.")
         return Response(page_with_meta(page, title=f"{d['title']}, {fmt_date(d['date'])} — Where They Stand",
                                        description=description, url=url, image=None, noindex=False),
                         media_type="text/html")

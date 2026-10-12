@@ -2969,3 +2969,12 @@ main:focus {
 .elsewhere a {
   white-space: normal;
 }
+
+/* the MPs and peers page: each House's full list folds away until opened */
+.people-group > summary {
+  cursor: pointer;
+}
+
+.people-group > summary > h3 {
+  display: inline;
+}
