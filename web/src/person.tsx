@@ -48,6 +48,7 @@ interface PersonData {
   voting: {
     votes: number;
     rebellions: number;
+    free_vote_differences?: number;
     since: string | null;
     until: string | null;
     method: string;
@@ -221,7 +222,11 @@ function Person({ number }: { number: string }) {
           <p>
             {p.voting.votes.toLocaleString("en-GB")} votes recorded between {fmtDate(p.voting.since)} and{" "}
             {fmtDate(p.voting.until)}, of which {p.voting.rebellions.toLocaleString("en-GB")} were against the majority of
-            their own party.
+            their own party
+            {p.voting.free_vote_differences
+              ? ` (not counting ${p.voting.free_vote_differences} vote${p.voting.free_vote_differences === 1 ? "" : "s"} where their party allowed a free vote, as reported by TheyWorkForYou Votes)`
+              : ""}
+            .
           </p>
           {p.voting.recent_rebellions.length > 0 && (
             <>

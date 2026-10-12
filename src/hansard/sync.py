@@ -370,6 +370,13 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                 stats["vote_descriptions"] = refresh_descriptions(settings.data_dir / "raw" / "twfy_divisions.parquet")
             except Exception as exc:
                 log.warning("vote descriptions not updated: %s", exc)
+            try:  # how parties whipped, where TheyWorkForYou Votes has reported it (a slice of votes per update)
+                from hansard.sources.whips import refresh as refresh_whips
+
+                stats["whips"] = refresh_whips(settings.data_dir / "whips.json",
+                                               settings.data_dir / "raw" / "twfy_divisions.parquet")
+            except Exception as exc:
+                log.warning("whip reports not updated: %s", exc)
         try:  # what each vote was on (amendment, second reading and so on), used across the site
             from hansard.vote_types import vote_types
 

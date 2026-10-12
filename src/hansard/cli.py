@@ -294,6 +294,17 @@ def interests(lords: bool = typer.Option(False, help="Read every peer's entries 
 
 
 @app.command()
+def whips(count: int = typer.Option(1500, help="votes to check in this run")):
+    """Check votes for whip reports published by TheyWorkForYou Votes (also done by sync, a slice at a time)."""
+    _setup_logging()
+    from hansard.sources.whips import refresh
+
+    settings = _settings()
+    typer.echo(json.dumps(refresh(settings.data_dir / "whips.json", settings.data_dir / "raw" / "twfy_divisions.parquet",
+                                  per_run=count, force=True), indent=2))
+
+
+@app.command()
 def groups(force: bool = typer.Option(True, help="Download again even if the copy is less than a week old")):
     """Download the all-party parliamentary groups dataset and rebuild (also done weekly by sync)."""
     _setup_logging()
