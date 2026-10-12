@@ -109,6 +109,10 @@ def regmem_path(settings: Settings) -> Path:
     return settings.data_dir / "regmem.json"
 
 
+def appgs_path(settings: Settings) -> Path:
+    return settings.data_dir / "appgs.sqlite"
+
+
 def donations_path(settings: Settings) -> Path:
     return settings.data_dir / "donations.sqlite"
 
@@ -260,6 +264,22 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("register of interests not updated: %s", exc)
                 stats["interests"] = {"error": str(exc)[:200]}
+
+        t = time.time()
+        if fetch and settings.section("appgs").get("enabled", True):
+            try:  # all-party parliamentary groups, from mySociety's dataset (weekly)
+                import duckdb
+
+                from hansard.reference.profiles import attach_reference
+                from hansard.sources.appgs import refresh as refresh_appgs
+
+                con = duckdb.connect()
+                attach_reference(con, settings.reference_dir)
+                stats["appgs"] = refresh_appgs(appgs_path(settings), con)
+                stats["appgs"]["seconds"] = round(time.time() - t, 1)
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("all-party groups not updated: %s", exc)
+                stats["appgs"] = {"error": str(exc)[:200]}
 
         t = time.time()
         if fetch and settings.section("donations").get("enabled", True):

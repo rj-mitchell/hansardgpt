@@ -284,6 +284,22 @@ def interests():
 
 
 @app.command()
+def groups(force: bool = typer.Option(True, help="Download again even if the copy is less than a week old")):
+    """Download the all-party parliamentary groups dataset and rebuild (also done weekly by sync)."""
+    _setup_logging()
+    import duckdb
+
+    from hansard.reference.profiles import attach_reference
+    from hansard.sources.appgs import refresh
+    from hansard.sync import appgs_path
+
+    settings = _settings()
+    con = duckdb.connect()
+    attach_reference(con, settings.reference_dir)
+    typer.echo(json.dumps(refresh(appgs_path(settings), con, force=force), indent=2))
+
+
+@app.command()
 def donations(force: bool = typer.Option(True, help="Download again even if the copy is less than a week old")):
     """Download the Electoral Commission's register of donations and match it to MPs (also done weekly by sync)."""
     _setup_logging()

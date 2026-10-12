@@ -43,6 +43,14 @@ Donations to MPs and to their local parties come from the
 with donors' addresses and postcodes left out. Matching donations to MPs is this site's own work (see the
 methodology page); each entry links to the Commission's record of it.
 
+## All-party and cross-party groups
+
+Groups, officers, members, secretariats and registered benefits come from mySociety's
+[APPG groups and memberships](https://github.com/mysociety/appg-membership) dataset, licensed under
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/), which is built from the Register of
+All-Party Parliamentary Groups (Open Parliament Licence v3.0) and the devolved parliaments' lists of cross-party
+groups. Membership lists found by AI web search are left out; contact details are left out.
+
 ## Gender and date of birth
 
 Members' gender and constituency election results (majorities, votes cast, by-elections) come from the UK

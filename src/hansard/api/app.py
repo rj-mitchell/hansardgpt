@@ -986,6 +986,56 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 holder["donations"] = Donations(donations_path(settings))
         return holder["donations"]
 
+    def get_groups():
+        from hansard.sources.appgs import Groups
+        from hansard.sync import appgs_path
+
+        with lock:
+            if "groups" not in holder:
+                holder["groups"] = Groups(appgs_path(settings))
+        return holder["groups"]
+
+    @app.get("/api/groups")
+    def groups_index(q: str = "", parliament: str = "uk"):
+        """All-party parliamentary groups (or a devolved parliament's cross-party groups), and their biggest
+        registered funders. Free: no AI."""
+        from hansard.sources.appgs import PARLIAMENTS
+
+        if parliament not in PARLIAMENTS:
+            raise HTTPException(404, "Unknown parliament.")
+        return get_groups().index(q[:200], parliament)
+
+    @app.get("/api/groups/funder")
+    def groups_funder(name: str):
+        return {"funder": name, "benefits": get_groups().funder(name[:300])}
+
+    @app.get("/api/groups/{parliament}/{slug}")
+    def group_detail(parliament: str, slug: str):
+        g = get_groups().group(slug, parliament)
+        if g is None:
+            raise HTTPException(404, "There is no group at this address.")
+        people = get_people()
+        for m in g["members"]:
+            m["member"] = people.brief(m["person_id"], m["updated"]) if m["person_id"] else None
+        return g
+
+    @app.get("/groups/{parliament}/{slug}", include_in_schema=False)
+    def group_page(parliament: str, slug: str, request: Request):
+        index = dist / "group.html"
+        if not index.exists():
+            raise HTTPException(404)
+        g = get_groups().group(slug, parliament)
+        base = str(request.base_url).rstrip("/")
+        if g is None:
+            return Response(page_with_meta(index.read_text(), title="Group not found — Where They Stand",
+                                           description="There is no group at this address.",
+                                           url=f"{base}/groups/{parliament}/{slug}", image=None),
+                            status_code=404, media_type="text/html")
+        desc = (g["purpose"] or g["title"])[:280]
+        return Response(page_with_meta(index.read_text(), title=f"{g['title']} — Where They Stand", description=desc,
+                                       url=f"{base}/groups/{parliament}/{slug}", image=None, noindex=False),
+                        media_type="text/html")
+
     @app.get("/api/donations")
     def donations_index():
         """The biggest donors to MPs in the last five years and the latest donations, as registered with the
@@ -1210,7 +1260,7 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
                 "devolved": devolved,
                 "interests": get_register().for_person(pid), "committee_evidence": evidence,
-                "donations": get_donations().for_person(pid)}
+                "donations": get_donations().for_person(pid), "groups": get_groups().for_person(pid)}
 
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):
@@ -1273,6 +1323,13 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             ev = []
         return sitemap([f"{base}/committees/{c}" for c in cs] + [f"{base}/inquiries/{i}" for i in iq]
                        + [f"{base}/evidence/{e}" for e in ev])
+
+    @app.get("/sitemap-groups.xml", include_in_schema=False)
+    def sitemap_groups(request: Request):
+        base = str(request.base_url).rstrip("/")
+        with get_groups().connect() as con:
+            rows = con.execute("SELECT parliament, slug FROM groups").fetchall() if con is not None else []
+        return sitemap([f"{base}/groups/{p}/{s}" for p, s in rows])
 
     @app.get("/sitemap-edms.xml", include_in_schema=False)
     def sitemap_edms(request: Request):

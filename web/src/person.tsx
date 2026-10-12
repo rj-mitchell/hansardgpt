@@ -5,6 +5,7 @@ import "./pages";
 import { Timeline } from "./components/Timeline";
 import { EdmList, type EdmRow } from "./components/EdmList";
 import { DonationsSection, type MemberDonations } from "./components/Donations";
+import { GroupsSection, type MemberGroup } from "./components/Groups";
 import { type Interests, InterestsSection } from "./components/Interests";
 import { hasVoteKind, VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
@@ -60,6 +61,7 @@ interface PersonData {
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
   interests?: Interests | null;
   donations?: MemberDonations | null;
+  groups?: MemberGroup[];
   devolved?: {
     memberships: { legislature: string; body: string; member: string; seat: string | null; party: string | null; start: string; end: string | null }[];
     counts: Record<string, number>;
@@ -302,6 +304,7 @@ function Person({ number }: { number: string }) {
         <InterestsSection interests={p.interests} name={p.name} isMP={p.current?.house === "commons"} />
       )}
       {p.donations && <DonationsSection donations={p.donations} name={p.name} />}
+      {p.groups && <GroupsSection groups={p.groups} name={p.name} />}
 
       {p.edms && p.edms.tabled + p.edms.signed > 0 && (
         <section aria-labelledby="h-edms">
