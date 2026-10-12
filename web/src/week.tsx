@@ -112,7 +112,7 @@ function Week({ start }: { start: string | null }) {
                   <li key={v.division_id}>
                     <span className="week-kind">{v.house === "lords" ? "Lords" : "Commons"}</span>
                     {v.path ? <a href={v.path}>{v.title}</a> : v.title}: Ayes {v.ayes}, Noes {v.noes}.
-                    {v.vote_type && v.vote_type.kind !== "other" && (
+                    {v.vote_type && (
                       <>
                         {" "}
                         <VoteKind vt={v.vote_type} />

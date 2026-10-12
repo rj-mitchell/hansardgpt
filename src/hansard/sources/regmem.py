@@ -15,7 +15,8 @@ import json
 import logging
 import re
 import threading
-from datetime import UTC, datetime
+import time
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,32 @@ def _item(div: etree._Element) -> dict[str, Any]:
             "children": children}
 
 
+_REGISTERED = re.compile(r"\s*\(Registered ([^)]+)\)\s*$")
+
+
+def _plain_item(item: etree._Element) -> dict[str, Any]:
+    """An entry from an older edition: a first line, then "Label: value" lines (addresses left out)."""
+    lines = [" ".join((item.text or "").split())]
+    for br in item.findall("./br"):
+        lines += [" ".join("".join(br.itertext()).split()), " ".join((br.tail or "").split())]
+    lines = [x for x in lines if x]
+    summary, details = (lines[0] if lines else ""), []
+    for line in lines[1:]:
+        name, sep, value = line.partition(":")
+        if sep and len(name) < 60 and value.strip():
+            if not _SKIP.search(name):
+                details.append([name.strip(), value.strip()])
+        else:
+            summary = f"{summary} {line}".strip()
+    if summary.lower().startswith("address") and details:  # the first line was itself an address
+        summary = details.pop(0)[1]
+    registered = None
+    m = _REGISTERED.search(summary)
+    if m:
+        summary, registered = summary[:m.start()].strip(), m.group(1)
+    return {"summary": summary, "details": details, "registered": registered, "published": None, "children": []}
+
+
 def _category_key(t: str) -> tuple[float, str]:
     try:
         return float(t), t
@@ -82,8 +109,7 @@ def parse(xml: bytes) -> dict[str, Any]:
                     for div in item.findall("./div[@class='interest-item']"):
                         items.append(_item(div))
                     if item.find("./div[@class='interest-item']") is None and _text(item):
-                        items.append({"summary": _text(item), "details": [], "registered": None,
-                                      "published": None, "children": []})  # older plain-text entries
+                        items.append(_plain_item(item))  # older editions: plain text, lines split by <br>
             if items:
                 cats.append({"type": cat.get("type") or "", "name": cat.get("name") or "", "items": items})
         cats.sort(key=lambda c: _category_key(c["type"]))
@@ -135,6 +161,127 @@ def refresh(path: Path, client: httpx.Client | None = None) -> dict[str, Any]:
             client.close()
 
 
+def editions(client: httpx.Client) -> list[tuple[str, str]]:
+    """Every edition listed, oldest first: (file name, date)."""
+    resp = client.get(BASE)
+    resp.raise_for_status()
+    return sorted(set(_FILE.findall(resp.text)), key=lambda x: x[1])
+
+
+def former_members(con: Any) -> dict[str, str]:
+    """Commons members since 2010 who are no longer MPs, with the date they left (DuckDB, reference attached)."""
+    rows = con.execute("""
+        SELECT person_id, max("end") AS left_on FROM ref_memberships WHERE house = 'commons' GROUP BY person_id
+        HAVING max("end") >= DATE '2010-05-06' AND max("end") < DATE '9000-01-01'""").fetchall()
+    return {pid: d.isoformat() for pid, d in rows}
+
+
+def refresh_history(path: Path, leavers: dict[str, str], *, client: httpx.Client | None = None,
+                    max_editions: int = 15, sleep=time.sleep) -> dict[str, Any]:
+    """For each former MP, their entries in the last edition published before they left (kept in ``path``).
+
+    Spread over runs: at most ``max_editions`` old editions are downloaded each time. A member missing from the
+    chosen edition is tried in the one before, up to three times."""
+    path = Path(path)
+    try:
+        history: dict[str, Any] = json.loads(path.read_text()) if path.exists() else {}
+    except (OSError, ValueError):
+        history = {}
+    todo = {pid: left for pid, left in leavers.items()
+            if (history.get(pid) or {}).get("left") != left or (history.get(pid) or {}).get("retry")}
+    if not todo:
+        return {"former_members": len(history), "editions_fetched": 0}
+    own = client is None
+    client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
+    fetched = 0
+    try:
+        listed = editions(client)
+        dates = [d for _, d in listed]
+        names = dict((d, n) for n, d in listed)
+
+        def choose(left: str, skip: int) -> str | None:
+            before = [d for d in dates if d <= left]
+            return before[-1 - skip] if len(before) > skip else None
+
+        wanted: dict[str, list[str]] = {}
+        for pid, left in todo.items():
+            ed = choose(left, (history.get(pid) or {}).get("tries", 0))
+            if ed:
+                wanted.setdefault(ed, []).append(pid)
+        for ed in sorted(wanted, reverse=True)[:max_editions]:
+            resp = client.get(BASE + names[ed])
+            resp.raise_for_status()
+            members = parse(resp.content)["members"]
+            fetched += 1
+            for pid in wanted[ed]:
+                tries = (history.get(pid) or {}).get("tries", 0) + 1
+                if pid in members:
+                    history[pid] = {"left": todo[pid], "edition": ed, "categories": members[pid]["categories"]}
+                else:  # not in that edition (left just before it was compiled?): try the one before next time
+                    history[pid] = {"left": todo[pid], "edition": None, "categories": [], "tries": tries,
+                                    "retry": tries < 3}
+            sleep(1.0)
+    finally:
+        if own:
+            client.close()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(history))
+    tmp.replace(path)
+    waiting = sum(1 for pid in leavers if (history.get(pid) or {}).get("left") != leavers[pid]
+                  or (history.get(pid) or {}).get("retry"))
+    return {"former_members": sum(1 for h in history.values() if h.get("edition")), "editions_fetched": fetched,
+            "still_to_fetch": waiting}
+
+
+def refresh_previous(path: Path, latest: str | None, *, client: httpx.Client | None = None,
+                     days: int = 365) -> dict[str, Any]:
+    """Keep the edition from about a year before ``latest`` (the newest published on or before that day), so a
+    member's page can show what is new in the register and what is no longer listed."""
+    path = Path(path)
+    if not latest:
+        return {"edition": None, "updated": False}
+    target = (date.fromisoformat(latest) - timedelta(days=days)).isoformat()
+    current = None
+    if path.exists():
+        try:
+            current = json.loads(path.read_text()).get("edition")
+        except (OSError, ValueError):
+            current = None
+    own = client is None
+    client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
+    try:
+        before = [(n, d) for n, d in editions(client) if d <= target]
+        if not before:
+            return {"edition": current, "updated": False}
+        name, day = before[-1]
+        if current == day:
+            return {"edition": day, "updated": False}
+        resp = client.get(BASE + name)
+        resp.raise_for_status()
+        data = parse(resp.content)
+        if not data["members"]:
+            return {"edition": current, "updated": False, "error": f"{name}: no members found"}
+        data["edition"] = day
+    finally:
+        if own:
+            client.close()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+    return {"edition": day, "updated": True}
+
+
+def _entries(categories: list[dict[str, Any]]) -> dict[tuple[str, str], str]:
+    return {(c["type"], i["summary"]): c["name"] for c in categories for i in c["items"] if i.get("summary")}
+
+
+def changes(now: list[dict[str, Any]], before: list[dict[str, Any]]) -> dict[str, list[dict[str, str]]]:
+    """Entries listed now but not in the earlier edition, and the reverse, compared by category and wording."""
+    a, b = _entries(now), _entries(before)
+    return {"added": [{"category": a[k], "summary": k[1]} for k in a if k not in b],
+            "removed": [{"category": b[k], "summary": k[1]} for k in b if k not in a]}
+
+
 class Register:
     """The latest edition on disk, reloaded when the file changes."""
 
@@ -143,6 +290,7 @@ class Register:
         self._lock = threading.Lock()
         self._data: dict[str, Any] | None = None
         self._mtime: float | None = None
+        self._sides: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def _load(self) -> dict[str, Any]:
         with self._lock:
@@ -157,10 +305,42 @@ class Register:
                     return self._data or {}
             return self._data
 
+    def _side(self, name: str) -> dict[str, Any]:
+        """A companion file (former members, or the edition a year back), reloaded when it changes."""
+        spath = self.path.with_name(name)
+        with self._lock:
+            try:
+                mtime = spath.stat().st_mtime
+            except OSError:
+                return {}
+            cached = self._sides.get(name)
+            if cached is None or cached[0] != mtime:
+                try:
+                    self._sides[name] = (mtime, json.loads(spath.read_text()))
+                except (OSError, ValueError):
+                    return cached[1] if cached else {}
+            return self._sides[name][1]
+
+    def _history(self) -> dict[str, Any]:
+        return self._side("regmem_history.json")
+
+    def _previous(self) -> dict[str, Any]:
+        return self._side("regmem_previous.json")
+
     def for_person(self, person_id: str) -> dict[str, Any] | None:
         data = self._load()
         m = (data.get("members") or {}).get(person_id)
+        if m is None:  # a former MP: their entries in the last edition before they left
+            h = self._history().get(person_id)
+            if h and h.get("edition"):
+                return {"edition": h["edition"], "source": BASE, "official": OFFICIAL, "former": True,
+                        "categories": h["categories"], "listed": True}
         if not data:
             return None
-        return {"edition": data.get("edition"), "source": data.get("source"), "official": OFFICIAL,
-                "categories": (m or {}).get("categories", []), "listed": m is not None}
+        out = {"edition": data.get("edition"), "source": data.get("source"), "official": OFFICIAL,
+               "categories": (m or {}).get("categories", []), "listed": m is not None, "former": False}
+        earlier = self._previous()
+        was = (earlier.get("members") or {}).get(person_id)
+        if m is not None and was is not None and earlier.get("edition") != data.get("edition"):
+            out["changes"] = {"since": earlier.get("edition"), **changes(m["categories"], was["categories"])}
+        return out

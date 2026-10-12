@@ -63,6 +63,17 @@ jobs:
           curl -fsS http://localhost:8000/api/status | grep -q "latest_record"
           curl -fsS -X POST http://localhost:8000/api/search -H "Content-Type: application/json" \
             -d '{"question": "trial by jury"}' | grep -q '"sources"'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Accessibility check (axe, WCAG 2.2 AA, light and dark, desktop and phone)
+        run: |
+          mkdir -p /tmp/a11y && cp scripts/a11y.mjs /tmp/a11y/
+          cd /tmp/a11y
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund playwright@1.47.2 axe-core@4.10.0
+          npx playwright install --with-deps chromium
+          node a11y.mjs http://localhost:8000
       - name: Show the container log if anything failed
         if: failure()
         run: docker logs wts || true

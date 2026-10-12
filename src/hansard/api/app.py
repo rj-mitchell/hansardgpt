@@ -114,6 +114,8 @@ class ScopeBody(BaseModel):
     pbc: bool = True
     votes: bool = True
     edms: bool = True
+    devolved: bool = False
+    evidence: bool = False
 
 
 class FeedbackBody(BaseModel):
@@ -402,10 +404,13 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         req = AskRequest(question=body.question, mode=body.mode, recency=body.recency, role_weight=body.role_weight,
                          scope=Scope(**body.scope.model_dump()))
         res, _, sources = p.find(plan, req)
-        return {"plan": plan.to_dict(), "sources": [s.card() for s in sources if s.kind in ("record", "edm")],
+        return {"plan": plan.to_dict(), "sources": [s.card() for s in sources if s.kind in ("record", "edm", "devolved", "evidence")],
                 "candidates": res.candidates, "semantic": res.semantic_available,
                 "evidence": {**res.evidence, "devolution": notes_for(plan.question),
-                             "edms": sum(1 for s in sources if s.kind == "edm")} if res.evidence else res.evidence}
+                             "edms": sum(1 for s in sources if s.kind == "edm"),
+                             "devolved": sum(1 for s in sources if s.kind == "devolved"),
+                             "committee_evidence": sum(1 for s in sources if s.kind == "evidence")}
+                if res.evidence else res.evidence}
 
     def sources_only_events(body: AskBody, note: str, uid: int | None = None,
                             visitor: str | None = None) -> Iterator[dict[str, Any]]:
@@ -709,6 +714,260 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return week_page(start, request)
 
     # ---- early day motions -----------------------------------------------------------------------
+    # ---- the public search API (no AI) -----------------------------------------------------------
+    @app.get("/api/v1/search")
+    def public_search(request: Request, q: str = "", date_from: str | None = None, date_to: str | None = None,
+                      house: str | None = None, party: str | None = None, written: bool = True,
+                      limit: int = 20, user=Depends(current_user)):
+        """Search the Westminster record since 2010, ranked by relevance. Free; no AI. See /developers."""
+        from hansard.engine import Filters
+
+        requester(request, user)
+        q = " ".join(q.split())[:300]
+        if len(q) < 2:
+            raise HTTPException(400, "Give some words to search for (q).")
+        try:
+            filters = Filters(date_from=date.fromisoformat(date_from) if date_from else None,
+                              date_to=date.fromisoformat(date_to) if date_to else None,
+                              houses=[house] if house in ("commons", "lords") else [],
+                              parties=[party] if party else [])
+        except ValueError as exc:
+            raise HTTPException(400, "Dates must be written as YYYY-MM-DD.") from exc
+        res = get_pipeline().engine.search(q, filters, Scope(written=written), [], 0.0, 1.0,
+                                           max(1, min(int(limit), 50)), diversify=False)
+        out = []
+        for r in res.records:
+            sp = r.get("speaker") or {}
+            out.append({"record_id": r["record_id"], "date": r["date"], "house": r["house"], "chamber": r["chamber"],
+                        "type": r["record_type"], "heading": r.get("heading"),
+                        "speaker": {"name": sp.get("name") or r.get("speaker_name_raw"), "party": sp.get("party"),
+                                    "constituency": sp.get("constituency"), "person_id": sp.get("person_id")},
+                        "excerpt": " ".join((r.get("excerpt") or "").split())[:1000],
+                        "column": r.get("colnum"), "uin": r.get("uin"),
+                        "url": r.get("official_url") or r.get("twfy_url"), "twfy_url": r.get("twfy_url"),
+                        "relevance": round(r["ranking"]["relevance"], 4) if r.get("ranking") else None})
+        return {"query": q, "results": out, "count": len(out),
+                "licence": "Contains Parliamentary information licensed under the Open Parliament Licence v3.0."}
+
+    # ---- the devolved parliaments --------------------------------------------------------------
+    def get_devolved():
+        from hansard.devolved import DevolvedStore, Members
+        from hansard.sync import devolved_path
+
+        with lock:
+            if "devolved" not in holder:
+                holder["devolved"] = (DevolvedStore(devolved_path(settings)),
+                                      Members(settings.parlparse_dir / "members" / "people.json"))
+        return holder["devolved"]
+
+    def devolved_speaker(members, pp, leg: str, row: dict) -> dict:
+        from hansard.devolved import LEGISLATURES
+
+        on = members.on(row.get("person_id"), LEGISLATURES[leg]["org"], row["date"])
+        raw = re.sub(r"^\d+\.\s*", "", row.get("speaker") or "")
+        number = None
+        if row.get("person_id"):
+            from hansard.people import person_number
+
+            number = person_number(row["person_id"])
+        name = on.get("name") or raw or None
+        role = raw.split("(")[0].strip() if raw.lower().startswith(("the ", "deputy ")) else None
+        return {"name": name, "party": on.get("party"), "seat": on.get("seat"), "role": role, "number": number,
+                "slug": re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") if number else None}
+
+    @app.get("/api/devolved")
+    def devolved_index():
+        """The devolved parliaments' recent sitting days. Free: no AI."""
+        from hansard.devolved import LEGISLATURES
+
+        store, _ = get_devolved()
+        counts = store.counts()
+        return {"legislatures": [{"id": k, "name": v["name"], "member": v["member"], "nation": v["nation"],
+                                  **(counts.get(k) or {"speeches": 0}), "days": store.days(k, 12)}
+                                 for k, v in LEGISLATURES.items()]}
+
+    @app.get("/api/devolved/search")
+    def devolved_search(q: str = "", leg: str | None = None, page: int = 1):
+        from hansard.devolved import LEGISLATURES
+
+        if leg and leg not in LEGISLATURES:
+            raise HTTPException(404, "Unknown parliament.")
+        store, members = get_devolved()
+        page = max(1, min(page, 200))
+        total, rows = store.search(q[:200], leg, limit=25, offset=(page - 1) * 25)
+        pp = get_people()
+        return {"total": total, "page": page, "per_page": 25,
+                "items": [{**r, "speaker": devolved_speaker(members, pp, r["legislature"], r),
+                           "body": LEGISLATURES[r["legislature"]]["name"]} for r in rows]}
+
+    @app.get("/api/devolved/{leg}")
+    def devolved_days(leg: str, before: str | None = None):
+        from hansard.devolved import LEGISLATURES
+
+        if leg not in LEGISLATURES or (before and not _DAY.match(before)):
+            raise HTTPException(404, "Unknown parliament.")
+        store, _ = get_devolved()
+        return {"id": leg, **LEGISLATURES[leg], "days": store.days(leg, 40, before)}
+
+    @app.get("/api/devolved/{leg}/{key}")
+    def devolved_day(leg: str, key: str):
+        from hansard.devolved import LEGISLATURES
+
+        if leg not in LEGISLATURES or not _SLUG.match(key.replace("_", "-")):
+            raise HTTPException(404, "Unknown parliament.")
+        store, members = get_devolved()
+        rows = store.day(leg, key)
+        if not rows:
+            raise HTTPException(404, "There is no sitting at this address.")
+        pp = get_people()
+        items, section = [], None
+        for r in rows:
+            head = r["major"] or ""
+            if head and head != section:
+                section = head
+                items.append({"kind": "heading", "text": head, "id": f"h-{r['ord']}"})
+            items.append({"kind": "said" if r["person_id"] else "procedural", "id": f"s{r['ord']}",
+                          "minor": r["minor"], "time": r["time"], "url": r["url"],
+                          "speaker": devolved_speaker(members, pp, leg, r) if r["person_id"] else None,
+                          "paragraphs": [p for p in r["text"].split("\n\n") if p]})
+        return {"id": leg, "body": LEGISLATURES[leg]["name"], "member": LEGISLATURES[leg]["member"],
+                "key": key, "date": rows[0]["date"], "items": items,
+                "speakers": len({r["person_id"] for r in rows if r["person_id"]}),
+                "contributions": sum(1 for r in rows if r["person_id"]),
+                "official_url": next((r["url"] for r in rows if r["url"]), None)}
+
+    @app.get("/devolved/{leg}/{key}", include_in_schema=False)
+    def devolved_day_page(leg: str, key: str, request: Request):
+        from hansard.devolved import LEGISLATURES
+
+        index = dist / "devolvedday.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        rows = get_devolved()[0].day(leg, key) if leg in LEGISLATURES else []
+        if not rows:
+            return Response(page_with_meta(page, title="Not found — Where They Stand", description="Nothing here.",
+                                           url=f"{base}/devolved/{leg}/{key}", image=None),
+                            status_code=404, media_type="text/html")
+        name = LEGISLATURES[leg]["name"]
+        return Response(page_with_meta(page, title=f"{name}, {fmt_date(rows[0]['date'])} — Where They Stand",
+                                       description=f"What was said in the {name} on {fmt_date(rows[0]['date'])}, as "
+                                                   "recorded in its official report, with each member's party and seat.",
+                                       url=f"{base}/devolved/{leg}/{key}", image=None, noindex=False),
+                        media_type="text/html")
+
+    def get_committees():
+        from hansard.sources.committees import Committees
+        from hansard.sync import committees_path
+
+        with lock:
+            if "committees" not in holder:
+                holder["committees"] = Committees(committees_path(settings))
+        c = holder["committees"]
+        if not c.available():
+            raise HTTPException(503, "Committee information is being collected and will appear after the next update.")
+        return c
+
+    @app.get("/api/committees")
+    def committees_index():
+        """Current select and other committees of both Houses. Free: no AI."""
+        c = get_committees()
+        return {"committees": c.index(), "totals": c.stats()}
+
+    @app.get("/api/committees/{cid}")
+    def committee_detail(cid: int):
+        d = get_committees().committee(cid)
+        if d is None:
+            raise HTTPException(404, "There is no committee with that number.")
+        return d
+
+    @app.get("/api/inquiries/{iid}")
+    def inquiry_detail(iid: int):
+        d = get_committees().inquiry(iid)
+        if d is None:
+            raise HTTPException(404, "There is no inquiry with that number.")
+        have = get_evidence().available()
+        for s in d["sessions"]:
+            s["transcript"] = s["id"] in have
+        return d
+
+    def get_evidence():
+        from hansard.sources.evidence import EvidenceStore
+        from hansard.sync import evidence_path
+
+        with lock:
+            if "evidence" not in holder:
+                holder["evidence"] = EvidenceStore(evidence_path(settings))
+        return holder["evidence"]
+
+    @app.get("/api/evidence")
+    def evidence_search(q: str = "", page: int = 1):
+        """What witnesses and committee members said in oral evidence (transcripts collected so far)."""
+        page = max(1, min(page, 200))
+        total, rows = get_evidence().search(q[:200], limit=25, offset=(page - 1) * 25)
+        sessions = {r["session_id"] for r in rows}
+        meta = get_committees().sessions_meta(sessions) if sessions else {}
+        return {"total": total, "page": page, "per_page": 25,
+                "items": [{**r, **meta.get(r["session_id"], {})} for r in rows]}
+
+    @app.get("/api/evidence/{sid}")
+    def evidence_detail(sid: int):
+        t = get_evidence().transcript(sid)
+        if t is None:
+            raise HTTPException(404, "There is no transcript for that session here yet.")
+        return {**t, **get_committees().sessions_meta({sid}).get(sid, {})}
+
+    @app.get("/evidence/{sid}", include_in_schema=False)
+    def evidence_page(sid: int, request: Request):
+        index = dist / "evidence.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        url = f"{str(request.base_url).rstrip('/')}/evidence/{sid}"
+        t = get_evidence().transcript(sid)
+        if t is None:
+            return Response(page_with_meta(page, title="Transcript not found — Where They Stand",
+                                           description="There is no transcript for that session here yet.", url=url,
+                                           image=None), status_code=404, media_type="text/html")
+        title = t["title"] or "Oral evidence"
+        return Response(page_with_meta(page, title=f"{title} — Where They Stand",
+                                       description=f"{title}: the transcript of a committee evidence session, with "
+                                                   "who said what.", url=url, image=None, noindex=False),
+                        media_type="text/html")
+
+    @app.get("/api/witnesses")
+    def witness_search(q: str = ""):
+        """Organisations and people who gave oral evidence to committees, and how often."""
+        return get_committees().witnesses(q[:200])
+
+    def committee_meta_page(kind: str, ident: int, request: Request) -> Response:
+        index = dist / f"{kind}.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        base = str(request.base_url).rstrip("/")
+        try:
+            c = get_committees()
+            d = c.committee(ident) if kind == "committee" else c.inquiry(ident)
+        except HTTPException:
+            d = None
+        path = f"/committees/{ident}" if kind == "committee" else f"/inquiries/{ident}"
+        if d is None:
+            return Response(page_with_meta(page, title="Not found — Where They Stand", description="Nothing here.",
+                                           url=base + path, image=None), status_code=404, media_type="text/html")
+        if kind == "committee":
+            title, desc = d["name"], (d.get("purpose") or f"The {d['name']}: its inquiries, reports and the "
+                                      "organisations it has heard from.")
+        else:
+            title = d["title"]
+            desc = (f"{d['title']}: an inquiry by the " + " and ".join(x["name"] for x in d["committees"]) +
+                    ", with its reports, the government's responses and who gave evidence.")
+        return Response(page_with_meta(page, title=f"{title} — Where They Stand", description=desc[:300],
+                                       url=base + path, image=None, noindex=False), media_type="text/html")
+
+    @app.get("/committees/{cid}", include_in_schema=False)
+    def committee_page(cid: int, request: Request):
+        return committee_meta_page("committee", cid, request)
+
+    @app.get("/inquiries/{iid}", include_in_schema=False)
+    def inquiry_page(iid: int, request: Request):
+        return committee_meta_page("inquiry", iid, request)
+
     def get_register():
         from hansard.sources.regmem import Register
         from hansard.sync import regmem_path
@@ -812,6 +1071,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         """How often words were used in Parliament each year, with the context to read the numbers (free)."""
         requester(request, user)
         phrases = [p for p in q.split(",") if p.strip()]
+        if by == "parliaments":
+            return parliaments_chart(phrases[:1])
         if not chart_slots.acquire(timeout=30):
             raise HTTPException(503, "The site is busy drawing other charts. Please try again in a moment.")
         try:
@@ -820,6 +1081,42 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             raise HTTPException(400, str(exc)) from exc
         finally:
             chart_slots.release()
+
+    def parliaments_chart(phrases: list[str]) -> dict[str, Any]:
+        """Westminster's two Houses and the three devolved parliaments, side by side, as rates (comparable)."""
+        from hansard.devolved import LEGISLATURES
+        from hansard.trends import clean_phrase
+
+        try:
+            phrase = clean_phrase(phrases[0]) if phrases else ""
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not phrase:
+            raise HTTPException(400, "Give a word or phrase.")
+        if not chart_slots.acquire(timeout=30):
+            raise HTTPException(503, "The site is busy drawing other charts. Please try again in a moment.")
+        try:
+            base = get_trends().chart([phrase], "house", str(state.latest_record_date()))
+        finally:
+            chart_slots.release()
+        dev = get_devolved()[0].yearly(phrase)
+        first = min((min(v) for v in dev.values() if v), default=None)
+        years = [y for y in base["years"] if first is None or y >= first]
+        keep = [base["years"].index(y) for y in years]
+        series = [{**s, **{k: [s[k][i] for i in keep] for k in ("counts", "totals", "rate")}} for s in base["series"]]
+        for leg, cfg in LEGISLATURES.items():
+            by_year = dev.get(leg) or {}
+            if not by_year:
+                continue
+            counts = [by_year[y][0] if y in by_year else None for y in years]
+            totals = [by_year[y][1] if y in by_year else None for y in years]
+            series.append({"key": f"{phrase}|{leg}", "phrase": phrase, "group": leg, "label": cfg["name"],
+                           "counts": counts, "totals": totals,
+                           "rate": [round(10000 * c / t, 2) if c is not None and t else None
+                                    for c, t in zip(counts, totals, strict=True)]})
+        partial = sorted({*[y for y in base["partial_years"] if y in years], *([first] if first else [])})
+        return {"phrases": [phrase], "by": "parliaments", "years": years, "series": series,
+                "partial_years": partial, "total": sum(sum(c or 0 for c in s["counts"]) for s in series)}
 
     # ---- timelines -----------------------------------------------------------------------------
     @app.get("/api/timeline")
@@ -860,8 +1157,28 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 edms["recent"] = edm_rows(edms["recent"])
             except (ValueError, OSError):
                 edms = None
+        evidence = []
+        if page.get("parliament_id"):
+            try:
+                evidence = get_committees().for_member(int(page["parliament_id"]))
+            except (HTTPException, ValueError, OSError):
+                evidence = []
+        devolved = None
+        try:
+            store, members = get_devolved()
+            ms = members.memberships(pid)
+            if ms:
+                devolved = {"memberships": ms, **store.for_person(pid)}
+                now = [m for m in ms if m["end"] is None]
+                if now and not page.get("current"):  # a sitting MSP, MS or MLA (and not an MP or peer)
+                    m = now[-1]
+                    page = {**page, "status": f"{m['member']} for {m['seat']} ({m['body']})"
+                                              + (f", {m['party']}" if m["party"] else "")}
+        except (OSError, ValueError):
+            devolved = None
         return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
-                "interests": get_register().for_person(pid)}
+                "devolved": devolved,
+                "interests": get_register().for_person(pid), "committee_evidence": evidence}
 
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):
@@ -905,6 +1222,42 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
                         f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
                         media_type="application/xml")
+
+    def sitemap(urls: list[str]) -> Response:
+        body = "".join(f"<url><loc>{u}</loc></url>" for u in urls[:50000])
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset '
+                        f'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>', media_type="application/xml")
+
+    @app.get("/sitemap-committees.xml", include_in_schema=False)
+    def sitemap_committees(request: Request):
+        base = str(request.base_url).rstrip("/")
+        try:
+            cs, iq = get_committees().sitemap_ids()
+        except HTTPException:
+            cs, iq = [], []
+        try:  # transcripts collected so far
+            ev = sorted(get_evidence().available(), reverse=True)
+        except Exception:
+            ev = []
+        return sitemap([f"{base}/committees/{c}" for c in cs] + [f"{base}/inquiries/{i}" for i in iq]
+                       + [f"{base}/evidence/{e}" for e in ev])
+
+    @app.get("/sitemap-edms.xml", include_in_schema=False)
+    def sitemap_edms(request: Request):
+        base = str(request.base_url).rstrip("/")
+        with get_edms().connect() as con:
+            ids = [r[0] for r in con.execute("SELECT id FROM edms ORDER BY date_tabled DESC LIMIT 50000")]
+        return sitemap([f"{base}/edms/{i}" for i in ids])
+
+    @app.get("/sitemap-devolved.xml", include_in_schema=False)
+    def sitemap_devolved(request: Request):
+        from hansard.devolved import LEGISLATURES
+
+        base = str(request.base_url).rstrip("/")
+        store, _ = get_devolved()
+        with store.connect() as con:
+            keys = con.execute("SELECT legislature, key FROM files ORDER BY date DESC").fetchall()
+        return sitemap([f"{base}/devolved/{leg}/{key}" for leg, key in keys if leg in LEGISLATURES])
 
     # ---- RSS feeds -------------------------------------------------------------------------
     def feed(request: Request, path: str, title: str, link: str, description: str, items: list) -> Response:
@@ -963,6 +1316,32 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                  for k, c in enumerate(corrections(state))]
         return feed(request, "/feeds/corrections.xml", "Corrections", "/corrections",
                     "Withdrawn briefings and published corrections.", items)
+
+    @app.get("/feeds/committee-reports.xml", include_in_schema=False)
+    def feed_committee_reports(request: Request):
+        base = str(request.base_url).rstrip("/")
+        try:
+            pubs = get_committees().recent_publications()
+        except HTTPException:
+            pubs = []
+        items = [{"title": f"{p['type']}: {p['title']}", "date": p["date"], "guid": f"committee-publication-{p['id']}",
+                  "link": f"{base}/inquiries/{p['inquiry_id']}" if p["inquiry_id"] else p["url"],
+                  "description": f"{p['type']} from the {p['committee'] or 'committee'}, published "
+                                 f"{fmt_date(p['date'])}. The document: {p['url']}"} for p in pubs]
+        return feed(request, "/feeds/committee-reports.xml", "Committee reports and government responses",
+                    "/committees", "New select committee reports, special reports and government responses.", items)
+
+    @app.get("/feeds/edms.xml", include_in_schema=False)
+    def feed_edms(request: Request):
+        base = str(request.base_url).rstrip("/")
+        _, rows = get_edms().search(limit=40)
+        items = [{"title": r["title"], "date": r["date_tabled"] or "2000-01-01", "guid": f"edm-{r['id']}",
+                  "link": f"{base}/edms/{r['id']}",
+                  "description": f"Early day motion {r['uin'] or ''} tabled by {r['primary_name'] or 'an MP'}"
+                                 f"{' (' + r['primary_party'] + ')' if r['primary_party'] else ''}."}
+                 for r in rows if r["date_tabled"]]
+        return feed(request, "/feeds/edms.xml", "Early day motions", "/edms",
+                    "Early day motions as they are tabled.", items)
 
     @app.get("/feeds/changelog.xml", include_in_schema=False)
     def feed_changelog(request: Request):

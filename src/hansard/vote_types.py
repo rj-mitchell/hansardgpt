@@ -190,6 +190,7 @@ class VoteTypes:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.path = Path(settings.data_dir) / "vote_types.json"
+        self.descriptions_path = Path(settings.data_dir) / "raw" / "twfy_divisions.parquet"
         self._lock = threading.Lock()
         self._types: dict[str, dict[str, Any]] | None = None
         self._version: str | None = None
@@ -204,7 +205,9 @@ class VoteTypes:
         if not {"records", "divisions"} <= self._stores:
             return "none"
         n, last, ayes = self._con.execute("SELECT count(*), max(date), sum(ayes) FROM divisions").fetchone()
-        return f"{n}|{last}|{ayes}|{RULES}"
+        desc = self.descriptions_path
+        stamp = int(desc.stat().st_mtime) if desc.exists() else 0  # a new copy of the descriptions rebuilds too
+        return f"{n}|{last}|{ayes}|{RULES}|{stamp}"
 
     def all(self) -> dict[str, dict[str, Any]]:
         with self._lock:
@@ -219,6 +222,11 @@ class VoteTypes:
             except (OSError, ValueError, KeyError):
                 pass
             types = build(self._con) if stamp != "none" else {}
+            from hansard.sources.twfy_votes import descriptions
+
+            for did, d in descriptions(self.descriptions_path).items():  # plain-English descriptions, where written
+                if did in types:
+                    types[did] = {**types[did], **d}
             tmp = self.path.with_suffix(".tmp")
             tmp.write_text(json.dumps({"version": stamp, "types": types}))
             tmp.replace(self.path)

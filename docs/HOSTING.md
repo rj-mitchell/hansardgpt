@@ -190,9 +190,11 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 | Feature a briefing (listed on the Topics page and found by search engines) | the admin page: "Feature" next to a recent briefing, or paste its address under "Featured briefings" |
 | Write the topic briefings now, rather than waiting for the twice-daily update (about 11p each) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard topics refresh` (add `--only cost-of-living` for one) |
 | See each topic's state | the admin page, or `docker compose exec app hansard topics list` |
+| Collect the devolved parliaments' records now, rather than a few dozen files per update (free; about 1,000 files since 2021, roughly an hour) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard devolved --files 2000` |
+| Rebuild the committee pages now, rather than waiting for the weekly update (free; the first time takes about two hours, because each committee's list of inquiries is fetched once from a slow service; later rebuilds take under an hour) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard committees` |
 | Fetch the newest Register of Members' Financial Interests now (free; also done by every update) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard interests` |
 | Check that early day motions can be read from Parliament (free) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard edms --check` |
-| Collect more early day motions now, rather than waiting for the twice-daily update (free) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard edms --months 60` |
+| Collect all early day motions since 2010 in one go, in the background (free; about 4–5 hours, one request at a time) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard edms --months 200 --signatures 25000` |
 | Add, change or remove a topic | edit `config/topics.toml` in the code (ask me), then install it as a new version. Never change a published topic's `slug`: it is its address |
 | Withdraw a briefing (after a complaint, say) | `curl -X POST -H "Authorization: Bearer YOUR_ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"reason": "complaint about attribution"}' https://wheretheystand.uk/api/admin/briefings/THE_ID/withdraw` |
 

@@ -61,29 +61,29 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | Item | Effort | Notes |
 |---|---|---|
 | ✓ **Your MP**: enter a postcode to see your MP, ask about them, see what they've said on a topic and their votes | M | Done 11 October: uses Parliament's own postcode look-up. No AI cost |
-| **Comparisons**: two MPs, parties or nations side by side on the same question | M | Costs the same as one or two briefings |
-| **Charts**: how much a subject was debated over time, by party, House and nation | M | No AI cost. Must show context with every number (the lesson from the NZ site's expenses) |
+| ✓ **Comparisons**: two MPs, parties or nations side by side on the same question | M | Costs the same as one or two briefings; Done: /compare |
+| ✓ **Charts**: how much a subject was debated over time, by party, House and nation | M | No AI cost. Must show context with every number (the lesson from the NZ site's expenses); Done: /charts, now including all five chambers |
 | ✓ **Topic briefings**: regularly refreshed briefings on the issues in the news, on permanent pages | S–M | Done 11 October: 16 topics in `config/topics.toml`. Rewritten only when due and the evidence has changed: about £2 to start, then roughly £2–6 a month |
 | **1997–2010** records | M–L | Needs the older boundary sets; disk use roughly doubles |
 | ✓ **Early Day Motions**: who signed which motions | M | Done: /edms to search and read motions and see who signed (with party on the day), and a section on each MP's page. Collected by the sync, working back to 2010 a year at a time. Briefings also use the two or three motions most relevant to a question, with signatures by party, as their own kind of source |
-| **Select committee evidence and reports** | L | Different source and format |
-| **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data |
+| ✓ **Select committee evidence and reports** | L | Different source and format; Committee pages, reports, government responses and the witness index done (/committees, /witnesses); transcripts in search and (opt-in) briefings done |
+| ✓ **Scottish Parliament, Senedd, Northern Ireland Assembly** | L each | Each has its own record and member data; Done: /devolved (reading and search, since 2021), and in briefings as an opt-in setting |
 
 ### B. Discussed earlier, not yet built
 
 | Item | Effort | Notes |
 |---|---|---|
 | ✓ **MP and peer pages**: roles over time, seats, recent contributions, voting record, briefings asked about them | M | Done 11 October, with seats and majorities. Still to add: briefings asked about them |
-| **Recent-activity feed** on each MP page ("spoke in…", "voted against their party on…") | S, after MP pages | |
-| **Voting record summaries** per member and topic, with the method shown in full | M | Per member done (votes and rebellions on MP pages); per topic still to do |
-| **Test set of 50–100 questions with scoring** | M | About $3–5 per run. The foundation for the next two items |
-| **Cheaper models where they are just as good** (for example, a smaller model for reading the question) | S, after the test set | Lowers running costs |
-| **Re-ranking step** for sharper choice of sources | M | Judged with the test set |
-| **Public search API** for researchers (search only, no AI briefings), documented and rate-limited | M | |
+| ✓ **Recent-activity feed** on each MP page ("spoke in…", "voted against their party on…") | S, after MP pages | Done |
+| ✓ **Voting record summaries** per member and topic, with the method shown in full | M | Per member done (votes and rebellions on MP pages); per topic done in member timelines (aye, no, against party, and how many were procedural) |
+| ✓ **Test set of 50–100 questions with scoring** | M | About $3–5 per run. The foundation for the next two items; Done: see docs/EVALUATION.md |
+| ✓ **Cheaper models where they are just as good** (for example, a smaller model for reading the question) | S, after the test set | Lowers running costs; Done: a smaller model reads the question |
+| ✓ **Re-ranking step** for sharper choice of sources | M | Judged with the test set; Done |
+| ✓ **Public search API** for researchers (search only, no AI briefings), documented and rate-limited | M | Done: /api/v1/search and the other JSON endpoints, documented on /developers |
 | **Topic alerts by email** (a weekly digest on chosen topics) | M–L | Needs an email-sending service and a sign-up with consent |
 | **Cloudflare protection** (proxy on) | S–M | Make the server trust Cloudflare's visitor details, choose the right certificate setting, update the privacy notice |
 | **Off-site backups** sent automatically to cheap storage | S | Needs a storage account from you (for example Backblaze B2) |
-| **Contact and press page**: a short media pack, logo files, how to cite the site | S | |
+| ✓ **Contact and press page**: a short media pack, logo files, how to cite the site | S | Done: /press |
 | ✓ **Link to the source code** from the About page and footer (the repository is public and MIT-licensed) | S | Done |
 
 ### B2. Added on 11 October
@@ -98,8 +98,8 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 **Finding and following positions**
 | Item | Effort | What it gives |
 |---|---|---|
-| **Timeline view**: one person's or party's statements on a topic in date order, with votes in between | M | Shows how positions developed, without the site judging consistency |
-| **Bill pages**: each bill's debates by stage (second reading, committee, report, Lords) with a briefing per stage | M | The data already includes bill names and committee debates |
+| ✓ **Timeline view**: one person's or party's statements on a topic in date order, with votes in between | M | Shows how positions developed, without the site judging consistency; Done: /timeline |
+| ✓ **Bill pages**: each bill's debates by stage (second reading, committee, report, Lords) with a briefing per stage | M | The data already includes bill names and committee debates; Done: /bills, with every vote's kind, the debates in full and an "Ask about this stage" link on each sitting (a ready-made briefing per stage is not stored, to keep costs down) |
 | ✓ **Debate pages**: "what was said in this debate", one briefing per debate | S–M | Done: every debate since 2010 readable in full on the site, with each speaker as they were on the day, its votes and an "Ask about this debate" box. Linked from sources, timelines, member and bill pages. A ready-made briefing per debate is still to do |
 | ✓ **"Ask about this"** in the source panel: a follow-up question about one speech or speaker | S | Done |
 | ✓ **Sources only** button: show the balanced evidence set without writing a briefing | S | Done |
@@ -117,10 +117,10 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | Item | Effort | What it gives |
 |---|---|---|
 | ✓ **Balance warning**: a note when the evidence is dominated by one party or group | S | Done |
-| **Fill in missing dates of birth** (about 5% of members since 2010) from other sources, with a small corrections file | S | More complete age groupings |
+| ✓ **Fill in missing dates of birth** (about 5% of members since 2010) from other sources, with a small corrections file | S | Partly done: members whose ParlParse record lacks a UK Parliament ID are now matched through their Wikidata item (12 more people, with gender too). About 110 members since 2010, mostly peers, have no Wikidata link at all; a corrections file for them is still to do |
 | ✓ **Glossary page** of parliamentary terms (division, Westminster Hall, urgent question and so on), linked from the source panel | S | Done: /glossary, linked from every vote label and the footer |
 | **Accessibility testing with real users** (screen reader and keyboard users) | M | Automated checks only catch some problems |
-| **Automatic accessibility check in CI**, so new pages stay accessible | S | |
+| ✓ **Automatic accessibility check in CI**, so new pages stay accessible | S | Done: scripts/a11y.mjs runs axe on 24 pages, light and dark, desktop and phone, against the site on sample data |
 
 **Running the site**
 | Item | Effort | What it gives |
@@ -148,7 +148,7 @@ briefing should not imply that it does.
 | ✓ **Name the type of each vote** from its title: second or third reading, reasoned amendment, programme motion, Lords amendments ("ping-pong"), opposition day motion, ten minute rule bill, closure, statutory instrument, money resolution | 1 day | Done: read from the motion before each division and the outcome after it; about 91% of divisions since 2010 get a kind. Shown on bill pages, member pages, timelines and in the source panel, and given to the briefing |
 | ✓ **Plain-English note for each type** in the source panel, for example "a reasoned amendment sets out reasons to decline a bill's second reading; voting against it usually means supporting the bill going forward" | Half a day | Done: shown with each vote and listed in the glossary |
 | ✓ **Briefing rule**: report what a procedural vote was about, never present it as a view on the policy itself; describe free votes as free votes | 2 hours | Done for procedural votes. Free votes cannot yet be told apart in the record (see whipping information) |
-| **Whipping information** (whether a vote was whipped, and how) where TheyWorkForYou Votes records it | 1–2 days | Their coverage is partial; shown only where recorded, with the source named |
+| **Whipping information** (whether a vote was whipped, and how) where TheyWorkForYou Votes records it | 1–2 days | Their coverage is partial; shown only where recorded, with the source named. Their plain-English descriptions of what voting aye or no meant (about 1,600 votes) are now shown and given to briefings; whip data is not in their published files yet |
 | **Wrecking amendments** and similar labels | Not recommended | Calling an amendment "wrecking" is a political judgement. The site would only report it when a speaker in the debate says so, with the citation |
 
 **Money, interests and influence (data interoperability)**
@@ -161,8 +161,8 @@ review before launch is advised.
 
 | Item | Time | Notes |
 |---|---|---|
-| ✓ **Register of Members' Financial Interests** on MP pages: declared jobs, gifts, donations, shareholdings, with dates | 2–3 days | Done for the latest edition (current MPs), from TheyWorkForYou's copy, matched by member ID, with a plain note that a declaration is not wrongdoing. Earlier editions (former MPs, changes over time) still to do |
-| **Declared interests next to speeches**: flag where the speaker had a relevant declared interest on the day | 2 days, after the above | Deciding "relevant" needs care; start with exact category matches and show the register entry, not a judgement |
+| ✓ **Register of Members' Financial Interests** on MP pages: declared jobs, gifts, donations, shareholdings, with dates | 2–3 days | Done for the latest edition (current MPs), from TheyWorkForYou's copy, matched by member ID, with a plain note that a declaration is not wrongdoing. Former MPs show the last edition before they left, collected a few old editions per update. Changes over the past year (new entries and those no longer listed, compared with the edition a year earlier) done |
+| ✓ **Declared interests next to speeches**: flag where the speaker had a relevant declared interest on the day | 2 days, after the above | First step done: where a speaker declared an interest in the speech itself ("I refer the House to my entry in the Register…"), the source shows that sentence in their own words, with a link to their register entries. The site makes no judgement of relevance. Matching speeches to register entries by subject is not planned |
 | **Electoral Commission donations** to MPs and their local parties | 2–3 days | Donations to individual MPs match by name and constituency, so each match needs a confidence check; ambiguous ones are left out |
 | **All-Party Parliamentary Groups**: which groups a member belongs to and who funds the secretariat | 1–2 days | The register is published per edition; needs a small scraper |
 | **Companies House**: directorships of members | 3–5 days | Matching by name is unreliable (many people share names). Only use where the member has declared the company in the register, then link to it. Needs a free API key |
@@ -175,9 +175,9 @@ what committees heard and recommended.
 
 | Item | Time | Notes |
 |---|---|---|
-| **Committee pages**: inquiries, reports and the government's responses, with links | 2–3 days | Parliament's Committees API, open data. No AI cost |
-| **Witness index**: who gave evidence to which inquiry, searchable by organisation | 2 days | From the same API. Shows which organisations are heard most |
-| **Oral evidence transcripts in search and briefings** | 5–8 days | The large item in section A. Different format; witnesses are not members, so they need their own labels |
+| ✓ **Committee pages**: inquiries, reports and the government's responses, with links | 2–3 days | Done: /committees, /committees/<id> and /inquiries/<id>, rebuilt weekly from the Committees API, including how long each government response took |
+| ✓ **Witness index**: who gave evidence to which inquiry, searchable by organisation | 2 days | Done: /witnesses, plus each committee's most-heard organisations and, on MP and peer pages, the sessions where they were a witness |
+| ✓ **Oral evidence transcripts in search and briefings** | 5–8 days | Done: readable (/evidence/<id>) and searchable (on /witnesses) from 2022, collected a few hundred per update, and in briefings as an opt-in setting. Witnesses' answers are matched to the listed witnesses (so the chair's and members' questions are left out) and kept in their own labelled section |
 | **Plain-English summaries of evidence sessions** | 2 days, after the above | About $0.05–0.20 per session, written once and stored |
 | **Recommendation tracking**: each report recommendation, whether the government accepted it, and what happened next | 2–3 weeks | Recommendations and responses are long documents; matching them needs AI and checking by a person. Best done for a few committees first, or in partnership with a research group |
 
@@ -190,11 +190,11 @@ data, which makes this much easier than starting from scratch.
 | Item | Time | Notes |
 |---|---|---|
 | ✓ **Devolution notes**: when a question is about a devolved subject (health, education, most transport, and so on), say so in the briefing, and which nations' policy Westminster decides | 1 day | Done: a hand-kept table (src/hansard/devolution.py) matched to the question's words; the note is shown beside the briefing, not written by AI |
-| **Scottish Parliament** debates, questions and members | 4–6 days | Members, parties and offices from the same mySociety sources |
-| **Senedd** | 4–6 days | Bilingual record; search would cover English and Welsh |
-| **Northern Ireland Assembly** | 3–5 days | Includes the periods when the Assembly was not sitting |
+| ✓ **Scottish Parliament** debates, questions and members | 4–6 days | Done as a first step for all three: /devolved to read each sitting and search the record since 2021, with each member's party and seat on the day, linked to their member pages. Kept apart from Westminster search and briefings for now |
+| ✓ **Senedd** | 4–6 days | Done (English record, including the official translation of Welsh contributions), as above |
+| ✓ **Northern Ireland Assembly** | 3–5 days | Done from 2022, as above |
 | **One common format** for all four, so filters and groupings work the same way | Included above | The site's format is already general; mostly new labels (MSP, MS, MLA) and offices |
-| **Cross-border comparison**: "how did Westminster, Holyrood and the Senedd debate the same issue?" | 2–3 days, after at least one devolved parliament | Builds on the comparisons feature |
+| ✓ **Cross-border comparison**: "how did Westminster, Holyrood and the Senedd debate the same issue?" | 2–3 days, after at least one devolved parliament | Done as a chart: "Across the UK's parliaments" on the Charts page compares how often a subject is raised in all five chambers, as rates. Briefings can now include the devolved parliaments too (Settings → Include → Devolved parliaments), reported by parliament |
 
 ---
 

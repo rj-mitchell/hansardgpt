@@ -12,6 +12,7 @@ Events (all JSON-serialisable) are yielded so the API can stream them:
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date
@@ -106,6 +107,8 @@ class Pipeline:
         self._client = client
         self.today = today
         self._edms = None
+        self._devolved = None
+        self._evidence = None
 
     @property
     def client(self):
@@ -198,7 +201,94 @@ class Pipeline:
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
         edms = self.find_edms(plan, req) if getattr(req.scope, "edms", True) else []
-        return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by, edms)
+        devolved = self.find_devolved(plan, req) if getattr(req.scope, "devolved", False) else []
+        evidence = self.find_evidence(plan, req) if getattr(req.scope, "evidence", False) else []
+        return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by, edms,
+                                                devolved, evidence)
+
+    def find_evidence(self, plan: QueryPlan, req: AskRequest) -> list[dict[str, Any]]:
+        """A few witnesses' answers to committees on the subject (when the reader asks for them): one per session
+        and per organisation, so one inquiry or one body does not fill the evidence."""
+        if plan.speakers or plan.filters.person_ids or plan.compare:
+            return []
+        from hansard.sources.committees import Committees
+        from hansard.sources.evidence import EvidenceStore, witness_for
+        from hansard.sync import committees_path, evidence_path
+        from hansard.votes import keywords
+
+        if not evidence_path(self.settings).exists() or not committees_path(self.settings).exists():
+            return []
+        wanted = 5 if req.mode == "comprehensive" else 3
+        try:
+            if self._evidence is None:
+                self._evidence = (EvidenceStore(evidence_path(self.settings)), Committees(committees_path(self.settings)))
+            store, committees = self._evidence
+            turns = store.relevant(keywords(plan.search_text))
+            sessions = committees.sessions_meta({t["session_id"] for t in turns})
+        except Exception:  # never let the committee record break a briefing
+            log.exception("committee evidence unavailable")
+            return []
+        lo = plan.filters.date_from and plan.filters.date_from.isoformat()
+        hi = plan.filters.date_to and plan.filters.date_to.isoformat()
+        out: list[dict[str, Any]] = []
+        used_sessions: set[int] = set()
+        used_bodies: set[str] = set()
+        for t in turns:
+            s = sessions.get(t["session_id"])
+            if not s or not s.get("date") or t["session_id"] in used_sessions:
+                continue
+            if (lo and s["date"] < lo) or (hi and s["date"] > hi):
+                continue
+            w = witness_for(t["speaker"], s["witnesses"])
+            body = (w or {}).get("organisation") or (w or {}).get("name")
+            if not w or (body or "").lower() in used_bodies:
+                continue
+            used_sessions.add(t["session_id"])
+            used_bodies.add((body or "").lower())
+            text, kept = "", []
+            for para in t["text"].split("\n\n"):  # whole paragraphs, to about 2,500 characters
+                if kept and len(text) + len(para) > 2500:
+                    break
+                kept.append(para)
+                text = "\n\n".join(kept)
+            out.append({**t, "text": text, "witness": w, "date": s["date"], "committees": s.get("committees"),
+                        "inquiry": s.get("inquiry"), "inquiry_id": s.get("inquiry_id"), "url": s.get("url")})
+            if len(out) >= wanted:
+                break
+        return out
+
+    def find_devolved(self, plan: QueryPlan, req: AskRequest) -> list[dict[str, Any]]:
+        """A few contributions from each devolved parliament on the subject (when the reader asks for them)."""
+        if plan.speakers or plan.filters.person_ids or plan.compare:
+            return []
+        from hansard.devolved import LEGISLATURES, DevolvedStore, Members
+        from hansard.people import person_number
+        from hansard.sync import devolved_path
+        from hansard.votes import keywords
+
+        path = devolved_path(self.settings)
+        if not path.exists():
+            return []
+        try:
+            if self._devolved is None:
+                self._devolved = (DevolvedStore(path), Members(self.settings.parlparse_dir / "members" / "people.json"))
+            store, members = self._devolved
+            found = store.relevant(keywords(plan.search_text),
+                                   date_from=plan.filters.date_from and plan.filters.date_from.isoformat(),
+                                   date_to=plan.filters.date_to and plan.filters.date_to.isoformat(),
+                                   per_body=3 if req.mode == "comprehensive" else 2)
+        except Exception:  # never let the devolved record break a briefing
+            log.exception("devolved parliaments unavailable")
+            return []
+        for d in found:
+            cfg = LEGISLATURES[d["legislature"]]
+            on = members.on(d["person_id"], cfg["org"], d["date"])
+            number = person_number(d["person_id"]) if d["person_id"] else None
+            name = on.get("name") or d["speaker"]
+            d["body"] = cfg["name"]
+            d["member"] = {**on, "name": name, "number": number,
+                           "slug": re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") if number else None}
+        return found
 
     def find_edms(self, plan: QueryPlan, req: AskRequest) -> list[dict[str, Any]]:
         """A few early day motions on the subject, with signatures counted by party on the day (when collected)."""
@@ -273,7 +363,9 @@ class Pipeline:
         yield {"type": "sources", "sources": [s.card() for s in sources], "candidates": result.candidates,
                "semantic": result.semantic_available,
                "evidence": {**evidence_summary(result.records, divisions), "devolution": notes_for(plan.question),
-                            "edms": sum(1 for s in sources if s.kind == "edm")}}
+                            "edms": sum(1 for s in sources if s.kind == "edm"),
+                            "devolved": sum(1 for s in sources if s.kind == "devolved"),
+                            "committee_evidence": sum(1 for s in sources if s.kind == "evidence")}}
 
         if not sources or (result.no_records and not divisions):
             yield {"type": "final", "answer": {"segments": [{"text": NO_RECORDS + " The archive contains no "

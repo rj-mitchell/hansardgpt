@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -113,6 +114,21 @@ def group_label(speaker: dict[str, Any] | None, group_by: str = "role") -> str:
     return GROUPS[speaker_group(speaker)]
 
 
+# A speaker's own declaration in the record, e.g. "I refer the House to my entry in the Register of Members'
+# Financial Interests" or "I declare an interest as a member of Unite": first person only, never about someone else.
+_DECLARED = re.compile(
+    r"(?:^|(?<=[.?!]\s))[^.?!]*?\b(?:I|We)\b[^.?!]{0,60}?(?:"
+    r"\b(?:declare|declaring)\b[^.?!]{0,20}?\b(?:an?|my|our)\b[^.?!]{0,80}?\b(?:interests?|[Rr]egister)\b"
+    r"|\b(?:refer|referring|draw|drawing|remind|direct)\b[^.?!]{0,80}?\b(?:my|our)\b[^.?!]{0,60}?"
+    r"\b(?:entry|entries|interests?|[Rr]egister)\b)[^.?!]*[.?!]?")
+
+
+def declared_interest(text: str) -> str | None:
+    """The sentence in which the speaker declared an interest, as they said it (None if they did not)."""
+    m = _DECLARED.search(text or "")
+    return " ".join(m.group(0).split()) if m else None
+
+
 def record_source(n: int, r: dict[str, Any], facets: set[str] | bool = False, group_by: str = "role") -> Source:
     ref = f"col. {r['colnum']}" if r.get("colnum") else (f"UIN {r['uin']}" if r.get("uin") else "")
     heading = r.get("heading") or r.get("minor_heading") or r.get("major_heading") or ""
@@ -144,6 +160,7 @@ def record_source(n: int, r: dict[str, Any], facets: set[str] | bool = False, gr
         "text": r["text"],
         "context": r.get("context"),
         "ranking": r.get("ranking"),
+        "declared": declared_interest(r["text"]),
     }
     return Source(n, "record", title, url, blocks, meta)
 
@@ -188,10 +205,53 @@ def edm_source(n: int, e: dict[str, Any]) -> Source:
     return Source(n, "edm", title, f"/edms/{e['id']}", blocks, meta)
 
 
+def devolved_source(n: int, d: dict[str, Any]) -> Source:
+    """A contribution in a devolved parliament: kept apart from Westminster, labelled with its parliament."""
+    sp = d.get("member") or {}
+    who = sp.get("name") or d.get("speaker") or "A member"
+    about = ", ".join(x for x in (sp.get("party"), sp.get("seat")) if x)
+    heading = " — ".join(x for x in (d.get("major"), d.get("minor")) if x)
+    title = " — ".join(x for x in (f"{who} ({about})" if about else who, d["body"], _fmt_date(d["date"]), heading) if x)
+    blocks = [f"{d['body']}, {_fmt_date(d['date'])}{f' — {heading}' if heading else ''}. {who}"
+              f"{f' ({about})' if about else ''}, a member of the {d['body']} (not of the UK Parliament):",
+              *[p for p in d["text"].split("\n\n") if p.strip()]]
+    meta = {"date": d["date"], "chamber": d["body"], "legislature": d["legislature"], "heading": heading,
+            "member": {"name": who, "party": sp.get("party"), "seat": sp.get("seat"),
+                       "number": sp.get("number"), "slug": sp.get("slug")},
+            "text": "\n\n".join(blocks), "group": d["body"], "official_url": d.get("url"),
+            "speaker_name_raw": d.get("speaker")}
+    return Source(n, "devolved", title, f"/devolved/{d['legislature']}/{d['key']}#s{d['ord']}", blocks, meta)
+
+
+def evidence_source(n: int, e: dict[str, Any]) -> Source:
+    """A witness's answer in a committee evidence session: labelled as evidence to a committee, not a view of
+    Parliament."""
+    w = e["witness"]
+    about = ", ".join(x for x in (w.get("role"), w.get("organisation")) if x)
+    who = f"{w['name']} ({about})" if about else w["name"]
+    committee = e.get("committees") or "a parliamentary committee"
+    where = f"oral evidence to the {committee}" if not committee.lower().startswith("the ") else \
+        f"oral evidence to {committee}"
+    title = " — ".join(x for x in (who, where[0].upper() + where[1:], _fmt_date(e["date"]), e.get("inquiry")) if x)
+    blocks = [f"{where[0].upper() + where[1:]}, {_fmt_date(e['date'])}"
+              f"{', inquiry: ' + e['inquiry'] if e.get('inquiry') else ''}. {who}, a witness answering the "
+              "committee's questions (evidence to a committee, not a view of Parliament):",
+              *[p for p in e["text"].split("\n\n") if p.strip()]]
+    meta = {"date": e["date"], "chamber": "Committee evidence", "committee": committee, "inquiry": e.get("inquiry"),
+            "inquiry_id": e.get("inquiry_id"), "session_id": e["session_id"], "witness": w,
+            "text": "\n\n".join(blocks), "group": "Committee evidence", "official_url": e.get("url"),
+            "speaker_name_raw": e.get("speaker")}
+    return Source(n, "evidence", title, f"/evidence/{e['session_id']}#t{e['ord']}", blocks, meta)
+
+
 def build_sources(records: list[dict[str, Any]], divisions: list[dict[str, Any]],
                   facets: set[str] | bool = False, group_by: str = "role",
-                  edms: list[dict[str, Any]] | None = None) -> list[Source]:
+                  edms: list[dict[str, Any]] | None = None,
+                  devolved: list[dict[str, Any]] | None = None,
+                  evidence: list[dict[str, Any]] | None = None) -> list[Source]:
     out = [record_source(i, r, facets, group_by) for i, r in enumerate(records, 1)]
     out += [division_source(len(out) + i, d) for i, d in enumerate(divisions, 1)]
     out += [edm_source(len(out) + i, e) for i, e in enumerate(edms or [], 1)]
+    out += [devolved_source(len(out) + i, d) for i, d in enumerate(devolved or [], 1)]
+    out += [evidence_source(len(out) + i, e) for i, e in enumerate(evidence or [], 1)]
     return out

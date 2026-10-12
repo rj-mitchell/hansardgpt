@@ -22,6 +22,11 @@ def test_member_and_party_timelines(indexed_settings, tmp_path):
     assert body["said"] >= 1 and dates == sorted(dates)
     said = next(i for i in body["items"] if i["kind"] == "said")
     assert said["excerpt"] and said["url"] and said["heading"]
+    if body["votes"]:  # a member's votes on the topic, summed up
+        s = body["vote_summary"]
+        assert s["aye"] + s["no"] <= body["votes"] and s["against_party"] <= body["votes"]
+    else:
+        assert body["vote_summary"] is None
 
     body = client.get(f"/api/timeline?party={party}&q=trial+by+jury").json()
     assert body["said"] >= 1 and all(i.get("speaker") for i in body["items"] if i["kind"] == "said")

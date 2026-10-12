@@ -60,7 +60,7 @@ export interface Rebel {
 
 export interface SourceCard {
   n: number;
-  kind: "record" | "division" | "edm";
+  kind: "record" | "division" | "edm" | "devolved" | "evidence";
   title: string;
   url: string;
   date: string;
@@ -98,6 +98,16 @@ export interface SourceCard {
   sponsor?: { name: string | null; party: string | null; number?: number | null; slug?: string | null };
   party_counts?: [string, number][];
   sponsors_count?: number | null;
+  // devolved parliaments
+  legislature?: string;
+  member?: { name: string | null; party: string | null; seat: string | null; number?: number | null; slug?: string | null };
+  declared?: string | null; // the speaker's own declaration of an interest, as said
+  // oral evidence to committees
+  committee?: string;
+  inquiry?: string | null;
+  inquiry_id?: number | null;
+  session_id?: number;
+  witness?: { name: string; organisation: string | null; role: string | null };
 }
 
 /** What a division was on, read from the motion and outcome recorded around it. */
@@ -107,6 +117,9 @@ export interface VoteType {
   note: string;
   question: string;
   outcome: string;
+  title?: string;
+  aye_means?: string;
+  no_means?: string;
 }
 
 export interface Filters {
@@ -173,6 +186,8 @@ export interface Scope {
   pbc: boolean;
   votes: boolean;
   edms?: boolean;
+  devolved?: boolean;
+  evidence?: boolean;
 }
 
 export interface Settings {
@@ -196,6 +211,8 @@ export interface Evidence {
   imbalance?: { party: string; count: number; total: number } | null;
   devolution?: { subject: string; name: string; text: string }[];
   edms?: number;
+  devolved?: number;
+  committee_evidence?: number;
   tenure?: Record<string, number>;
   majority_bands?: Record<string, number>;
 }

@@ -7,11 +7,18 @@ export interface InterestItem {
   published: string | null;
   children: InterestItem[];
 }
+interface Change {
+  category: string;
+  summary: string;
+}
+
 export interface Interests {
   edition: string | null;
   source: string | null;
   official: string;
   listed: boolean;
+  former?: boolean;
+  changes?: { since: string; added: Change[]; removed: Change[] };
   categories: { type: string; name: string; items: InterestItem[] }[];
 }
 
@@ -63,17 +70,22 @@ export function InterestsSection({ interests, name, isMP }: { interests: Interes
     <section aria-labelledby="h-interests">
       <h2 id="h-interests">Registered interests</h2>
       <p>
-        {interests.listed && total > 0
-          ? `${name} has ${total} entr${total === 1 ? "y" : "ies"} in the Register of Members' Financial Interests`
-          : `${name} has no entries in the Register of Members' Financial Interests`}
-        {interests.edition ? `, as published on ${fmtDate(interests.edition)}` : ""}.
+        {interests.former
+          ? `When ${name} left the Commons, they had ${total} entr${total === 1 ? "y" : "ies"} in the Register of ` +
+            `Members' Financial Interests (the last edition before they left, published ${interests.edition ? fmtDate(interests.edition) : ""}).`
+          : `${
+              interests.listed && total > 0
+                ? `${name} has ${total} entr${total === 1 ? "y" : "ies"} in the Register of Members' Financial Interests`
+                : `${name} has no entries in the Register of Members' Financial Interests`
+            }${interests.edition ? `, as published on ${fmtDate(interests.edition)}` : ""}.`}
       </p>
       <p className="muted small">
         MPs must register their jobs and earnings, donations, gifts, visits abroad, property and shareholdings. These
         are declarations, shown as registered: an entry is not a finding of wrongdoing, and being listed here does not
-        mean an interest influenced anything the member said or did. Donors' addresses are left out. Read the{" "}
+        mean an interest influenced anything the member said or did. Addresses listed separately are left out. Read the{" "}
         <a href={interests.official}>official register</a>.
       </p>
+      {interests.changes && <Changes changes={interests.changes} />}
       {interests.categories.map((c) => (
         <details key={c.type + c.name} className="interest-category">
           <summary>
@@ -87,5 +99,49 @@ export function InterestsSection({ interests, name, isMP }: { interests: Interes
         </details>
       ))}
     </section>
+  );
+}
+
+function ChangeList({ items }: { items: Change[] }) {
+  return (
+    <ul className="interests">
+      {items.map((c, k) => (
+        <li key={k} className="interest">
+          <p className="interest-summary">{c.summary}</p>
+          <p className="muted small">{c.category}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** What is listed now but was not a year earlier, and the reverse, compared by wording. */
+function Changes({ changes }: { changes: NonNullable<Interests["changes"]> }) {
+  const { added, removed, since } = changes;
+  if (added.length === 0 && removed.length === 0) {
+    return <p className="small">No entries have been added or removed since the edition of {fmtDate(since)}.</p>;
+  }
+  return (
+    <details className="interest-category">
+      <summary>
+        Changes since {fmtDate(since)}: {added.length} new, {removed.length} no longer listed
+      </summary>
+      <p className="muted small">
+        Compared by wording with the edition published on {fmtDate(since)}, so an entry whose wording was updated
+        appears in both lists. Entries usually leave the register a year after registration or when the interest ends.
+      </p>
+      {added.length > 0 && (
+        <>
+          <h3>New entries</h3>
+          <ChangeList items={added} />
+        </>
+      )}
+      {removed.length > 0 && (
+        <>
+          <h3>No longer listed</h3>
+          <ChangeList items={removed} />
+        </>
+      )}
+    </details>
   );
 }

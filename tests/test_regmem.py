@@ -72,3 +72,81 @@ def test_details_are_tidied():
         "addresses and repeated values are left out"
     plain = parse(FIXTURE.read_bytes())["members"]["uk.org.publicwhip/person/10777"]["categories"][0]["items"][0]
     assert plain["summary"] == "Older-style entry written as plain text."
+
+
+OLD = Path(__file__).parent / "fixtures" / "regmem" / "regmem2016-09-05.xml"
+FORMER = "uk.org.publicwhip/person/99999"
+
+
+def test_older_editions_are_read():
+    cats = parse(OLD.read_bytes())["members"][FORMER]["categories"]
+    visit = cats[0]["items"][0]
+    assert visit["summary"] == "Name of donor: Example Foundation"
+    assert ["Estimate of the probable value", "£1,500"] in visit["details"]
+    assert not [n for n, _ in visit["details"] if "address" in n.lower()], "address lines are left out"
+    assert cats[1]["items"][0] == {"summary": "Trustee of an example charity.", "details": [],
+                                   "registered": "2 May 2015", "published": None, "children": []}
+
+
+def test_former_members_get_the_last_edition_before_they_left(tmp_path):
+    from hansard.sources.regmem import refresh_history
+
+    files = {"regmem2016-09-05.xml": OLD.read_bytes(), "regmem2026-09-21.xml": FIXTURE.read_bytes()}
+    fetched: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.rsplit("/", 1)[1]
+        if not name:
+            return httpx.Response(200, text=" ".join(f'<a href="{n}"></a>' for n in files))
+        fetched.append(name)
+        return httpx.Response(200, content=files[name])
+
+    latest = tmp_path / "regmem.json"
+    refresh(latest, httpx.Client(transport=httpx.MockTransport(handler)))
+    hist = tmp_path / "regmem_history.json"
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    out = refresh_history(hist, {FORMER: "2016-09-12"}, client=client, sleep=lambda _s: None)
+    assert out["former_members"] == 1 and fetched[-1] == "regmem2016-09-05.xml"
+    page = Register(latest).for_person(FORMER)
+    assert page["former"] and page["edition"] == "2016-09-05" and page["categories"]
+    fetched.clear()
+    assert refresh_history(hist, {FORMER: "2016-09-12"}, client=client)["editions_fetched"] == 0
+    assert fetched == [], "nothing is fetched again once known"
+
+
+def test_changes_since_the_edition_a_year_earlier(tmp_path):
+    import copy
+    import json
+
+    from hansard.sources.regmem import refresh_previous
+
+    files = {"regmem2025-09-01.xml": b"", "regmem2025-09-29.xml": b"", "regmem2026-09-21.xml": FIXTURE.read_bytes()}
+    fetched: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.rsplit("/", 1)[1]
+        if not name:
+            return httpx.Response(200, text=" ".join(f'<a href="{n}"></a>' for n in files))
+        fetched.append(name)
+        return httpx.Response(200, content=FIXTURE.read_bytes())
+
+    latest = tmp_path / "regmem.json"
+    refresh(latest, httpx.Client(transport=httpx.MockTransport(handler)))
+    previous = tmp_path / "regmem_previous.json"
+    fetched.clear()
+    out = refresh_previous(previous, "2026-09-21", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert out == {"edition": "2025-09-01", "updated": True} and fetched == ["regmem2025-09-01.xml"], \
+        "the newest edition at least a year older"
+    assert not refresh_previous(previous, "2026-09-21",
+                                client=httpx.Client(transport=httpx.MockTransport(handler)))["updated"]
+
+    assert Register(latest).for_person(BENN)["changes"] == {"since": "2025-09-01", "added": [], "removed": []}
+    data = json.loads(previous.read_text())
+    cats = copy.deepcopy(data["members"][BENN]["categories"])
+    gone = cats[0]["items"].pop(0)
+    cats[0]["items"].append({**gone, "summary": "An old job"})
+    data["members"][BENN]["categories"] = cats
+    previous.write_text(json.dumps(data))
+    ch = Register(latest).for_person(BENN)["changes"]
+    assert ch["added"] == [{"category": cats[0]["name"], "summary": gone["summary"]}]
+    assert ch["removed"] == [{"category": cats[0]["name"], "summary": "An old job"}]

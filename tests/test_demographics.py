@@ -198,3 +198,26 @@ def test_sources_are_listed_under_the_grouping_asked_for(resolver):
     assert group_label(greening, "age") == "Aged 40 to 54 on the day"
     assert group_label(None, "age") == "Age not known"
     assert group_label(greening) == "Government ministers"
+
+
+def test_a_member_missing_their_parliament_id_is_matched_by_wikidata_item(tmp_path):
+    import json
+    import shutil
+
+    from hansard.reference.build import build_reference
+
+    from .conftest import BENN, DEMOGRAPHICS, GEO_CSV, MEMBERS
+
+    members = tmp_path / "members"
+    shutil.copytree(MEMBERS, members)
+    people = json.loads((members / "people.json").read_text())
+    for p in people["persons"]:
+        if p["id"] == BENN:
+            p["identifiers"] = [i for i in p["identifiers"] if i["scheme"] != "datadotparl_id"]
+    (members / "people.json").write_text(json.dumps(people))
+    demo = load_demographics(DEMOGRAPHICS)
+    without = build_reference(members, GEO_CSV, demographics=demo)
+    assert next(p for p in without.persons if p["person_id"] == BENN)["birth_date"] is None
+    demo["births"]["413"] = {**demo["births"]["413"], "qid": "Q262742"}
+    benn = next(p for p in build_reference(members, GEO_CSV, demographics=demo).persons if p["person_id"] == BENN)
+    assert benn["datadotparl_id"] == "413" and benn["gender"] == "M" and str(benn["birth_date"]) == "1953-11-26"

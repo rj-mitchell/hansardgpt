@@ -54,6 +54,10 @@ export function EvidenceBar({
         {years ? `, ${years}` : ""}
         {evidence.divisions ? `, plus ${evidence.divisions} division${evidence.divisions === 1 ? "" : "s"}` : ""}
         {evidence.edms ? ` and ${evidence.edms} early day motion${evidence.edms === 1 ? "" : "s"}` : ""}
+        {evidence.devolved ? `, and ${evidence.devolved} from the devolved parliaments` : ""}
+        {evidence.committee_evidence
+          ? `, and ${evidence.committee_evidence} witness answer${evidence.committee_evidence === 1 ? "" : "s"} to committees`
+          : ""}
       </p>
       {evidence.imbalance && (
         <p className="evidence-warning">

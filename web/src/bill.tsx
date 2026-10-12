@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import "./pages";
 import { VoteKind, VoteKindKey } from "./components/VoteKind";
 import { fmtDate } from "./render";
+import { stageQuestion } from "./stage";
 import type { VoteType } from "./types";
 
 interface Sitting {
@@ -36,6 +37,7 @@ interface BillData {
 }
 
 const HOUSE: Record<string, string> = { commons: "Commons", lords: "Lords" };
+
 
 function Bill({ slug }: { slug: string }) {
   const [b, setB] = useState<BillData | null>(null);
@@ -89,6 +91,12 @@ function Bill({ slug }: { slug: string }) {
             <p className="timeline-head">{s.stages.join("; ")}</p>
             <p className="timeline-excerpt small">
               {s.contributions} contribution{s.contributions === 1 ? "" : "s"}
+              {s.contributions > 0 && (
+                <>
+                  {" · "}
+                  <a href={`/?q=${encodeURIComponent(stageQuestion(b.name, s))}`}>Ask about this stage</a>
+                </>
+              )}
               {s.path ? (
                 <>
                   {" · "}

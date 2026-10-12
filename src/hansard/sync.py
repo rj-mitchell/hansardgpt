@@ -93,6 +93,18 @@ def refresh_demographics_data(settings: Settings, fetch: bool = True) -> tuple[d
     return load_demographics(demographics_path(settings)), status
 
 
+def evidence_path(settings: Settings) -> Path:
+    return settings.data_dir / "evidence.sqlite"
+
+
+def devolved_path(settings: Settings) -> Path:
+    return settings.data_dir / "devolved.sqlite"
+
+
+def committees_path(settings: Settings) -> Path:
+    return settings.data_dir / "committees.sqlite"
+
+
 def regmem_path(settings: Settings) -> Path:
     return settings.data_dir / "regmem.json"
 
@@ -221,12 +233,73 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
         t = time.time()
         if fetch and settings.section("interests").get("enabled", True):
             try:  # the Register of Members' Financial Interests: a new edition every two weeks or so
-                from hansard.sources.regmem import refresh
+                import duckdb
 
-                stats["interests"] = {**refresh(regmem_path(settings)), "seconds": round(time.time() - t, 1)}
+                from hansard.reference.profiles import attach_reference
+                from hansard.sources.regmem import (
+                    former_members,
+                    refresh,
+                    refresh_history,
+                    refresh_previous,
+                )
+
+                stats["interests"] = refresh(regmem_path(settings))
+                # the edition from a year earlier, to show what changed
+                stats["interests"]["previous"] = refresh_previous(
+                    regmem_path(settings).with_name("regmem_previous.json"), stats["interests"].get("edition"))
+                con = duckdb.connect()
+                attach_reference(con, settings.reference_dir)
+                # former MPs: the last edition before they left, a few old editions per run
+                stats["interests"]["history"] = refresh_history(regmem_path(settings).with_name("regmem_history.json"),
+                                                                former_members(con))
+                stats["interests"]["seconds"] = round(time.time() - t, 1)
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("register of interests not updated: %s", exc)
                 stats["interests"] = {"error": str(exc)[:200]}
+
+        t = time.time()
+        if fetch and settings.section("devolved").get("enabled", True):
+            try:  # the Scottish Parliament, the Senedd and the Northern Ireland Assembly: a few dozen files a run
+                from hansard.devolved import SINCE, DevolvedStore, sync_devolved
+
+                since = settings.section("devolved").get("since")
+                stats["devolved"] = {**sync_devolved(DevolvedStore(devolved_path(settings)),
+                                                     since=date.fromisoformat(since) if since else SINCE,
+                                                     max_files=int(settings.section("devolved").get("files_per_run", 60))),
+                                     "seconds": round(time.time() - t, 1)}
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("devolved parliaments not updated: %s", exc)
+                stats["devolved"] = {"error": str(exc)[:200]}
+
+        t = time.time()
+        if fetch and settings.section("committees").get("enabled", True):
+            try:  # select committees, their reports and who gave evidence: rebuilt about once a week
+                from hansard.sources.committees import refresh as refresh_committees
+
+                stats["committees"] = {**refresh_committees(committees_path(settings)),
+                                       "seconds": round(time.time() - t, 1)}
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("committees not updated: %s", exc)
+                stats["committees"] = {"error": str(exc)[:200]}
+            t = time.time()
+            try:  # oral evidence transcripts, a few hundred per run (needs the committee data above)
+                import sqlite3
+
+                from hansard.sources.evidence import SINCE as EVIDENCE_SINCE
+                from hansard.sources.evidence import EvidenceStore, sync_transcripts
+
+                if committees_path(settings).exists():
+                    with sqlite3.connect(committees_path(settings)) as cc:
+                        sessions = cc.execute("SELECT id, date FROM sessions").fetchall()
+                    since = settings.section("committees").get("transcripts_since")
+                    stats["transcripts"] = {**sync_transcripts(
+                        EvidenceStore(evidence_path(settings)), sessions,
+                        since=date.fromisoformat(since) if since else EVIDENCE_SINCE,
+                        max_sessions=int(settings.section("committees").get("transcripts_per_run", 300))),
+                        "seconds": round(time.time() - t, 1)}
+            except Exception as exc:
+                log.warning("committee transcripts not updated: %s", exc)
+                stats["transcripts"] = {"error": str(exc)[:200]}
 
         t = time.time()
         if fetch and settings.section("edms").get("enabled", True):
@@ -240,6 +313,13 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                 stats["edms"] = {"error": str(exc)[:200]}
 
         t = time.time()
+        if fetch:
+            try:  # plain-English descriptions of some votes, from TheyWorkForYou Votes (weekly)
+                from hansard.sources.twfy_votes import refresh as refresh_descriptions
+
+                stats["vote_descriptions"] = refresh_descriptions(settings.data_dir / "raw" / "twfy_divisions.parquet")
+            except Exception as exc:
+                log.warning("vote descriptions not updated: %s", exc)
         try:  # what each vote was on (amendment, second reading and so on), used across the site
             from hansard.vote_types import vote_types
 

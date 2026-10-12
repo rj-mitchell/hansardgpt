@@ -79,6 +79,18 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
           <span className="att">
             <b>Division {s.number}</b> {s.major_heading}
           </span>
+        ) : s.kind === "devolved" ? (
+          <span className="att">
+            <b>{s.member?.name}</b>
+            {s.member && (s.member.party || s.member.seat) ? ` (${[s.member.party, s.member.seat].filter(Boolean).join(", ")})` : ""}
+          </span>
+        ) : s.kind === "evidence" ? (
+          <span className="att">
+            <b>{s.witness?.name}</b>
+            {s.witness && (s.witness.role || s.witness.organisation)
+              ? ` (${[s.witness.role, s.witness.organisation].filter(Boolean).join(", ")})`
+              : ""}
+          </span>
         ) : s.kind === "edm" ? (
           <span className="att">
             <b>{s.uin ? `EDM ${s.uin}` : "Early day motion"}</b> {s.edm_title}
@@ -88,6 +100,7 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
         )}
         {roles.length > 0 && <span className="role">{roles.join("; ")}</span>}
         {seat && <span className="seat">{seat}</span>}
+        {s.declared && <span className="seat">Declared an interest when speaking</span>}
         <span className="where">
           <time dateTime={s.date}>{fmtDate(s.date)}</time> · {s.chamber}
           {s.heading ? ` · ${s.heading}` : ""}
@@ -154,6 +167,10 @@ export function SourceDrawer({
             ? `Division ${source.number}`
             : source.kind === "edm"
               ? `Early day motion${source.uin ? ` ${source.uin}` : ""}`
+              : source.kind === "devolved"
+                ? (source.member?.name ?? "A member")
+              : source.kind === "evidence"
+                ? (source.witness?.name ?? "A witness")
               : speakerLine(sp, source.speaker_name_raw)}
         </h2>
         <button type="button" className="close" onClick={onClose} aria-label="Close source">
@@ -166,6 +183,10 @@ export function SourceDrawer({
       <div className="drawer-body">
         {source.kind === "edm" ? (
           <EdmDetail source={source} quotes={quotes} />
+        ) : source.kind === "devolved" ? (
+          <DevolvedDetail source={source} quotes={quotes} />
+        ) : source.kind === "evidence" ? (
+          <EvidenceDetail source={source} quotes={quotes} />
         ) : (
           <>
         <dl className="facts">
@@ -196,6 +217,23 @@ export function SourceDrawer({
               )}
               <dt>Role on {fmtDate(source.date)}</dt>
               <dd>{roleTitles(sp).length ? roleTitles(sp).join("; ") : "Backbencher (no ministerial or committee-chair post)"}</dd>
+              {source.declared && (
+                <>
+                  <dt>Declared an interest</dt>
+                  <dd>
+                    “{source.declared}”{" "}
+                    <span className="muted small">
+                      (in their own words)
+                      {sp?.house === "commons" && sp.person_id && (
+                        <>
+                          {" · "}
+                          <a href={`/people/${sp.person_id.split("/").pop()}#h-interests`}>Their registered interests</a>
+                        </>
+                      )}
+                    </span>
+                  </dd>
+                </>
+              )}
               {sp?.house === "commons" && sp.majority_then && (
                 <>
                   <dt>Majority then</dt>
@@ -373,7 +411,7 @@ function DivisionDetail({ source }: { source: SourceCard }) {
       <p>
         <strong>{[source.major_heading, source.minor_heading].filter(Boolean).join(" — ")}</strong>
       </p>
-      {source.vote_type && source.vote_type.kind !== "other" && (
+      {source.vote_type && (
         <p className="small">
           <VoteKind vt={source.vote_type} detail />
         </p>
@@ -463,6 +501,95 @@ function EdmDetail({ source, quotes }: { source: SourceCard; quotes: string[] })
       <AboutRecord source={source} />
       <section className="verbatim" aria-label="Text of the motion">
         {(source.motion_text ?? "").split("\n\n").map((para, i) => (
+          <p key={i}>
+            {highlightParts(para, quotes).map((part, j) =>
+              part.hit ? <mark key={j}>{part.text}</mark> : <span key={j}>{part.text}</span>,
+            )}
+          </p>
+        ))}
+      </section>
+    </>
+  );
+}
+
+/** A contribution in a devolved parliament: who, their party and seat on the day, and their words. */
+function DevolvedDetail({ source, quotes }: { source: SourceCard; quotes: string[] }) {
+  const m = source.member;
+  const words = source.text.split("\n\n").slice(1);
+  return (
+    <>
+      <dl className="facts">
+        <dt>Member</dt>
+        <dd>{m?.number && m.slug ? <a href={`/people/${m.number}/${m.slug}`}>{m.name}</a> : (m?.name ?? "—")}</dd>
+        <dt>Party</dt>
+        <dd>{m?.party ?? "—"}</dd>
+        <dt>Seat</dt>
+        <dd>{m?.seat ?? "—"}</dd>
+        <dt>Where</dt>
+        <dd>
+          {source.chamber}, {fmtDate(source.date)}
+          {source.heading ? ` — ${source.heading}` : ""}
+        </dd>
+        <dt>Links</dt>
+        <dd className="links">
+          <a href={source.url}>The whole sitting on this site</a>
+          {source.official_url && (
+            <a href={source.official_url} target="_blank" rel="noreferrer">
+              The official report
+            </a>
+          )}
+        </dd>
+      </dl>
+      <AboutRecord source={source} />
+      <section className="verbatim" aria-label="Verbatim text">
+        {words.map((para, i) => (
+          <p key={i}>
+            {highlightParts(para, quotes).map((part, j) =>
+              part.hit ? <mark key={j}>{part.text}</mark> : <span key={j}>{part.text}</span>,
+            )}
+          </p>
+        ))}
+      </section>
+    </>
+  );
+}
+
+/** A witness's answer to a committee: who they are, which committee and inquiry, and their words. */
+function EvidenceDetail({ source, quotes }: { source: SourceCard; quotes: string[] }) {
+  const w = source.witness;
+  const words = source.text.split("\n\n").slice(1);
+  return (
+    <>
+      <dl className="facts">
+        <dt>Witness</dt>
+        <dd>{w?.name ?? "—"}</dd>
+        <dt>Role</dt>
+        <dd>{[w?.role, w?.organisation].filter(Boolean).join(", ") || "—"}</dd>
+        <dt>Committee</dt>
+        <dd>
+          {source.committee}, {fmtDate(source.date)}
+        </dd>
+        {source.inquiry && (
+          <>
+            <dt>Inquiry</dt>
+            <dd>
+              {source.inquiry_id ? <a href={`/inquiries/${source.inquiry_id}`}>{source.inquiry}</a> : source.inquiry}
+            </dd>
+          </>
+        )}
+        <dt>Links</dt>
+        <dd className="links">
+          <a href={source.url}>The whole transcript on this site</a>
+          {source.official_url && (
+            <a href={source.official_url} target="_blank" rel="noreferrer">
+              The session on Parliament's website
+            </a>
+          )}
+        </dd>
+      </dl>
+      <AboutRecord source={source} />
+      <section className="verbatim" aria-label="Verbatim text">
+        {words.map((para, i) => (
           <p key={i}>
             {highlightParts(para, quotes).map((part, j) =>
               part.hit ? <mark key={j}>{part.text}</mark> : <span key={j}>{part.text}</span>,

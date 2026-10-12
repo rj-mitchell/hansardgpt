@@ -9,6 +9,10 @@ import httpx
 from hansard.sources.edms import EdmStore, normalise_edm, normalise_sponsors, sync_edms
 
 
+def NO_WAIT(_seconds: float) -> None:
+    return None
+
+
 def motion(i: int, title: str, tabled: str, mnis: int = 4514, **extra) -> dict:
     return {"Id": i, "UIN": str(i), "Title": title, "MotionText": f"That this House notes {title.lower()}.",
             "DateTabled": f"{tabled}T00:00:00", "Status": "Published", "StatusDate": f"{tabled}T00:00:00",
@@ -57,7 +61,7 @@ def test_sync_search_and_member_summary(tmp_path):
     motions = [motion(1, "Rail fares in the North", "2024-01-10"), motion(2, "Bus services", "2023-11-02", mnis=172),
                motion(3, "Amendment on rail", "2024-01-15", AmendmentToMotionId=1)]
     store = EdmStore(tmp_path / "edms.sqlite")
-    stats = sync_edms(store, today=date(2024, 2, 1), months_per_run=6, client=fake_api(motions))
+    stats = sync_edms(store, today=date(2024, 2, 1), months_per_run=6, sleep=NO_WAIT, client=fake_api(motions))
     assert stats["total"] == 3 and stats["signatures"] == 6 and stats["unrecognised"] == 0
     assert store.search("rail")[0] == 2 and store.search("buses services")[0] == 0
     total, rows = store.search("bus")
@@ -67,7 +71,7 @@ def test_sync_search_and_member_summary(tmp_path):
     mine = store.member_summary(172)
     assert mine["tabled"] == 1 and mine["signed"] == 0, "a withdrawn signature does not count"
     # a second run: older months already done are not fetched again, and nothing is duplicated
-    again = sync_edms(store, today=date(2024, 2, 1), months_per_run=6, client=fake_api(motions))
+    again = sync_edms(store, today=date(2024, 2, 1), months_per_run=6, sleep=NO_WAIT, client=fake_api(motions))
     assert again["total"] == 3 and store.search("rail")[0] == 2
 
 
@@ -84,7 +88,7 @@ def test_pages_and_api(indexed_settings, tmp_path):
         client = TestClient(app)
         assert client.get("/api/edms").json()["available"] is False, "before the first sync"
         store = EdmStore(path)
-        sync_edms(store, today=date(2024, 2, 1), months_per_run=3,
+        sync_edms(store, today=date(2024, 2, 1), months_per_run=3, sleep=NO_WAIT,
                   client=fake_api([motion(1, "Hospice funding", "2024-01-10")]))
         listing = client.get("/api/edms", params={"q": "hospice"}).json()
         assert listing["total"] == 1 and listing["items"][0]["sponsor"]["name"] == "Ann Example"
@@ -108,7 +112,7 @@ def test_motions_join_the_evidence_for_a_briefing(indexed_settings):
 
     path = edms_path(indexed_settings)
     try:
-        sync_edms(EdmStore(path), today=date(2024, 2, 1), months_per_run=3,
+        sync_edms(EdmStore(path), today=date(2024, 2, 1), months_per_run=3, sleep=NO_WAIT,
                   client=fake_api([motion(1, "Hospice funding crisis", "2024-01-10"),
                                    motion(2, "Bus services", "2024-01-12")]))
         p = Pipeline(indexed_settings, Engine(indexed_settings, embedder=HashingEmbedder(64)))
@@ -124,3 +128,27 @@ def test_motions_join_the_evidence_for_a_briefing(indexed_settings):
     finally:
         for suffix in ("", "-wal", "-shm"):
             path.with_name(path.name + suffix).unlink(missing_ok=True)
+
+
+def test_slowing_down_when_parliament_asks(tmp_path):
+    waits: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/EarlyDayMotions/list":
+            return httpx.Response(200, json={"PagingInfo": {"Total": 1},
+                                             "Response": [motion(1, "Rail fares", "2024-01-10")]})
+        return httpx.Response(429, headers={"Retry-After": "7"})
+
+    store = EdmStore(tmp_path / "edms.sqlite")
+    stats = sync_edms(store, today=date(2024, 2, 1), months_per_run=1, sleep=waits.append,
+                      client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert stats["rate_limited"] and stats["total"] == 1, "the motions are kept; signatures wait for next time"
+    assert 7 in waits, "the wait Parliament asks for is respected"
+    assert stats["signatures_still_to_fetch"] == 1
+
+
+def test_signature_count_follows_the_names(tmp_path):
+    store = EdmStore(tmp_path / "edms.sqlite")
+    sync_edms(store, today=date(2024, 2, 1), months_per_run=3, sleep=NO_WAIT,
+              client=fake_api([motion(1, "Rail fares", "2024-01-10", SponsorsCount=0)]))
+    assert store.get(1)["sponsors_count"] == 1, "one current signature; the withdrawn one is not counted"

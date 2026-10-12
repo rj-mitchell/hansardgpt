@@ -5,7 +5,7 @@ import "./pages";
 import { Timeline } from "./components/Timeline";
 import { EdmList, type EdmRow } from "./components/EdmList";
 import { type Interests, InterestsSection } from "./components/Interests";
-import { VoteKind } from "./components/VoteKind";
+import { hasVoteKind, VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
 import type { VoteType } from "./types";
 
@@ -58,6 +58,12 @@ interface PersonData {
   } | null;
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
   interests?: Interests | null;
+  devolved?: {
+    memberships: { legislature: string; body: string; member: string; seat: string | null; party: string | null; start: string; end: string | null }[];
+    counts: Record<string, number>;
+    recent: { legislature: string; key: string; date: string; ord: number; major: string | null; excerpt: string }[];
+  } | null;
+  committee_evidence?: { id: number; date: string | null; role: string | null; committees: string | null; inquiry: string | null; url: string }[];
 }
 
 const BAND: Record<string, string> = { marginal: "marginal seat", middle: "majority 10% to 20%", safe: "safe seat" };
@@ -217,7 +223,7 @@ function Person({ number }: { number: string }) {
                 {p.voting.recent_rebellions.map((r) => (
                   <li key={r.date + r.title}>
                     {fmtDate(r.date)}: <a href={r.twfy_url}>{r.title || "Division"}</a>
-                    {r.vote_type && r.vote_type.kind !== "other" && (
+                    {hasVoteKind(r.vote_type) && (
                       <>
                         {" "}
                         (<VoteKind vt={r.vote_type} />)
@@ -230,6 +236,63 @@ function Person({ number }: { number: string }) {
             </>
           )}
           <p className="muted small">{p.voting.method}</p>
+        </section>
+      )}
+
+      {p.devolved && (
+        <section aria-labelledby="h-devolved">
+          <h2 id="h-devolved">In the devolved parliaments</h2>
+          <ul>
+            {p.devolved.memberships.map((m, k) => (
+              <li key={k}>
+                {m.member} for {m.seat ?? "an unknown seat"} ({m.body}){m.party ? `, ${m.party}` : ""}{" "}
+                <span className="muted small">
+                  ({fmtDate(m.start)} – {m.end ? fmtDate(m.end) : "now"})
+                </span>
+              </li>
+            ))}
+          </ul>
+          {p.devolved.recent.length > 0 && (
+            <>
+              <h3>Recent contributions</h3>
+              <ol className="contributions">
+                {p.devolved.recent.map((c) => (
+                  <li key={`${c.key}-${c.ord}`}>
+                    <p className="muted small">
+                      {fmtDate(c.date)}
+                      {c.major ? ` · ${c.major}` : ""}
+                    </p>
+                    <p>{c.excerpt.length >= 320 ? `${c.excerpt.trimEnd()}…` : c.excerpt}</p>
+                    <p className="small">
+                      <a href={`/devolved/${c.legislature}/${c.key}#s${c.ord}`}>Read it in the sitting</a>
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+          <p className="muted small">
+            Collected since 2021; see <a href="/devolved">devolved parliaments</a>.
+          </p>
+        </section>
+      )}
+
+      {p.committee_evidence && p.committee_evidence.length > 0 && (
+        <section aria-labelledby="h-evidence">
+          <h2 id="h-evidence">Evidence to committees</h2>
+          <p className="muted small">Sessions where {p.name} answered a committee's questions as a witness, most recent first.</p>
+          <ul className="edm-list">
+            {p.committee_evidence.map((s) => (
+              <li key={s.id}>
+                <a href={s.url} target="_blank" rel="noreferrer">
+                  {s.date ? fmtDate(s.date) : "Session"}
+                </a>
+                : {s.committees}
+                {s.inquiry ? ` · ${s.inquiry}` : ""}
+                {s.role && <span className="muted small"> ({s.role})</span>}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

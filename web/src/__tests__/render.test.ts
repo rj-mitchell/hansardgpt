@@ -115,3 +115,18 @@ describe("demoteHeadings", () => {
     expect(demoteHeadings("<header>ok</header>")).toBe("<header>ok</header>");
   });
 });
+
+describe("stageQuestion", () => {
+  it("asks about one sitting of a bill, naming the stage, House and date", async () => {
+    const { stageQuestion } = await import("../stage");
+    expect(stageQuestion("Rail Bill", { date: "2024-03-05", house: "commons", stages: ["Second reading"] })).toBe(
+      "What arguments were made at the second reading of the Rail Bill in the House of Commons on 5 March 2024?",
+    );
+    expect(stageQuestion("Rail Bill", { date: "2024-03-05", house: "lords", stages: ["Debate"] })).toBe(
+      "What arguments were made on the Rail Bill in the House of Lords on 5 March 2024?",
+    );
+    expect(stageQuestion("Rail Bill", { date: "2024-03-05", house: "commons", stages: ["Public Bill Committee"] })).toContain(
+      "at the Public Bill Committee of",
+    );
+  });
+});

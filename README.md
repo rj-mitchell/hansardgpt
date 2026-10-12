@@ -29,6 +29,18 @@ which groups. If the archive has nothing relevant, the tool says **"No records f
 > Status: v1, covering May 2010 (the 2010 general election) to today. Commons, Lords, Westminster Hall, written
 > answers and statements (both Houses), Public Bill Committees and every division (vote).
 
+Besides briefings, the site has free pages built from the record (no AI):
+
+* **MPs and peers**: roles, seats and majorities, recent contributions, voting record and rebellions, registered
+  financial interests, early day motions, evidence given to committees, and an RSS feed of what they say.
+* **Debates** in full, **This week** in Parliament, **Bills** (every sitting and vote), **Charts** of how often a
+  subject is raised (by party, House, nation, or across all five UK parliaments), **Compare** and **Timelines**.
+* **Every vote explained**: its kind (amendment, second reading, programme motion…) read from the record, with a
+  neutral note on what voting either way means, and mySociety's plain-English descriptions where they exist.
+* **Early day motions** and who signed them; **Committees**, their reports, the government's responses and who gave
+  evidence; the **devolved parliaments** (Scottish Parliament, Senedd, NI Assembly) to read and search.
+* A **glossary**, RSS feeds, a documented search **API** (`/developers`), Word and PDF downloads, and embed codes.
+
 ---
 
 ## Contents
@@ -327,6 +339,10 @@ The authority multiplier `m` depends on the speaker's role on the date of the re
   under the Open Parliament Licence v3.0.
 * **Members, offices and committees:** [mysociety/parlparse](https://github.com/mysociety/parlparse)
   `members/`, comprising `people.json`, `ministers-2010.json` and `posts/westminster-parliament-posts.json`.
+* **Early day motions and committees:** the UK Parliament [oral questions and motions](https://oralquestionsandmotions-api.parliament.uk/)
+  and [Committees](https://committees-api.parliament.uk/) APIs, under the Open Parliament Licence v3.0.
+* **Register of Members' Financial Interests, devolved parliaments and vote descriptions:** TheyWorkForYou's
+  published data (`pwdata/scrapedxml/regmem`, `sp-new`, `senedd`, `ni`, `pwdata/votes`), with thanks to mySociety.
 * **Constituency → region:** ONS (Dec 2021 constituency names and codes) and mySociety's
   [2025-constituencies](https://github.com/mysociety/2025-constituencies) data, under the Open Government
   Licence v3.0. The vendored lookup in `data_static/geo/` is rebuilt by `scripts/build_geo_lookups.py`.
