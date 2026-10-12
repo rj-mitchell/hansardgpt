@@ -86,3 +86,29 @@ def test_devolved_registers_from_theyworkforyou(tmp_path):
     assert regs[0]["member_word"] == "MSP" and regs[0]["categories"]
     assert regs[0]["changes"] == {"since": "2025-09-01", "added": [], "removed": []}
     assert Registers(tmp_path).for_person("uk.org.publicwhip/person/1") == []
+
+
+def test_members_missing_from_a_partial_edition_are_kept(tmp_path):
+    from lxml import etree
+
+    root = etree.fromstring(FIXTURE.read_bytes())
+    partial = etree.fromstring(FIXTURE.read_bytes())
+    for rm in partial.findall("regmem"):
+        if rm.get("personid") == BENN:
+            partial.remove(rm)
+    files = {"regmem2026-09-07.xml": etree.tostring(root), "regmem2026-09-21.xml": etree.tostring(partial)}
+    listing = {"n": 1}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.rsplit("/", 1)[1]
+        if not name:
+            shown = sorted(files)[: listing["n"]]
+            return httpx.Response(200, text=" ".join(f'<a href="{f}"></a>' for f in shown))
+        return httpx.Response(200, content=files[name])
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    refresh_devolved(tmp_path, client=client)
+    listing["n"] = 2  # a newer, partial edition appears
+    out = refresh_devolved(tmp_path, client=client)
+    assert out["senedd"]["kept_from_earlier"] == 1
+    assert [r["register"] for r in Registers(tmp_path).for_person(BENN)][:1] == ["scottish-parliament"]

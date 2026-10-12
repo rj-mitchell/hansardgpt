@@ -113,7 +113,7 @@ def parse(xml: bytes) -> dict[str, Any]:
             if items:
                 cats.append({"type": cat.get("type") or "", "name": cat.get("name") or "", "items": items})
         cats.sort(key=lambda c: _category_key(c["type"]))
-        members[pid] = {"name": rm.get("membername"), "categories": cats}
+        members[pid] = {"name": rm.get("membername"), "categories": cats, "date": rm.get("date")}
     return {"edition": edition, "members": members}
 
 

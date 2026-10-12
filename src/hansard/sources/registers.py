@@ -196,7 +196,21 @@ def refresh_devolved(data_dir: Path, *, client: httpx.Client | None = None) -> d
             continue
         try:
             path = path_for(data_dir, key)
+            try:
+                before = json.loads(path.read_text()).get("members") or {} if path.exists() else {}
+            except (OSError, ValueError):
+                before = {}
             stats = regmem.refresh(path, client=client, base=cfg["base"])
+            if stats.get("updated") and before:
+                # some editions list only some members: keep the others as last published (each has its date)
+                data = json.loads(path.read_text())
+                kept = {pid: m for pid, m in before.items() if pid not in data["members"]}
+                if kept:
+                    data["members"].update(kept)
+                    stats["kept_from_earlier"] = len(kept)
+                    tmp = path.with_suffix(".tmp")
+                    tmp.write_text(json.dumps(data))
+                    tmp.replace(path)
             stats["previous"] = regmem.refresh_previous(path.with_name(path.stem + "_previous.json"),
                                                         stats.get("edition"), client=client, base=cfg["base"])
             out[key] = stats
@@ -238,7 +252,8 @@ class Registers:
             if m is None:
                 continue
             entry = {"register": key, "register_name": cfg["name"], "member_word": cfg["member"],
-                     "body": cfg["body"], "edition": data.get("edition"), "source": data.get("source"),
+                     "body": cfg["body"], "edition": m.get("date") or data.get("edition"),
+                     "source": data.get("source"),
                      "official": cfg["official"], "listed": True, "former": False,
                      "categories": clean(m["categories"])}
             if key == "lords":
