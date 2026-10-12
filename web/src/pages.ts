@@ -3,6 +3,7 @@ import "@fontsource-variable/source-serif-4/opsz.css";
 import "@fontsource-variable/source-serif-4/opsz-italic.css";
 import "./styles.css";
 import { api } from "./api";
+import { setUpNavMore } from "./navMore";
 import { fmtDate } from "./render";
 
 void api.hit(window.location.pathname, document.referrer);
@@ -28,6 +29,7 @@ void showDonate();
 for (const a of document.querySelectorAll<HTMLAnchorElement>(".page-nav a")) {
   if (a.pathname === window.location.pathname.replace(/\.html$/, "")) a.setAttribute("aria-current", "page");
 }
+setUpNavMore();
 
 interface Status {
   archive_start: string;

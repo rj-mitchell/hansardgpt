@@ -13,7 +13,8 @@ import { ATTRIBUTION } from "./attribution";
 import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
-import { NAV } from "./nav";
+import { SiteFooter } from "./components/SiteFooter";
+import { MORE, NAV } from "./nav";
 import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
@@ -358,7 +359,8 @@ export default function App() {
         </p>
         <div className="running-head">
           <span>
-            Debates, written answers and divisions{meta ? ` · ${meta.archive_start.slice(0, 4)} to date` : ""}
+            Parliament's record{meta ? ` since ${meta.archive_start.slice(0, 4)}` : ""}: debates, questions, statements,
+            votes, bills, committees and members' interests
           </span>
           <span className="masthead-actions">
             <nav className="page-nav" aria-label="Site">
@@ -367,6 +369,16 @@ export default function App() {
                   {n.label}
                 </a>
               ))}
+              <details className="nav-more">
+                <summary>More</summary>
+                <div className="nav-more-list">
+                  {MORE.map((n) => (
+                    <a key={n.href} href={n.href}>
+                      {n.label}
+                    </a>
+                  ))}
+                </div>
+              </details>
             </nav>
             <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
               Settings
@@ -546,41 +558,12 @@ export default function App() {
 
       <SourceDrawer source={drawerSource} quotes={drawer?.h.quotes ?? []} onClose={() => setDrawer(null)} />
 
-      <footer className="footer full-width">
-        <p className="independence">{BRAND.independence}</p>
+      <SiteFooter donateUrl={meta?.donate_url} attribution={meta?.attribution ?? ATTRIBUTION}>
         <p className="print-only">
           From {BRAND.name} (beta), wheretheystand.uk. Briefings are written by AI from the cited Hansard records; check the
           sources.
         </p>
-        <nav className="footer-nav" aria-label="About this site">
-          <a href="/about">About</a>
-          <a href="/topics">Topics</a>
-          <a href="/timeline">Timelines</a>
-          <a href="/bills">Bills</a>
-          <a href="/charts">Charts</a>
-          <a href="/compare">Compare</a>
-          <a href="/methodology">Methodology</a>
-          <a href="/resources">Other resources</a>
-          <a href="/changelog">Changelog</a>
-          <a href="/status">Status</a>
-          <a href="/corrections">Corrections</a>
-          <a href="/corrections#report">Report a problem</a>
-          <a href="/accessibility">Accessibility</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/terms">Terms</a>
-          <a href="https://github.com/rj-mitchell/hansardgpt">Source code</a>
-          {meta?.donate_url && <a href={meta.donate_url}>Support this site</a>}
-        </nav>
-        <p className="licence">
-          Briefings are licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>; see the{" "}
-          <a href="/terms">terms</a> for reuse.
-        </p>
-        {(meta?.attribution ?? ATTRIBUTION).map((a) => (
-          <a key={a.url} href={a.url} target="_blank" rel="noreferrer">
-            {a.text}
-          </a>
-        ))}
-      </footer>
+      </SiteFooter>
     </div>
   );
 }
