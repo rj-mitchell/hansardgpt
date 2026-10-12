@@ -197,6 +197,8 @@ uv run hansard serve                  # open http://127.0.0.1:8000
 
 ## Running it on a server
 
+**Loose ends to chase:** [docs/FOLLOW_UP.md](docs/FOLLOW_UP.md) lists checks and emails that need a person.
+
 **Step-by-step guide:** [docs/HOSTING.md](docs/HOSTING.md) covers ordering a server (written for a Hostkey VPS in
 London), pointing the domains at it, and running the setup.
 
