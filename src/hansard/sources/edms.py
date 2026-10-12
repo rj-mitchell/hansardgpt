@@ -324,9 +324,10 @@ def _save(store: EdmStore, items: list[dict[str, Any]]) -> int:
     return n
 
 
-def sync_edms(store: EdmStore, *, today: date | None = None, months_per_run: int = 36, sponsors_per_run: int = 1000,
-              client: httpx.Client | None = None, sleep=time.sleep) -> dict[str, Any]:
-    """Recent changes, then some older months, then signatures. Returns counts for the sync log.
+def sync_edms(store: EdmStore, *, today: date | None = None, months_per_run: int = 36, sponsors_per_run: int = 6000,
+              sponsors_seconds: float = 900, client: httpx.Client | None = None, sleep=time.sleep) -> dict[str, Any]:
+    """Recent changes, then some older months, then signatures (up to ``sponsors_seconds`` of them). Returns counts
+    for the sync log.
 
     Requests go one at a time with a short pause. If Parliament keeps asking us to slow down, the run stops early
     and the next update carries on where it left off."""
@@ -357,7 +358,10 @@ def sync_edms(store: EdmStore, *, today: date | None = None, months_per_run: int
             if end < today - timedelta(days=60):  # recent months stay open: signatures still arrive
                 store.month_done(m.strftime("%Y-%m"))
             stats["months"] += 1
+        started = time.monotonic()
         for eid in store.needing_sponsors(sponsors_per_run):
+            if time.monotonic() - started > sponsors_seconds:  # the rest at the next update
+                break
             items = _items(_get(client, f"/EarlyDayMotion/{eid}", sleep=sleep))
             sponsors = normalise_sponsors(items[0]) if items else None
             if sponsors is not None:

@@ -22,7 +22,6 @@ import logging
 import re
 import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -57,32 +56,44 @@ GENERAL_ELECTIONS = [date.fromisoformat(d) for d in (
     "2024-07-04")]
 
 
-def _get(client: httpx.Client, path: str, tries: int = 3) -> Any:
+PAUSE = 0.2           # seconds between requests: one at a time, as Parliament's services ask
+BUDGET_SECONDS = 300  # per update; whatever is left is fetched at the next one
+
+
+class Throttled(Exception):
+    """Parliament asked us to slow down (429): stop now, keep what was fetched, carry on next update."""
+
+
+def _get(client: httpx.Client, path: str, tries: int = 3, sleep=time.sleep) -> Any:
     for attempt in range(tries):
         try:
             resp = client.get(f"{API}{path}")
+            if resp.status_code == 429:
+                raise Throttled(path)
             if resp.status_code == 404:
                 return None
             resp.raise_for_status()
-            return resp.json()
+            body = resp.json()
+            sleep(PAUSE)
+            return body
         except httpx.HTTPError:
             if attempt == tries - 1:
                 raise
-            time.sleep(1 + attempt * 2)
+            sleep(1 + attempt * 2)
     return None
 
 
-def fetch_representations(client: httpx.Client, member_id: str) -> list[dict[str, Any]]:
+def fetch_representations(client: httpx.Client, member_id: str, sleep=time.sleep) -> list[dict[str, Any]]:
     """The Commons seats a member has held: [{"id", "name", "start", "end"}]."""
-    body = _get(client, f"/Members/{member_id}/Biography")
+    body = _get(client, f"/Members/{member_id}/Biography", sleep=sleep)
     reps = ((body or {}).get("value") or {}).get("representations") or []
     return [{"id": r["id"], "name": r["name"], "start": r["startDate"][:10],
              "end": (r.get("endDate") or "")[:10] or None} for r in reps if r.get("house") == 1 and r.get("id")]
 
 
-def fetch_results(client: httpx.Client, constituency_id: int) -> list[dict[str, Any]]:
+def fetch_results(client: httpx.Client, constituency_id: int, sleep=time.sleep) -> list[dict[str, Any]]:
     """Every real (not notional) election result for a constituency, oldest first."""
-    body = _get(client, f"/Location/Constituency/{constituency_id}/ElectionResults")
+    body = _get(client, f"/Location/Constituency/{constituency_id}/ElectionResults", sleep=sleep)
     out = []
     for r in (body or {}).get("value") or []:
         if r.get("isNotional"):
@@ -95,43 +106,93 @@ def fetch_results(client: httpx.Client, constituency_id: int) -> list[dict[str, 
 
 
 def refresh_elections(cache: Path, member_ids: list[str], *, force: bool = False, client: httpx.Client | None = None,
-                      workers: int = 4) -> dict[str, Any]:
-    """Update the cache if it is over a week old (or missing). Keeps the previous copy on any failure."""
-    if cache.exists() and not force:
+                      budget_seconds: float = BUDGET_SECONDS, sleep=time.sleep, now=None) -> dict[str, Any]:
+    """Bring the cached seats and results up to date, a few minutes' worth per update.
+
+    First anyone the copy has never looked up (the record grew), then, once a week, the sitting MPs and their seats
+    (by-elections and general elections change those; history does not). Requests go one at a time; on the first
+    request to slow down, or when the time is up, what was fetched is saved and the next update carries on."""
+    now = now or (lambda: datetime.now(UTC))
+    old: dict[str, Any] = {}
+    if cache.exists():
         try:
             old = json.loads(cache.read_text())
-            fetched = datetime.fromisoformat(old["fetched_at"])
-            # fresh unless a week old, or members are asked for that the copy never looked up (the record grew)
-            if datetime.now(UTC) - fetched < REFRESH and set(member_ids) <= set(old.get("requested") or []):
-                return {"status": "fresh"}
-        except (OSError, ValueError, KeyError):
-            pass
+        except (OSError, ValueError):
+            old = {}
+    reps: dict[str, list] = dict(old.get("representations") or {})
+    results: dict[str, list] = dict(old.get("results") or {})
+    requested = set(old.get("requested") or [])
+    try:
+        fetched = datetime.fromisoformat(old["fetched_at"])
+    except (KeyError, TypeError, ValueError):
+        fetched = None
+    cycle = old.get("cycle")  # the weekly refresh in progress: {"members": [...], "seats": [...]} still to do
+    if cycle is None and (force or fetched is None or now() - fetched >= REFRESH):
+        sitting = sorted(m for m, rs in reps.items() if m in set(member_ids) and any(r.get("end") is None for r in rs))
+        cycle = {"members": sitting, "seats": sorted({str(r["id"]) for m in sitting for r in reps[m]
+                                                       if r.get("end") is None})}
+    new_members = [m for m in member_ids if m not in requested]
+    if not new_members and not cycle:
+        return {"status": "fresh"}
+
     own = client is None
     client = client or httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=True)
+    started, done, stopped = time.monotonic(), 0, None
+
+    def time_up() -> bool:
+        return time.monotonic() - started > budget_seconds
+
     try:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            reps = dict(zip(member_ids, pool.map(lambda m: fetch_representations(client, m), member_ids),
-                            strict=True))
-            seat_ids = sorted({r["id"] for rs in reps.values() for r in rs})
-            results = dict(zip([str(i) for i in seat_ids], pool.map(lambda c: fetch_results(client, c), seat_ids),
-                               strict=True))
+        for m in new_members:
+            if time_up():
+                break
+            reps[m] = fetch_representations(client, m, sleep)
+            requested.add(m)
+            done += 1
+        for c in sorted({str(r["id"]) for rs in reps.values() for r in rs} - set(results)):  # seats never fetched
+            if time_up():
+                break
+            results[c] = fetch_results(client, int(c), sleep)
+            done += 1
+        while cycle and cycle["members"] and not time_up():
+            m = cycle["members"][0]
+            reps[m] = fetch_representations(client, m, sleep)
+            cycle["members"].pop(0)
+            done += 1
+        while cycle and cycle["seats"] and not time_up():
+            c = cycle["seats"][0]
+            results[c] = fetch_results(client, int(c), sleep)
+            cycle["seats"].pop(0)
+            done += 1
+    except Throttled as exc:
+        stopped = f"Parliament asked us to slow down ({exc})"
     except Exception as exc:  # network trouble: keep what we have
-        log.warning("could not refresh election results (%s); keeping the previous copy", exc)
-        return {"status": "failed", "error": repr(exc)}
+        stopped = repr(exc)
     finally:
         if own:
             client.close()
-    if not any(results.values()):
-        return {"status": "failed", "error": "no results returned"}
+    if done == 0 and stopped:
+        log.warning("could not refresh election results (%s); keeping the previous copy", stopped)
+        return {"status": "failed", "error": stopped}
+    finished_cycle = cycle is not None and not cycle["members"] and not cycle["seats"]
+    remaining = (len([m for m in member_ids if m not in requested])
+                 + len({str(r["id"]) for rs in reps.values() for r in rs} - set(results))
+                 + (len(cycle["members"]) + len(cycle["seats"]) if cycle else 0))
     cache.parent.mkdir(parents=True, exist_ok=True)
     tmp = cache.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"fetched_at": datetime.now(UTC).isoformat(timespec="seconds"), "source": SOURCE,
-                               "requested": sorted(member_ids),
-                               "representations": {k: v for k, v in reps.items() if v}, "results": results},
-                              sort_keys=True))
+    tmp.write_text(json.dumps({
+        "fetched_at": now().isoformat(timespec="seconds") if finished_cycle or fetched is None
+        else old.get("fetched_at"),
+        "source": SOURCE, "requested": sorted(requested),
+        "representations": {k: v for k, v in reps.items() if v}, "results": results,
+        **({"cycle": cycle} if cycle and not finished_cycle else {})}, sort_keys=True))
     tmp.replace(cache)
-    return {"status": "updated", "members": sum(1 for v in reps.values() if v), "seats": len(seat_ids),
-            "results": sum(len(v) for v in results.values())}
+    out = {"status": "updated" if not remaining else "partial", "requests": done, "remaining": remaining,
+           "seats": len(results), "results": sum(len(v) for v in results.values())}
+    if stopped:
+        log.info("election results: %d fetched, %d left for the next update (%s)", done, remaining, stopped)
+        out["stopped"] = stopped
+    return out
 
 
 def seat_key(name: str) -> str:
