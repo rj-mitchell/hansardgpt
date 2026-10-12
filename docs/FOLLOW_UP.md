@@ -4,49 +4,35 @@ Loose ends that need a person (an email, a decision or a check). Tick them off o
 
 ## Next time you are at a computer, in order
 
-- [ ] **1. Install the latest version.** Merge
+*Done 12 October: installing the 1997 version, the off-site backup, the admin page, loading the new data and the
+licence checks.*
+
+- [ ] **1. Install the latest version** (company roles). Merge
   <https://github.com/rj-mitchell/hansardgpt/compare/main...claude/hansard-parliament-engine-review-7veaif>, then on
   the server: `bash /opt/hansardgpt/deploy/update.sh`
-- [ ] **1a. Load the 1997–2010 records (once, right after installing).** The site now covers from May 1997.
-  The twice-daily update fetches the older years by itself, so this only starts it now instead of at 07:15 or
-  19:15. On the server:
-  `sudo systemctl start --no-block hansard-sync.service`
-  - To watch it: `journalctl -u hansard-sync -f` (press Ctrl+C to stop watching; the update carries on).
-  - It downloads about 4–5 GB and takes a few hours. Searching by words covers the older years as soon as it
-    ends. Search by meaning fills in over the next few days (newest first), a few hours per update.
-  - Until it finishes, the pages already say "1997" but searches only find records from 2010.
-- [ ] **2. Turn on the off-site backup** (Backblaze B2: bucket and key already made). On the server, run the command
-  under "Setting up the off-site copy" in [HOSTING.md](HOSTING.md#backups). It asks for the bucket name, keyID and
-  applicationKey, and hides the key as you paste it. Then check:
-  `cd /opt/hansardgpt/deploy && docker compose run --rm -T app hansard offsite` should say `"ok": true`, and
-  `docker compose run --rm -T app hansard backup --to /backups` should end "Off-site copy: stored in …".
-- [ ] **3. Set up the admin page.**
-  - Your admin token was created when the server was set up. To see it, on the server:
-    `grep ^HANSARD_ADMIN_TOKEN= /opt/hansardgpt/deploy/.env | cut -d= -f2`
-  - Save it in your password manager. Don't send it to anyone, Claude included.
-  - Open <https://wheretheystand.uk/admin> and paste the token. The page shows:
-    - spending, and warnings (including failed backups);
-    - reports from readers, feedback and visits;
-    - recent briefings, with "Feature" buttons, and topic briefings;
-    - the update history.
-  - The page forgets the token when you close the browser tab, so paste it each time, ideally from the password
-    manager.
-  - If the command prints nothing (the token is missing), create one and restart the site:
-    `cd /opt/hansardgpt/deploy && sed -i '/^HANSARD_ADMIN_TOKEN=/d' .env && echo "HANSARD_ADMIN_TOKEN=$(openssl rand -hex 24)" >> .env && docker compose up -d`
-    Then run the first command again to see it.
-- [ ] **4. Load the new data now** rather than waiting for the weekly update. All of this is free. On the server, in
-  `/opt/hansardgpt/deploy`:
-  - `docker compose exec app hansard donations` (about a minute)
-  - `docker compose exec app hansard groups` (seconds)
-  - `docker compose exec -d app hansard interests --lords` (about 15 minutes, in the background)
-  - Optional, slower:
-    - `docker compose exec -d app hansard committees` (about two hours)
-    - `docker compose exec -d app hansard devolved --files 2000` (about an hour)
-    - `docker compose exec -d app hansard edms --months 200 --signatures 25000` (4–5 hours)
-    - `docker compose exec -d app hansard whips --count 20000` (checks every vote for a whip report in one
-      go, about 3–4 hours; otherwise the updates do it 1,500 votes at a time over a week or two)
-- [ ] **5. Click-check the links to other sites** (see below).
-- [ ] **6. The two licence checks below** (Electoral Commission and TheyWorkForYou Votes).
+- [ ] **2. Make a Companies House API key** (free). At
+  <https://developer.company-information.service.gov.uk/>, sign in with your Companies House account, then:
+  - "Your applications" → "Create an application". Name: Where They Stand. Description: "Shows MPs' and peers'
+    company roles on wheretheystand.uk". Environment: **Live**. Save.
+  - In the application, "Create new key" → key type **REST**. Leave "restricted IPs" and "JavaScript domains"
+    empty. Save, and copy the key it shows.
+- [ ] **3. Put the key on the server.** Run this; it asks for the key without showing it, saves it in the server's
+  settings file and restarts the site:
+
+  ```
+  cd /opt/hansardgpt/deploy && read -rsp "Companies House API key: " K && echo && sed -i -e '/^HANSARD_COMPANIES_HOUSE_KEY=/d' -e '$a\' .env && printf 'HANSARD_COMPANIES_HOUSE_KEY=%s\n' "$K" >> .env && unset K && docker compose up -d
+  ```
+
+  Don't paste the key anywhere else, Claude included.
+- [ ] **4. Try it on 20 members:** `cd /opt/hansardgpt/deploy && docker compose exec app hansard directorships --count 20`
+  - It should end with `"checked": 20`. If it says the key was refused, make the key again (step 2) and repeat
+    step 3.
+  - Then `docker compose exec app hansard directorships --show "a"` lists what it found for those 20. Paste that
+    output to Claude if you'd like the matches checked; it contains no key.
+- [ ] **5. Look up everyone now**, rather than a few hundred members per update over a week or two (free; about
+  2–3 hours, in the background):
+  `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard directorships --count 4000`
+- [ ] **6. Click-check the links to other sites** (see below), and the new "Company roles" links on an MP's page.
 
 The server must be able to reach these sites:
 - `search.electoralcommission.org.uk`
@@ -55,6 +41,7 @@ The server must be able to reach these sites:
 - `api.backblazeb2.com`, plus Backblaze's upload addresses (`*.backblazeb2.com`)
 - `www.theyworkforyou.com` and `data.theyworkforyou.com` (already used for the record)
 - `votes.theyworkforyou.com` (whip reports)
+- `api.company-information.service.gov.uk` (company roles)
 - `en.wikipedia.org` (dates of birth Wikidata lacks)
 
 If your server places no limits on outgoing connections (the usual case), there is nothing to do.
@@ -73,18 +60,33 @@ If your server places no limits on outgoing connections (the usual case), there 
   - On a peer's page: "official register" under Registered interests (the Register of Lords' Interests).
   - On an MSP's and an MLA's page: "official register" under Registered interests.
 
-## Electoral Commission: confirm the licence for the register of donations
+## Electoral Commission: licence (done)
+
+*Added 12 October 2026; settled the same day.*
+
+- The Commission's licence (at api.electoralcommission.org.uk/terms) is the Open Government Licence v3.0 with some
+  extra conditions. The site now shows the attribution it asks for ("Contains Electoral Commission Information ©
+  Electoral Commission and/or database right") on the donations page, on each MP's donations and in the
+  methodology and ATTRIBUTION.
+- That page is written for the Commission's elections API. Its list of exclusions includes automated extraction
+  ("screen scraping"). The site doesn't scrape: once a week it uses the register's own "Export to CSV" download,
+  one request at a time. If you ever want that confirmed, email the Commission (the contact on the same page)
+  and say: "We download the register of donations once a week with the search site's CSV export and show
+  donations to MPs, credited and linked to each record. Is that within your terms?" Nothing needs doing
+  otherwise.
+
+## Companies House: confirm the terms for company roles
 
 *Added 12 October 2026.*
 
-- **What it is.** The site downloads the Commission's register of donations (search.electoralcommission.org.uk)
-  and shows donations to MPs. The search site states no licence, and the Commission's main website (where its
-  copyright notice is) could not be reached from Claude's environment.
-- **What we assume.** Its content is under the Open Government Licence v3.0, as is usual for UK public bodies; the
-  site credits the Commission and links every donation to its record.
-- **To do.** Open <https://www.electoralcommission.org.uk> and find its copyright or reuse notice (usually linked
-  in the page footer). If it says the Open Government Licence, delete this item. If it says anything else, tell
-  Claude.
+- **What it is.** The site looks up MPs' and peers' company roles through the Companies House public data API (your
+  free key). Claude's environment could not reach the Companies House developer site to read its terms.
+- **What we assume.** The register is public and the API is offered for reuse. The site shows only company names,
+  roles and dates (no addresses, nationality or dates of birth), credits Companies House and links each entry to
+  its record, and stays well under the rate limit (600 requests in five minutes).
+- **To do.** When you make the key, read the terms you are asked to accept. If they say anything about
+  attribution wording, limits on showing officers' details, or not combining the data with other sources, tell
+  Claude. Otherwise delete this item.
 
 ## TheyWorkForYou Votes: licence for the plain-English vote descriptions
 

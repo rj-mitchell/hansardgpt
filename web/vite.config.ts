@@ -61,6 +61,7 @@ export default defineConfig({
         inquiry: here("./inquiry.html"),
         witnesses: here("./witnesses.html"),
         donations: here("./donations.html"),
+        directorships: here("./directorships.html"),
         groups: here("./groups.html"),
         group: here("./group.html"),
         devolved: here("./devolved.html"),

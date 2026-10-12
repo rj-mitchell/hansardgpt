@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import "./pages";
 import { Timeline } from "./components/Timeline";
 import { EdmList, type EdmRow } from "./components/EdmList";
+import { DirectorshipsSection, type MemberDirectorships } from "./components/Directorships";
 import { DonationsSection, type MemberDonations } from "./components/Donations";
 import { GroupsSection, type MemberGroup } from "./components/Groups";
 import { ELSEWHERE, Elsewhere, type Link } from "./elsewhere";
@@ -64,6 +65,7 @@ interface PersonData {
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
   interests?: Interests | null;
   donations?: MemberDonations | null;
+  directorships?: MemberDirectorships | null;
   registers?: Interests[];
   groups?: MemberGroup[];
   devolved?: {
@@ -315,6 +317,7 @@ function Person({ number }: { number: string }) {
         <InterestsSection key={r.register} interests={r} name={p.name} isMP={false} />
       ))}
       {p.donations && <DonationsSection donations={p.donations} name={p.name} />}
+      {p.directorships && <DirectorshipsSection d={p.directorships} name={p.name} />}
       {p.groups && <GroupsSection groups={p.groups} name={p.name} />}
 
       {p.edms && p.edms.tabled + p.edms.signed > 0 && (

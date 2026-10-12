@@ -986,6 +986,20 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 holder["donations"] = Donations(donations_path(settings))
         return holder["donations"]
 
+    def get_directorships():
+        from hansard.sources.companies import Directorships
+        from hansard.sync import directorships_path
+
+        with lock:
+            if "directorships" not in holder:
+                holder["directorships"] = Directorships(directorships_path(settings))
+        return holder["directorships"]
+
+    @app.get("/api/directorships")
+    def directorships_index(q: str = ""):
+        """Members' current company roles at Companies House, by company; ``q`` searches companies and members."""
+        return get_directorships().index(q[:200])
+
     def get_groups():
         from hansard.sources.appgs import Groups
         from hansard.sync import appgs_path
@@ -1264,11 +1278,15 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                                               + (f", {m['party']}" if m["party"] else "")}
         except (OSError, ValueError):
             devolved = None
+        from hansard.sources.companies import mark_declared as _mark_declared
+
+        interests, registers = get_register().for_person(pid), get_registers().for_person(pid)
         return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
                 "devolved": devolved,
-                "interests": get_register().for_person(pid), "registers": get_registers().for_person(pid),
-                "committee_evidence": evidence,
-                "donations": get_donations().for_person(pid), "groups": get_groups().for_person(pid)}
+                "interests": interests, "registers": registers, "committee_evidence": evidence,
+                "donations": get_donations().for_person(pid), "groups": get_groups().for_person(pid),
+                "directorships": _mark_declared(get_directorships().for_person(pid),
+                                               json.dumps([interests, registers], default=str))}
 
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):
