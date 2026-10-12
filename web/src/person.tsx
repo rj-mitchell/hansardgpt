@@ -191,7 +191,7 @@ function Person({ number }: { number: string }) {
           <a href={`/feeds/people/${p.number}.xml`}>Follow what {p.name} says in a feed reader (RSS)</a>
         </p>
         {p.contributions.length === 0 ? (
-          <p className="muted">No contributions in the record since 2010.</p>
+          <p className="muted">No contributions in the record since 1997.</p>
         ) : (
           <ol className="contributions">
             {p.contributions.map((c) => (

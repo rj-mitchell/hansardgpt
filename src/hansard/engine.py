@@ -31,7 +31,6 @@ WRITTEN_SOURCES = {"wrans", "lordswrans", "wms", "lordswms"}
 PBC_SOURCES = {"standing"}
 ORAL_SOURCES = {"debates", "westminhall", "lordspages"}
 GROUP_BY = ("role", "gender", "age", "tenure", "majority")
-ARCHIVE_START = date(2010, 5, 6)
 
 
 @dataclass
@@ -167,7 +166,7 @@ class Engine:
         """
         if not (filters.genders or filters.age_bands or filters.tenure or filters.majority_bands):
             return None, {}
-        clauses, params = ["m.\"end\" >= ?"], [filters.date_from or ARCHIVE_START]
+        clauses, params = ["m.\"end\" >= ?"], [filters.date_from or self.settings.archive_start]
         if filters.tenure or filters.majority_bands:
             clauses.append("m.house = 'commons'")  # first terms and majorities apply to MPs
         if filters.date_to:
@@ -182,7 +181,7 @@ class Engine:
             f"""SELECT DISTINCT p.person_id, p.birth_date, p.birth_precision FROM ref_persons p
                 JOIN ref_memberships m ON m.person_id = p.person_id WHERE {' AND '.join(clauses)}""",
             params).fetchall()
-        lo, hi = filters.date_from or ARCHIVE_START, filters.date_to or (self.today or date.today())
+        lo, hi = filters.date_from or self.settings.archive_start, filters.date_to or (self.today or date.today())
         bands = [b for b in filters.age_bands if b in {k for k, *_ in AGE_BANDS}]
         people: list[str] = []
         births: dict[str, date] = {}

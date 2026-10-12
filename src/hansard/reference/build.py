@@ -367,7 +367,7 @@ def build_reference(
         "election_results": len(ref.election_results),
         "memberships": len(ref.memberships),
         "names": len(ref.names),
-        "unmatched_seats_since_2010": sorted(unmatched_seats),
+        "unmatched_seats": sorted(unmatched_seats),
         **office_stats,
     }
     return ref

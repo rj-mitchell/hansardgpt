@@ -130,8 +130,8 @@ class Pipeline:
     def parties(self) -> list[tuple[str, str]]:
         rows = self.engine.resolver.con.execute(
             """SELECT DISTINCT p.party_id, p.party_name FROM ref_parties p
-               JOIN ref_memberships m ON m.party_id = p.party_id WHERE m."end" >= DATE '2010-05-06'
-               ORDER BY 1""").fetchall()
+               JOIN ref_memberships m ON m.party_id = p.party_id WHERE m."end" >= ?
+               ORDER BY 1""", [self.settings.archive_start]).fetchall()
         return [(r[0], r[1]) for r in rows]
 
     def make_plan(self, req: AskRequest) -> tuple[QueryPlan, dict[str, int] | None]:

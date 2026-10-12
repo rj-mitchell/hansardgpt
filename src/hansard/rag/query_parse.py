@@ -268,12 +268,13 @@ def parse_offline(question: str, region_groups: dict[str, list[str]], today: dat
 # --------------------------------------------------------------------------- model-based
 
 
-def system_prompt(region_groups: dict[str, list[str]], parties: list[tuple[str, str]], today: date) -> str:
+def system_prompt(region_groups: dict[str, list[str]], parties: list[tuple[str, str]], today: date,
+                  start: date = date(1997, 5, 1)) -> str:
     groups = "\n".join(f"- {k}: {', '.join(v)}" for k, v in region_groups.items())
     ports = "\n".join(f"- {k}: {v}" for k, v in PORTFOLIOS.items())
     party_list = ", ".join(f"{pid} ({name})" for pid, name in parties)
     return f"""You convert research questions about the UK Parliament into search filters for a Hansard search engine.
-Today's date is {today.isoformat()}. The archive covers May 2010 to today.
+Today's date is {today.isoformat()}. The archive covers {start:%B %Y} to today.
 
 Rules:
 - Only set a filter when the question clearly asks for it. Never invent constraints.
@@ -345,7 +346,7 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
     resp = client.messages.parse(
         model=parse_model(settings),
         max_tokens=2000,
-        system=cached_system(system_prompt(settings.regions, parties, today)),
+        system=cached_system(system_prompt(settings.regions, parties, today, settings.archive_start)),
         messages=[{"role": "user", "content": f"{convo}Question: {question}"}],
         output_config={"effort": settings.answer.get("query_parse_effort", "low")},
         output_format=ParsedQuery,

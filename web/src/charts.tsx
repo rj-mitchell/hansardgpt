@@ -102,7 +102,7 @@ function Charts() {
       )}
       {error && <p className="form-error" role="alert">{error}</p>}
       {query && !data && !error && <p className="muted" role="status">Counting… this can take a few seconds.</p>}
-      {data && data.series.length === 0 && <p>These words do not appear in the record since 2010. Try other words.</p>}
+      {data && data.series.length === 0 && <p>These words do not appear in the record since 1997. Try other words.</p>}
       {data && data.series.length > 0 && (
         <section aria-labelledby="h-chart">
           <h2 id="h-chart">
@@ -148,7 +148,7 @@ function Charts() {
                 Rises often follow a bill, an event or a debate on a single day; a small group's rate can jump on a
                 handful of contributions, so check the numbers in the table.
               </li>
-              <li>2010 starts in May, at the general election, and the current year is not yet over.</li>
+              <li>1997 starts in May, at the general election, and the current year is not yet over. The Lords record starts in November 1999, Westminster Hall in 2000 and written questions in 2001, so early years count less of the record.</li>
               {data.by === "nation" && <li>Nations are those of MPs' seats; members of the Lords have none and are shown separately.</li>}
               {data.by === "party" && <li>Party is the member's party on the day. Labour includes Labour/Co-operative members.</li>}
               {data.by === "parliaments" && (

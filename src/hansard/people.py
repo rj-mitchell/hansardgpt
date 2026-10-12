@@ -261,9 +261,9 @@ class People:
 
     # ---- finding people ----------------------------------------------------------------------------------------
     def search(self, text: str = "", current_only: bool = True, limit: int = 2000) -> list[dict[str, Any]]:
-        """Members for the people index: current MPs and peers (or anyone since 2010), optionally by name."""
+        """Members for the people index: current MPs and peers (or anyone since the archive starts), optionally by name."""
         where = ['m."end" >= ?' if not current_only else 'm."end" = DATE \'9999-12-31\'']
-        params: list[Any] = [] if current_only else [date(2010, 5, 6)]
+        params: list[Any] = [] if current_only else [self.settings.archive_start]
         if text:
             where.append("lower(n.name) LIKE ?")
             params.append(f"%{text.lower()}%")

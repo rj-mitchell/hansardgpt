@@ -127,7 +127,7 @@ def elections_path(settings: Settings) -> Path:
 
 def refresh_elections_data(settings: Settings, members_dir: Path, fetch: bool = True
                            ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Seats and election results for every MP since 2010 (refreshed weekly when ``fetch``), and what happened."""
+    """Seats and election results for every MP since 2010 (election results start then) (refreshed weekly when ``fetch``), and what happened."""
     from hansard.sources.elections import commons_member_ids, load_elections, refresh_elections
 
     status: dict[str, Any] = {"status": "not fetched"}
@@ -164,7 +164,7 @@ def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | No
                           demographics, elections)
     people = install_reference(settings, state, ref, sha)
     return {"parlparse_sha": sha, "reference_changed": True, "people_changed": sorted(people),
-            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", []), "demographics": demo_status,
+            "unmatched_seats": ref.stats.get("unmatched_seats", []), "demographics": demo_status,
             "elections": elec_status}
 
 

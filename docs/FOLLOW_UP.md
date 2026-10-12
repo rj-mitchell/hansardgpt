@@ -7,6 +7,14 @@ Loose ends that need a person (an email, a decision or a check). Tick them off o
 - [ ] **1. Install the latest version.** Merge
   <https://github.com/rj-mitchell/hansardgpt/compare/main...claude/hansard-parliament-engine-review-7veaif>, then on
   the server: `bash /opt/hansardgpt/deploy/update.sh`
+- [ ] **1a. Load the 1997–2010 records (once, right after installing).** The site now covers from May 1997.
+  The twice-daily update fetches the older years by itself, so this only starts it now instead of at 07:15 or
+  19:15. On the server:
+  `sudo systemctl start --no-block hansard-sync.service`
+  - To watch it: `journalctl -u hansard-sync -f` (press Ctrl+C to stop watching; the update carries on).
+  - It downloads about 4–5 GB and takes a few hours. Searching by words covers the older years as soon as it
+    ends. Search by meaning fills in over the next few days (newest first), a few hours per update.
+  - Until it finishes, the pages already say "1997" but searches only find records from 2010.
 - [ ] **2. Turn on the off-site backup** (Backblaze B2: bucket and key already made). On the server, run the command
   under "Setting up the off-site copy" in [HOSTING.md](HOSTING.md#backups). It asks for the bucket name, keyID and
   applicationKey, and hides the key as you paste it. Then check:
@@ -35,6 +43,8 @@ Loose ends that need a person (an email, a decision or a check). Tick them off o
     - `docker compose exec -d app hansard committees` (about two hours)
     - `docker compose exec -d app hansard devolved --files 2000` (about an hour)
     - `docker compose exec -d app hansard edms --months 200 --signatures 25000` (4–5 hours)
+    - `docker compose exec -d app hansard whips --count 20000` (checks every vote for a whip report in one
+      go, about 3–4 hours; otherwise the updates do it 1,500 votes at a time over a week or two)
 - [ ] **5. Click-check the links to other sites** (see below).
 - [ ] **6. The two licence checks below** (Electoral Commission and TheyWorkForYou Votes).
 
@@ -43,7 +53,9 @@ The server must be able to reach these sites:
 - `raw.githubusercontent.com`
 - `members-api.parliament.uk`
 - `api.backblazeb2.com`, plus Backblaze's upload addresses (`*.backblazeb2.com`)
-- `www.theyworkforyou.com`
+- `www.theyworkforyou.com` and `data.theyworkforyou.com` (already used for the record)
+- `votes.theyworkforyou.com` (whip reports)
+- `en.wikipedia.org` (dates of birth Wikidata lacks)
 
 If your server places no limits on outgoing connections (the usual case), there is nothing to do.
 

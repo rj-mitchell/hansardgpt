@@ -76,10 +76,10 @@ def reference(pull: bool = typer.Option(True, help="git pull parlparse members/ 
     """Build reference tables (people, seats, offices, regions) from parlparse."""
     _setup_logging()
     stats = build_reference_data(_settings(), pull=pull, members_dir=members)
-    unmatched = stats.pop("unmatched_seats_since_2010")
+    unmatched = stats.pop("unmatched_seats")
     typer.echo(json.dumps(stats, indent=2, default=str))
     if unmatched:
-        typer.echo(f"WARNING: {len(unmatched)} seats since 2010 without an ONS match: {unmatched[:10]}")
+        typer.echo(f"WARNING: {len(unmatched)} seats since 1997 without a region: {unmatched[:10]}")
 
 
 # --------------------------------------------------------------------------- data

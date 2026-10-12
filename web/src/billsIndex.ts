@@ -1,4 +1,4 @@
-/** The bills page: every bill debated since 2010, newest first, filtered as you type. */
+/** The bills page: every bill debated since 1997, newest first, filtered as you type. */
 import "./pages";
 import { fmtDate } from "./render";
 
