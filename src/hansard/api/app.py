@@ -1022,17 +1022,16 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
     @app.get("/groups/{parliament}/{slug}", include_in_schema=False)
     def group_page(parliament: str, slug: str, request: Request):
         index = dist / "group.html"
-        if not index.exists():
-            raise HTTPException(404)
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
         g = get_groups().group(slug, parliament)
         base = str(request.base_url).rstrip("/")
         if g is None:
-            return Response(page_with_meta(index.read_text(), title="Group not found — Where They Stand",
+            return Response(page_with_meta(page, title="Group not found — Where They Stand",
                                            description="There is no group at this address.",
                                            url=f"{base}/groups/{parliament}/{slug}", image=None),
                             status_code=404, media_type="text/html")
         desc = (g["purpose"] or g["title"])[:280]
-        return Response(page_with_meta(index.read_text(), title=f"{g['title']} — Where They Stand", description=desc,
+        return Response(page_with_meta(page, title=f"{g['title']} — Where They Stand", description=desc,
                                        url=f"{base}/groups/{parliament}/{slug}", image=None, noindex=False),
                         media_type="text/html")
 

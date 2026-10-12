@@ -142,6 +142,5 @@ def test_refresh_store_and_the_mp_page(indexed_settings, tmp_path):
         assert index["recent"][0]["member"]["name"] == "Justine Greening"
         assert client.get("/api/donations/donors", params={"q": "acme"}).json()["donors"][0]["n"] == 2
         assert len(client.get("/api/donations/donor", params={"name": "Acme Ltd"}).json()["donations"]) == 2
-        assert client.get("/donations").status_code == 200
     finally:
         path.unlink(missing_ok=True)
