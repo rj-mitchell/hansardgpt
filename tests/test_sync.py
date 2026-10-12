@@ -142,7 +142,12 @@ def test_republished_written_answer_replaces_the_older_copy(settings, xml_mirror
     assert _passages(settings, "source_key = 'answers2026-10-08'")
     # passage IDs are unique again, so in-place speaker updates work
     idx = SearchIndex(settings.index_dir, 64)
-    assert Indexer(settings, idx, StateDB(settings.state_db)).reenrich_people({"uk.org.publicwhip/person/25673"}) > 0
+    who = "uk.org.publicwhip/person/25673"
+    indexer = Indexer(settings, idx, StateDB(settings.state_db))
+    assert indexer.reenrich_people({who}) == 0  # nothing changed: nothing rewritten
+    idx.passages().update(where=f"person_id = '{who}'", values={"party": "Stale"})
+    assert indexer.reenrich_people({who}) > 0
+    assert "Stale" not in {r["party"] for r in _passages(settings, f"person_id = '{who}'")}
 
 
 def test_dedupe_cleans_an_index_built_with_both_copies(settings, xml_mirror, tmp_path):
@@ -315,3 +320,14 @@ def test_only_one_update_runs_at_a_time(settings):
         fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with pytest.raises(SyncRunning):
             run_sync(settings, fetch=False, embed_minutes=0)
+
+
+def test_the_vectors_table_is_indexed_by_passage(settings, xml_mirror, tmp_path):
+    """Without it, updating speaker details on a few passages reads every vector into memory."""
+    members = tmp_path / "members"
+    shutil.copytree(MEMBERS, members)
+    run_sync(settings, fetch=False, members_dir=members, embedder=HashingEmbedder(64), embed_minutes=None, workers=1,
+             today=date(2026, 10, 1))
+    idx = SearchIndex(settings.index_dir, 64)
+    assert any("passage_id" in (ix.columns or []) for ix in idx.vectors().list_indices())
+    assert idx.ensure_vector_ids() is False  # already there

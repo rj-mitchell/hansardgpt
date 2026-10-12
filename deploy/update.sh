@@ -8,8 +8,14 @@ set -euo pipefail
 DIR="${DIR:-/opt/hansardgpt}"
 
 echo "==> Fetching the latest version"
-caddy_before=$(sha1sum "$DIR/deploy/Caddyfile" | cut -d' ' -f1)
+caddy_before="${CADDY_BEFORE:-$(sha1sum "$DIR/deploy/Caddyfile" | cut -d' ' -f1)}"
+self_before=$(sha1sum "$DIR/deploy/update.sh" | cut -d' ' -f1)
 git -C "$DIR" pull --ff-only
+# bash goes on reading the copy of this script it started with, so a new version only takes effect if run afresh
+if [[ -z "${UPDATE_RESTARTED:-}" && "$(sha1sum "$DIR/deploy/update.sh" | cut -d' ' -f1)" != "$self_before" ]]; then
+  echo "==> This update script has changed: running the new version"
+  CADDY_BEFORE="$caddy_before" UPDATE_RESTARTED=1 exec bash "$DIR/deploy/update.sh"
+fi
 
 cd "$DIR/deploy"
 echo "==> Refreshing the update and backup timers"
