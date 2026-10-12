@@ -252,6 +252,7 @@ def _run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | 
             t = time.time()
             stats["fetch"] = {**fetch_xml(settings), "seconds": round(time.time() - t, 1)}
 
+        log.info("checking for new and corrected files")
         ing = ingest(settings, workers=workers, state=state)
         stats["ingest"] = ing.as_dict()
 
@@ -261,8 +262,11 @@ def _run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | 
         first_build = not idx.has_data()
         passages = indexer.index_pending()
         people = pending_people(state)
+        if people and not first_build:
+            log.info("updating speaker details (party, seat, roles) for %d member(s) whose records changed", len(people))
         reenriched = indexer.reenrich_people(people) if people and not first_build else 0
         state.set(PENDING_PEOPLE, "[]")
+        log.info("checking for passages waiting to be merged into the search indices")
         waiting = 0 if first_build else idx.unmerged()  # includes rows an earlier, stopped update added
         if first_build and passages:
             idx.build_indices()
