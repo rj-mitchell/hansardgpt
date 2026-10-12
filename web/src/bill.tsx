@@ -3,6 +3,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./pages";
 import { VoteKind, VoteKindKey } from "./components/VoteKind";
+import { ELSEWHERE, Elsewhere } from "./elsewhere";
 import { fmtDate } from "./render";
 import { stageQuestion } from "./stage";
 import type { VoteType } from "./types";
@@ -118,9 +119,19 @@ function Bill({ slug }: { slug: string }) {
       </ol>
       <p className="muted small">
         Stages are read from the record's headings and the standard wording of motions, so a few sittings are labelled
-        only "Debate". The official account of the bill's progress is on{" "}
-        <a href="https://bills.parliament.uk">Parliament's bills site</a>.
+        only "Debate".
       </p>
+      <Elsewhere
+        links={[
+          { href: ELSEWHERE.bills(b.name), text: "Parliament's bills site", note: "the bill's text, amendments, stages and briefings" },
+          { href: ELSEWHERE.commonsLibrary(b.name), text: "House of Commons Library", note: "impartial briefings on the bill" },
+          {
+            href: ELSEWHERE.legislation(b.name.replace(/\s*\[(HL|Lords)\]\s*/gi, " ").replace(/\bBill\b/, "Act").trim()),
+            text: "legislation.gov.uk",
+            note: "the Act as passed and amended, if it became law",
+          },
+        ]}
+      />
 
       {b.divisions.length > 0 && (
         <section aria-labelledby="h-divisions">

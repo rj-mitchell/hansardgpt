@@ -4,6 +4,7 @@ import { AnswerView } from "./components/AnswerView";
 import { Controls } from "./components/Controls";
 import { Login } from "./components/Login";
 import { PlanChips } from "./components/PlanChips";
+import { ElsewhereForSearch } from "./elsewhere";
 import { EvidenceBar } from "./components/Evidence";
 import { SourceDrawer, SourceList } from "./components/Sources";
 import { SupportReminder } from "./components/SupportReminder";
@@ -511,6 +512,14 @@ export default function App() {
               open={t.status === "answering" || (!t.answer && t.status === "done")}
               writing={t.status === "answering"}
             />
+            {t.status === "done" && t.plan && (
+              <ElsewhereForSearch
+                words={t.plan.search_text}
+                from={t.plan.filters.date_from}
+                to={t.plan.filters.date_to}
+                noRecords={!!t.answer?.no_records || t.sources.length === 0}
+              />
+            )}
             {t.status === "done" && t.semantic === false && (
               <p className="muted small">Meaning-based search is still being built; these results used keyword search.</p>
             )}

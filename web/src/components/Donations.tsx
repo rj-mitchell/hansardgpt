@@ -106,7 +106,12 @@ export function DonationsSection({ donations, name }: { donations: MemberDonatio
         Donations over the reporting limit must be reported to the Electoral Commission; it publishes them, with the
         donor's name. A donation is not a finding of wrongdoing, and does not show that it influenced anything the
         member said or did. Records are matched to members by name and date, so a few may be missing; each links to
-        the Commission's own record. See <a href="/methodology#donations">how donations are matched</a>.
+        the Commission's own record. See <a href="/methodology#donations">how donations are matched</a>. Loans, and
+        donations to parties nationally, are on the{" "}
+        <a href="https://search.electoralcommission.org.uk/" rel="noreferrer">
+          Electoral Commission's register
+        </a>
+        .
       </p>
       {donations.top_donors && donations.top_donors.length > 1 && (
         <p className="small">
