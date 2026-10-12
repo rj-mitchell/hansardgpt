@@ -412,9 +412,27 @@ def backup(to: Path = typer.Option(None, help="folder for backups (default: <dat
            keep: int = typer.Option(14, help="how many daily backups to keep")):
     """Back up what cannot be rebuilt: saved briefings, reports, feedback, usage and visit counts."""
     from hansard.backup import make_backup
+    from hansard.offsite import OffsiteError, send
 
     _setup_logging()
-    typer.echo(f"Backed up to {make_backup(_settings(), to, keep)}")
+    archive = make_backup(_settings(), to, keep)
+    typer.echo(f"Backed up to {archive}")
+    try:  # and a copy off the server, when a Backblaze B2 bucket is set up
+        out = send(archive)
+    except OffsiteError as exc:
+        typer.echo(f"The off-site copy failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo("Off-site copy: " + (f"stored in {out['bucket']} ({out['stored']} kept there)"
+                                    if out.get("ok") else out["offsite"]))
+
+
+@app.command()
+def offsite():
+    """Check the off-site backup bucket: whether the key works, and how many backups are stored there."""
+    from hansard.offsite import check
+
+    _setup_logging()
+    typer.echo(json.dumps(check(), indent=2))
 
 
 @app.command()

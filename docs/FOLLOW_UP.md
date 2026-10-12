@@ -1,7 +1,51 @@
 # Things to follow up on
 
-Loose ends that need a person (an email, a decision or a check), newest first. Tick them off or delete them
-when done.
+Loose ends that need a person (an email, a decision or a check). Tick them off or delete them when done.
+
+## Next time you are at a computer, in order
+
+- [ ] **1. Install the latest version.** Merge
+  <https://github.com/rj-mitchell/hansardgpt/compare/main...claude/hansard-parliament-engine-review-7veaif>, then on
+  the server: `bash /opt/hansardgpt/deploy/update.sh`
+- [ ] **2. Turn on the off-site backup** (Backblaze B2: bucket and key already made). On the server, run the command
+  under "Setting up the off-site copy" in [HOSTING.md](HOSTING.md#backups). It asks for the bucket name, keyID and
+  applicationKey, and hides the key as you paste it. Then check:
+  `cd /opt/hansardgpt/deploy && docker compose run --rm -T app hansard offsite` should say `"ok": true`, and
+  `docker compose run --rm -T app hansard backup --to /backups` should end "Off-site copy: stored in …".
+- [ ] **3. Set up the admin page.**
+  - Your admin token was created when the server was set up. To see it, on the server:
+    `grep ^HANSARD_ADMIN_TOKEN= /opt/hansardgpt/deploy/.env | cut -d= -f2`
+  - Save it in your password manager. Don't send it to anyone, Claude included.
+  - Open <https://wheretheystand.uk/admin> and paste the token. The page shows:
+    - spending, and warnings (including failed backups);
+    - reports from readers, feedback and visits;
+    - recent briefings, with "Feature" buttons, and topic briefings;
+    - the update history.
+  - The page forgets the token when you close the browser tab, so paste it each time, ideally from the password
+    manager.
+  - If the command prints nothing (the token is missing), create one and restart the site:
+    `cd /opt/hansardgpt/deploy && sed -i '/^HANSARD_ADMIN_TOKEN=/d' .env && echo "HANSARD_ADMIN_TOKEN=$(openssl rand -hex 24)" >> .env && docker compose up -d`
+    Then run the first command again to see it.
+- [ ] **4. Load the new data now** rather than waiting for the weekly update. All of this is free. On the server, in
+  `/opt/hansardgpt/deploy`:
+  - `docker compose exec app hansard donations` (about a minute)
+  - `docker compose exec app hansard groups` (seconds)
+  - `docker compose exec -d app hansard interests --lords` (about 15 minutes, in the background)
+  - Optional, slower:
+    - `docker compose exec -d app hansard committees` (about two hours)
+    - `docker compose exec -d app hansard devolved --files 2000` (about an hour)
+    - `docker compose exec -d app hansard edms --months 200 --signatures 25000` (4–5 hours)
+- [ ] **5. Click-check the links to other sites** (see below).
+- [ ] **6. The two licence checks below** (Electoral Commission and TheyWorkForYou Votes).
+
+The server must be able to reach these sites:
+- `search.electoralcommission.org.uk`
+- `raw.githubusercontent.com`
+- `members-api.parliament.uk`
+- `api.backblazeb2.com`, plus Backblaze's upload addresses (`*.backblazeb2.com`)
+- `www.theyworkforyou.com`
+
+If your server places no limits on outgoing connections (the usual case), there is nothing to do.
 
 ## Click-check a few links to other sites
 

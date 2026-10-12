@@ -82,7 +82,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 | ✓ **Public search API** for researchers (search only, no AI briefings), documented and rate-limited | M | Done: /api/v1/search and the other JSON endpoints, documented on /developers |
 | **Topic alerts by email** (a weekly digest on chosen topics) | M–L | Needs an email-sending service and a sign-up with consent |
 | **Cloudflare protection** (proxy on) | S–M | Make the server trust Cloudflare's visitor details, choose the right certificate setting, update the privacy notice |
-| **Off-site backups** sent automatically to cheap storage | S | Needs a storage account from you (for example Backblaze B2) |
+| ✓ **Off-site backups** sent automatically to cheap storage | S | Done 12 October: each nightly backup is copied to a Backblaze B2 bucket (last 60 kept), with a warning on the admin page if it fails. Turned on by adding the bucket and key on the server |
 | ✓ **Contact and press page**: a short media pack, logo files, how to cite the site | S | Done: /press |
 | ✓ **Link to the source code** from the About page and footer (the repository is public and MIT-licensed) | S | Done |
 

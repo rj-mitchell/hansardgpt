@@ -217,15 +217,35 @@ Everything can be rebuilt from public sources except the saved briefings, report
 visit counts. The setup script backs these up **every night at 3.30am**, keeping the last 14 days, in
 `/opt/hansardgpt/deploy/backups` on the server.
 
-Those copies protect against mistakes, but not against losing the whole server, so now and then (monthly, say)
-copy them to your own computer. In Terminal or PowerShell on your computer, not the server:
+Those copies protect against mistakes, but not against losing the whole server, so each night's backup is also
+copied to a **Backblaze B2** bucket once it is set up (the last 60 nights are kept there; they are small, well
+within B2's free 10 GB).
+
+### Setting up the off-site copy (once)
+
+1. At backblaze.com, create a **private** B2 bucket and an **application key** allowed to access only that bucket.
+2. On the server, run this. It asks for the bucket name, the keyID and the applicationKey; the key is not shown as
+   you paste it, and is saved only in the server's settings file:
+
+   ```
+   cd /opt/hansardgpt/deploy && read -rp "B2 bucket name: " B && read -rp "B2 keyID: " I && read -rsp "B2 applicationKey: " K && echo && sed -i -e '/^HANSARD_B2_/d' -e '$a\' .env && printf 'HANSARD_B2_BUCKET=%s\nHANSARD_B2_KEY_ID=%s\nHANSARD_B2_APPLICATION_KEY=%s\n' "$B" "$I" "$K" >> .env && unset B I K
+   ```
+
+3. Check the key works: `docker compose run --rm -T app hansard offsite` should say `"ok": true`.
+4. Make a backup now, which also sends it off-site:
+   `docker compose run --rm -T app hansard backup --to /backups`. It should end "Off-site copy: stored in …".
+
+From then on it happens every night. The admin page shows a warning if a backup or its off-site copy fails.
+
+To get a backup back from B2 (if the server is lost): in the Backblaze website, open the bucket, download the
+newest `where-they-stand-….tar.gz`, copy it into `/opt/hansardgpt/deploy/backups/` on the new server, and restore it
+as below.
+
+You can still copy backups to your own computer if you like. In Terminal or PowerShell on your computer:
 
 ```
 scp "root@YOUR.SERVER.IP:/opt/hansardgpt/deploy/backups/*.tar.gz" .
 ```
-
-This puts the files in the folder you are in. If Hostkey offers snapshot backups of the whole server, turning them
-on as well is worthwhile.
 
 To make a backup straight away: `cd /opt/hansardgpt/deploy && docker compose run --rm -T app hansard backup --to /backups`.
 

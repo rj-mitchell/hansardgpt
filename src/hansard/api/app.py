@@ -1508,7 +1508,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
 
     @app.get("/api/admin/usage")
     def usage(user=Depends(admin_user)):
-        return {**summary(state), "visits": visit_summary(state), "alerts": alerts(state, settings.usage),
+        from hansard.offsite import backup_alerts
+
+        backups = Path(os.environ.get("HANSARD_BACKUP_DIR", "/backups"))
+        return {**summary(state), "visits": visit_summary(state),
+                "alerts": alerts(state, settings.usage) + backup_alerts(backups),
                 "failures": recent_failures(state), "popular_questions": popular_questions(state)}
 
     @app.get("/api/admin/sync")
