@@ -195,6 +195,7 @@ if something was put right) and withdraw a briefing. A withdrawal reason is show
 | Fetch the newest Register of Members' Financial Interests now (free; also done by every update) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard interests` |
 | Load the donations to MPs now, rather than at the weekly update (free; about a minute) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard donations` |
 | Load the all-party groups now, rather than at the weekly update (free; a few seconds) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard groups` |
+| See which of these background jobs are still running (no output means all have finished) | `cd /opt/hansardgpt/deploy && docker compose exec app sh -c 'for p in /proc/[0-9]*; do tr "\0" " " < $p/cmdline 2>/dev/null; echo; done \| grep "[h]ansard "'` |
 | Check that early day motions can be read from Parliament (free) | `cd /opt/hansardgpt/deploy && docker compose exec app hansard edms --check` |
 | Collect all early day motions since 2010 in one go, in the background (free; about 4–5 hours, one request at a time) | `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard edms --months 200 --signatures 25000` |
 | Add, change or remove a topic | edit `config/topics.toml` in the code (ask me), then install it as a new version. Never change a published topic's `slug`: it is its address |
