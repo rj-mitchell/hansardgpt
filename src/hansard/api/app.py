@@ -977,6 +977,37 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 holder["register"] = Register(regmem_path(settings))
         return holder["register"]
 
+    def get_donations():
+        from hansard.sources.donations import Donations
+        from hansard.sync import donations_path
+
+        with lock:
+            if "donations" not in holder:
+                holder["donations"] = Donations(donations_path(settings))
+        return holder["donations"]
+
+    @app.get("/api/donations")
+    def donations_index():
+        """The biggest donors to MPs in the last five years and the latest donations, as registered with the
+        Electoral Commission and matched to MPs. Free: no AI."""
+        out = get_donations().index()
+        people = get_people()
+        for r in out.get("recent", []):
+            r["member"] = people.brief(r["person_id"], r["accepted"]) if r.get("person_id") else None
+        return out
+
+    @app.get("/api/donations/donors")
+    def donations_donors(q: str = ""):
+        return {"query": q, "donors": get_donations().donors(q[:200])}
+
+    @app.get("/api/donations/donor")
+    def donations_by_donor(name: str):
+        people = get_people()
+        rows = get_donations().donor(name[:300])
+        for r in rows:
+            r["member"] = people.brief(r["person_id"], r["accepted"]) if r.get("person_id") else None
+        return {"donor": name, "donations": rows}
+
     def get_edms():
         from hansard.sources.edms import EdmStore
         from hansard.sync import edms_path
@@ -1178,7 +1209,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             devolved = None
         return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
                 "devolved": devolved,
-                "interests": get_register().for_person(pid), "committee_evidence": evidence}
+                "interests": get_register().for_person(pid), "committee_evidence": evidence,
+                "donations": get_donations().for_person(pid)}
 
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):

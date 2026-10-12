@@ -36,6 +36,13 @@ the Northern Ireland Assembly, and plain-English descriptions of some divisions
 licensed under the Open Parliament Licence and the equivalent licences of the Scottish Parliament, the Senedd and
 the Northern Ireland Assembly.
 
+## Political donations
+
+Donations to MPs and to their local parties come from the
+[Electoral Commission's register of donations](https://search.electoralcommission.org.uk/), refreshed weekly,
+with donors' addresses and postcodes left out. Matching donations to MPs is this site's own work (see the
+methodology page); each entry links to the Commission's record of it.
+
 ## Gender and date of birth
 
 Members' gender and constituency election results (majorities, votes cast, by-elections) come from the UK

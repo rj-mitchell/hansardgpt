@@ -3,6 +3,19 @@
 Loose ends that need a person (an email, a decision or a check), newest first. Tick them off or delete them
 when done.
 
+## Electoral Commission: confirm the licence for the register of donations
+
+*Added 12 October 2026.*
+
+- **What it is.** The site downloads the Commission's register of donations (search.electoralcommission.org.uk)
+  and shows donations to MPs. The search site states no licence, and the Commission's main website (where its
+  copyright notice is) could not be reached from Claude's environment.
+- **What we assume.** Its content is under the Open Government Licence v3.0, as is usual for UK public bodies; the
+  site credits the Commission and links every donation to its record.
+- **To do.** Open <https://www.electoralcommission.org.uk> and find its copyright or reuse notice (usually linked
+  in the page footer). If it says the Open Government Licence, delete this item. If it says anything else, tell
+  Claude.
+
 ## TheyWorkForYou Votes: licence for the plain-English vote descriptions
 
 *Added 12 October 2026.*

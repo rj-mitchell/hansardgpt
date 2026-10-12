@@ -60,6 +60,7 @@ export default defineConfig({
         committee: here("./committee.html"),
         inquiry: here("./inquiry.html"),
         witnesses: here("./witnesses.html"),
+        donations: here("./donations.html"),
         devolved: here("./devolved.html"),
         devolvedday: here("./devolvedday.html"),
         developers: here("./developers.html"),

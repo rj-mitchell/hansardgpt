@@ -82,6 +82,21 @@ class People:
         return [r[0] for r in self.con.execute("SELECT xml_id FROM ref_person_ids WHERE person_id = ?",
                                                [person_id]).fetchall()]
 
+    def brief(self, person_id: str, on: str | None = None) -> dict[str, Any] | None:
+        """Name, page link and party (on ``on``, or latest) for a list entry."""
+        with self._lock:
+            row = self.con.execute("""
+                SELECT r.latest_name,
+                       (SELECT arg_max(m.party_name, m.start) FROM ref_memberships m WHERE m.person_id = r.person_id
+                          AND coalesce(try_cast(? AS DATE), current_date) BETWEEN m.start AND m."end") AS party,
+                       (SELECT arg_max(m.constituency, m.start) FROM ref_memberships m WHERE m.person_id = r.person_id
+                          AND m.house = 'commons' AND coalesce(try_cast(? AS DATE), current_date) >= m.start)
+                FROM ref_persons r WHERE r.person_id = ?""", [on, on, person_id]).fetchone()
+        if row is None:
+            return None
+        return {"name": row[0], "number": person_number(person_id), "slug": slug(row[0]), "party": row[1],
+                "constituency": row[2]}
+
     # ---- the page ----------------------------------------------------------------------------------------------
     def by_parliament_id(self, pairs: list[tuple[int, str | None]]) -> dict[tuple[int, str | None], dict[str, Any]]:
         return members_by_parliament_id(self.con, pairs)

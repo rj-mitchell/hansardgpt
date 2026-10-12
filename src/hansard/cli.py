@@ -284,6 +284,22 @@ def interests():
 
 
 @app.command()
+def donations(force: bool = typer.Option(True, help="Download again even if the copy is less than a week old")):
+    """Download the Electoral Commission's register of donations and match it to MPs (also done weekly by sync)."""
+    _setup_logging()
+    import duckdb
+
+    from hansard.reference.profiles import attach_reference
+    from hansard.sources.donations import refresh
+    from hansard.sync import donations_path
+
+    settings = _settings()
+    con = duckdb.connect()
+    attach_reference(con, settings.reference_dir)
+    typer.echo(json.dumps(refresh(donations_path(settings), con, force=force), indent=2))
+
+
+@app.command()
 def edms(check: bool = typer.Option(False, help="show what the API returns now, to confirm the fields read"),
          months: int = typer.Option(12, help="older months to fetch in this run"),
          signatures: int = typer.Option(1000, help="motions whose signatures to fetch in this run")):

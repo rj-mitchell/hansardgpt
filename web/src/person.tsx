@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import "./pages";
 import { Timeline } from "./components/Timeline";
 import { EdmList, type EdmRow } from "./components/EdmList";
+import { DonationsSection, type MemberDonations } from "./components/Donations";
 import { type Interests, InterestsSection } from "./components/Interests";
 import { hasVoteKind, VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
@@ -58,6 +59,7 @@ interface PersonData {
   } | null;
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
   interests?: Interests | null;
+  donations?: MemberDonations | null;
   devolved?: {
     memberships: { legislature: string; body: string; member: string; seat: string | null; party: string | null; start: string; end: string | null }[];
     counts: Record<string, number>;
@@ -299,6 +301,7 @@ function Person({ number }: { number: string }) {
       {p.interests && (
         <InterestsSection interests={p.interests} name={p.name} isMP={p.current?.house === "commons"} />
       )}
+      {p.donations && <DonationsSection donations={p.donations} name={p.name} />}
 
       {p.edms && p.edms.tabled + p.edms.signed > 0 && (
         <section aria-labelledby="h-edms">

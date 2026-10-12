@@ -109,6 +109,10 @@ def regmem_path(settings: Settings) -> Path:
     return settings.data_dir / "regmem.json"
 
 
+def donations_path(settings: Settings) -> Path:
+    return settings.data_dir / "donations.sqlite"
+
+
 def edms_path(settings: Settings) -> Path:
     return settings.data_dir / "edms.sqlite"
 
@@ -256,6 +260,22 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("register of interests not updated: %s", exc)
                 stats["interests"] = {"error": str(exc)[:200]}
+
+        t = time.time()
+        if fetch and settings.section("donations").get("enabled", True):
+            try:  # the Electoral Commission's register of donations, matched to MPs (weekly)
+                import duckdb
+
+                from hansard.reference.profiles import attach_reference
+                from hansard.sources.donations import refresh as refresh_donations
+
+                con = duckdb.connect()
+                attach_reference(con, settings.reference_dir)
+                stats["donations"] = refresh_donations(donations_path(settings), con)
+                stats["donations"]["seconds"] = round(time.time() - t, 1)
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("donations not updated: %s", exc)
+                stats["donations"] = {"error": str(exc)[:200]}
 
         t = time.time()
         if fetch and settings.section("devolved").get("enabled", True):
