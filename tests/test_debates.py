@@ -101,3 +101,19 @@ def test_the_week_in_parliament(indexed_settings, tmp_path):
     assert client.get("/api/week", params={"start": "1999-01-04"}).status_code == 404
     assert client.get("/weeks/1999-01-04").status_code == 404
     assert client.get("/api/week", params={"start": "not-a-date"}).status_code == 404
+
+
+def test_this_week_says_when_parliament_is_not_sitting(indexed_settings):
+    from datetime import timedelta
+
+    from hansard.week import Weeks
+
+    weeks = Weeks(indexed_settings)
+    last_debate, newest = weeks.con.execute("""
+        SELECT max(date) FILTER (WHERE source IN ('debates', 'lordspages')), max(date) FROM records""").fetchone()
+    assert weeks.pause(last_debate + timedelta(days=3)) is None, "a weekend is not a recess"
+    later = weeks.pause(newest + timedelta(days=30))
+    assert later["last_sat"] == last_debate.isoformat()
+    assert later["recess"] is False, "nothing at all for a month: the record may be stale, not a recess"
+    if newest > last_debate + timedelta(days=7):  # written answers after the last sitting: a recess
+        assert weeks.pause(newest + timedelta(days=1))["recess"]

@@ -686,6 +686,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         w = find_week(start)
         if w is None:
             raise HTTPException(404, "Parliament did not sit that week, or the week is outside the record.")
+        if start is None:  # "this week": say so when Parliament has not sat lately (a recess)
+            return {**w, "pause": get_weeks().pause(date.today())}
         return w
 
     def week_page(start: str | None, request: Request) -> Response:

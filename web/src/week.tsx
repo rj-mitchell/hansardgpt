@@ -39,6 +39,47 @@ interface WeekData {
   lords_written_statements: number;
   previous: string | null;
   next: string | null;
+  pause?: Pause | null;
+}
+interface Pause {
+  last_sat: string;
+  commons_last_sat: string | null;
+  lords_last_sat: string | null;
+  record_to: string;
+  recess: boolean;
+  written_answers_since: number;
+  written_statements_since: number;
+}
+
+/** Shown on "this week" when neither House has sat for over a week. */
+function PauseNote({ p }: { p: Pause }) {
+  const houses =
+    p.commons_last_sat && p.lords_last_sat && p.commons_last_sat !== p.lords_last_sat
+      ? `the Commons last sat on ${fmtDate(p.commons_last_sat)} and the Lords on ${fmtDate(p.lords_last_sat)}`
+      : `it last sat on ${fmtDate(p.last_sat)}`;
+  const since = [
+    p.written_answers_since > 0 &&
+      `${p.written_answers_since.toLocaleString("en-GB")} written answer${p.written_answers_since === 1 ? " has" : "s have"} been published`,
+    p.written_statements_since > 0 &&
+      `${p.written_statements_since} written statement${p.written_statements_since === 1 ? "" : "s"} made`,
+  ].filter(Boolean);
+  return (
+    <p className="shared-note" role="status" style={{ marginBlockEnd: "var(--space-m)" }}>
+      {p.recess ? (
+        <>
+          <strong>Parliament is in recess:</strong> {houses}. Here is the last week it sat.
+          {since.length > 0 && ` Since then, ${since.join(" and ")}.`} Sittings appear here the morning after they
+          happen.
+        </>
+      ) : (
+        <>
+          <strong>No sittings since {fmtDate(p.last_sat)}</strong>, and the latest record is from {fmtDate(p.record_to)}.
+          The record may not have been updated: see the <a href="/status">status page</a>. Here is the last week
+          Parliament sat.
+        </>
+      )}
+    </p>
+  );
 }
 
 const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
@@ -70,6 +111,7 @@ function Week({ start }: { start: string | null }) {
   const debates = w.days.reduce((n, d) => n + d.chambers.reduce((m, c) => m + c.debates.length, 0), 0);
   return (
     <article className="week">
+      {w.pause && <PauseNote p={w.pause} />}
       <p className="eyebrow">In Parliament</p>
       <h1>
         Week of {fmtDate(w.start)}
