@@ -128,7 +128,15 @@ function ChangeList({ items }: { items: Change[] }) {
 function Changes({ changes }: { changes: NonNullable<Interests["changes"]> }) {
   const { added, removed, since } = changes;
   if (added.length === 0 && removed.length === 0) {
-    return <p className="small">No entries have been added or removed since {fmtDate(since)}.</p>;
+    const tracked = changes.removed_tracked_from;
+    return tracked && tracked > since ? (
+      <p className="small">
+        No new entries registered since {fmtDate(since)}. Entries that are removed are tracked from {fmtDate(tracked)}, when
+        this site began reading the register.
+      </p>
+    ) : (
+      <p className="small">No entries have been added or removed since {fmtDate(since)}.</p>
+    );
   }
   return (
     <details className="interest-category">
