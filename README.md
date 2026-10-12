@@ -415,4 +415,4 @@ whatever has been embedded so far.
 * **Before 2010.** Seats before the 2010 boundaries have no ONS code: they take their region and seat type
   from the later seat of the same name, or their region from `data_static/geo/pre2010_regions.csv` (117 seats
   abolished or renamed; no seat type). Posts of members who left before 2010 come from parlparse's
-  `ministers.json`. Election results, majorities, early day motions and committee pages still start in 2010.
+  `ministers.json`. Election results, majorities and committee pages still start in 2010; early day motions in 1997.

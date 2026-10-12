@@ -33,6 +33,9 @@ licence checks.*
 - [ ] **5. Look up everyone now**, rather than a few hundred members per update over a week or two (free; about
   2–3 hours, in the background):
   `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard directorships --count 4000`
+- [ ] **5a. Load early day motions back to 1997** (free; about 3–4 hours in the background, one request at a time;
+  otherwise the updates get there over a couple of weeks):
+  `cd /opt/hansardgpt/deploy && docker compose exec -d app hansard edms --months 400 --signatures 60000`
 - [ ] **6. Click-check the links to other sites** (see below), and the new "Company roles" links on an MP's page.
 
 The server must be able to reach these sites:

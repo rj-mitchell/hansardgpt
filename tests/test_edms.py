@@ -152,3 +152,14 @@ def test_signature_count_follows_the_names(tmp_path):
     sync_edms(store, today=date(2024, 2, 1), months_per_run=3, sleep=NO_WAIT,
               client=fake_api([motion(1, "Rail fares", "2024-01-10", SponsorsCount=0)]))
     assert store.get(1)["sponsors_count"] == 1, "one current signature; the withdrawn one is not counted"
+
+
+def test_older_motions_count_signatures_from_the_names(tmp_path):
+    old = motion(15377, "British Dependent Territories", "1998-01-29", SponsorsCount=0)
+    edm = normalise_edm(old)
+    assert edm["sponsors_count"] is None, "Parliament gives 0 for older motions: unknown, not none"
+    store = EdmStore(tmp_path / "edms.sqlite")
+    store.upsert(edm, old)
+    store.set_sponsors(15377, normalise_sponsors({"Sponsors": DETAIL_SPONSORS}))
+    store.upsert(normalise_edm(old), old)  # a later refresh of the motion keeps the count from the names
+    assert store.get(15377)["sponsors_count"] == 1

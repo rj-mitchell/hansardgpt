@@ -325,7 +325,7 @@ function Person({ number }: { number: string }) {
           <h2 id="h-edms">Early day motions</h2>
           <p>
             Tabled {p.edms.tabled.toLocaleString("en-GB")} and signed {p.edms.signed.toLocaleString("en-GB")} early
-            day motion{p.edms.signed === 1 ? "" : "s"} since 2010.{" "}
+            day motion{p.edms.signed === 1 ? "" : "s"} since 1997.{" "}
             <a href={`/edms?person=${p.number}`}>See them all</a>
           </p>
           <h3>Most recent</h3>

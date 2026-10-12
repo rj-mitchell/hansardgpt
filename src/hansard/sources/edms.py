@@ -2,7 +2,7 @@
 
 An early day motion (EDM) is a motion put down by MPs, usually never debated, used to put a view on record and to
 gather signatures. Each sync fetches the motions changed recently, works back through older years a little at a
-time (since 2010), and fetches who signed each motion. Members are matched to parlparse people by their UK
+time (since 1997), and fetches who signed each motion. Members are matched to parlparse people by their UK
 Parliament ID, never by name.
 
 Kept in their own SQLite file (data/edms.sqlite) with a full-text index. If the API cannot be reached, or answers
@@ -29,7 +29,7 @@ from hansard.sources.demographics import USER_AGENT
 log = logging.getLogger(__name__)
 
 API = "https://oralquestionsandmotions-api.parliament.uk"
-START = date(2010, 5, 18)  # the first sitting day of the 2010 Parliament
+START = date(1997, 5, 1)  # the start of the site's record (Parliament's list goes back to 1989)
 PAGE = 100
 SOURCE = "UK Parliament oral questions and motions API (early day motions)"
 
@@ -98,7 +98,8 @@ def normalise_edm(raw: dict[str, Any]) -> dict[str, Any] | None:
             "title": " ".join(str(title).split()), "text": _get_key(raw, "MotionText", "Text"),
             "date_tabled": _day(_get_key(raw, "DateTabled", "TabledDate")), "status": _get_key(raw, "Status"),
             "status_date": _day(_get_key(raw, "StatusDate")),
-            "sponsors_count": _int(_get_key(raw, "SponsorsCount", "SignaturesCount")),
+            # older motions give 0 here although they list their signatures: unknown until the names are fetched
+            "sponsors_count": _int(_get_key(raw, "SponsorsCount", "SignaturesCount")) or None,
             "primary_mnis": sponsor["mnis"], "primary_name": sponsor["name"], "primary_party": sponsor["party"],
             "amendment_to": _int(_get_key(raw, "AmendmentToMotionId")),
             "prayer": 1 if _get_key(raw, "PrayingAgainstNegativeStatutoryInstrumentId", "StatutoryInstrumentTitle")
@@ -150,7 +151,11 @@ class EdmStore:
                             (edm["id"], old["title"], old["text"] or ""))
             cols = [*edm.keys(), "raw"]
             con.execute(f"INSERT INTO edms ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
-                        f"ON CONFLICT (id) DO UPDATE SET {', '.join(f'{c} = excluded.{c}' for c in cols)}",
+                        f"ON CONFLICT (id) DO UPDATE SET "
+                        + ", ".join(f"{c} = excluded.{c}" if c != "sponsors_count" else
+                                    # a count taken from the list of names stands until the names are fetched again
+                                    "sponsors_count = CASE WHEN edms.sponsors_fetched IS NOT NULL "
+                                    "THEN edms.sponsors_count ELSE excluded.sponsors_count END" for c in cols),
                         [*edm.values(), json.dumps(raw) if raw is not None else None])
             con.execute("INSERT INTO edm_text (rowid, title, text) VALUES (?, ?, ?)",
                         (edm["id"], edm["title"], edm["text"] or ""))
