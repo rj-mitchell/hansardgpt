@@ -1057,6 +1057,14 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             r["member"] = people.brief(r["person_id"], r["accepted"]) if r.get("person_id") else None
         return {"donor": name, "donations": rows}
 
+    def get_registers():
+        from hansard.sources.registers import Registers
+
+        with lock:
+            if "registers" not in holder:
+                holder["registers"] = Registers(settings.data_dir)
+        return holder["registers"]
+
     def get_edms():
         from hansard.sources.edms import EdmStore
         from hansard.sync import edms_path
@@ -1258,7 +1266,8 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             devolved = None
         return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
                 "devolved": devolved,
-                "interests": get_register().for_person(pid), "committee_evidence": evidence,
+                "interests": get_register().for_person(pid), "registers": get_registers().for_person(pid),
+                "committee_evidence": evidence,
                 "donations": get_donations().for_person(pid), "groups": get_groups().for_person(pid)}
 
     @app.get("/api/postcode/{postcode}")

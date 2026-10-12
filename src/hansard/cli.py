@@ -274,13 +274,23 @@ def committees(force: bool = typer.Option(True, help="rebuild even if the copy i
 
 
 @app.command()
-def interests():
-    """Fetch the newest edition of the Register of Members' Financial Interests (also done by every sync)."""
+def interests(lords: bool = typer.Option(False, help="Read every peer's entries now, even if read this week")):
+    """Fetch the newest registers of interests: Commons, Lords and the devolved parliaments (also done by sync)."""
     _setup_logging()
+    import duckdb
+
+    from hansard.reference.profiles import attach_reference
+    from hansard.sources.registers import refresh_devolved, refresh_lords, sitting_peers
     from hansard.sources.regmem import refresh
     from hansard.sync import regmem_path
 
-    typer.echo(json.dumps(refresh(regmem_path(_settings())), indent=2))
+    settings = _settings()
+    out: dict = {"commons": refresh(regmem_path(settings))}
+    con = duckdb.connect()
+    attach_reference(con, settings.reference_dir)
+    out["lords"] = refresh_lords(settings.data_dir / "regmem_lords.json", sitting_peers(con), force=lords)
+    out["devolved"] = refresh_devolved(settings.data_dir)
+    typer.echo(json.dumps(out, indent=2))
 
 
 @app.command()

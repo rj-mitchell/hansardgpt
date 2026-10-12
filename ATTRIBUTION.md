@@ -36,6 +36,14 @@ the Northern Ireland Assembly, and plain-English descriptions of some divisions
 licensed under the Open Parliament Licence and the equivalent licences of the Scottish Parliament, the Senedd and
 the Northern Ireland Assembly.
 
+## Registers of interests
+
+The Register of Members' Financial Interests and the registers of the Scottish Parliament, the Senedd and the
+Northern Ireland Assembly come from the copies published by [TheyWorkForYou](https://www.theyworkforyou.com/pwdata/)
+(mySociety); the Register of Lords' Interests from the UK Parliament
+[Members API](https://members-api.parliament.uk/), under the Open Parliament Licence v3.0 and the equivalent
+licences of the devolved parliaments.
+
 ## Political donations
 
 Donations to MPs and to their local parties come from the

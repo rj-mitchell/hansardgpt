@@ -18,7 +18,12 @@ export interface Interests {
   official: string;
   listed: boolean;
   former?: boolean;
-  changes?: { since: string; added: Change[]; removed: Change[] };
+  changes?: { since: string; added: Change[]; removed: Change[]; removed_tracked_from?: string | null };
+  // registers other than the Commons
+  register?: string;
+  register_name?: string;
+  member_word?: string;
+  body?: string;
   categories: { type: string; name: string; items: InterestItem[] }[];
 }
 
@@ -66,24 +71,28 @@ function Item({ item }: { item: InterestItem }) {
 export function InterestsSection({ interests, name, isMP }: { interests: Interests; name: string; isMP: boolean }) {
   if (!interests.listed && !isMP) return null;
   const total = interests.categories.reduce((n, c) => n + c.items.length, 0);
+  const register = interests.register_name ?? "Register of Members' Financial Interests";
+  const id = `h-interests${interests.register ? `-${interests.register}` : ""}`;
   return (
-    <section aria-labelledby="h-interests">
-      <h2 id="h-interests">Registered interests</h2>
+    <section aria-labelledby={id}>
+      <h2 id={id}>Registered interests{interests.body && interests.register !== "lords" ? ` (${interests.body})` : ""}</h2>
       <p>
         {interests.former
           ? `When ${name} left the Commons, they had ${total} entr${total === 1 ? "y" : "ies"} in the Register of ` +
             `Members' Financial Interests (the last edition before they left, published ${interests.edition ? fmtDate(interests.edition) : ""}).`
           : `${
               interests.listed && total > 0
-                ? `${name} has ${total} entr${total === 1 ? "y" : "ies"} in the Register of Members' Financial Interests`
-                : `${name} has no entries in the Register of Members' Financial Interests`
-            }${interests.edition ? `, as published on ${fmtDate(interests.edition)}` : ""}.`}
+                ? `${name} has ${total} entr${total === 1 ? "y" : "ies"} in the ${register}`
+                : `${name} has no entries in the ${register}`
+            }${interests.edition ? `, as ${interests.register === "lords" ? "read" : "published"} on ${fmtDate(interests.edition)}` : ""}.`}
       </p>
       <p className="muted small">
-        MPs must register their jobs and earnings, donations, gifts, visits abroad, property and shareholdings. These
-        are declarations, shown as registered: an entry is not a finding of wrongdoing, and being listed here does not
-        mean an interest influenced anything the member said or did. Addresses listed separately are left out. Read the{" "}
-        <a href={interests.official}>official register</a>.
+        {interests.register
+          ? `Members of the ${interests.body} must register their paid work, shareholdings, property, gifts, visits and other interests set out in its rules. `
+          : "MPs must register their jobs and earnings, donations, gifts, visits abroad, property and shareholdings. "}
+        These are declarations, shown as registered: an entry is not a finding of wrongdoing, and being listed here does
+        not mean an interest influenced anything the member said or did. Addresses listed separately are left out. Read
+        the <a href={interests.official}>official register</a>.
       </p>
       {interests.changes && <Changes changes={interests.changes} />}
       {interests.categories.map((c) => (
@@ -119,7 +128,7 @@ function ChangeList({ items }: { items: Change[] }) {
 function Changes({ changes }: { changes: NonNullable<Interests["changes"]> }) {
   const { added, removed, since } = changes;
   if (added.length === 0 && removed.length === 0) {
-    return <p className="small">No entries have been added or removed since the edition of {fmtDate(since)}.</p>;
+    return <p className="small">No entries have been added or removed since {fmtDate(since)}.</p>;
   }
   return (
     <details className="interest-category">
@@ -127,8 +136,10 @@ function Changes({ changes }: { changes: NonNullable<Interests["changes"]> }) {
         Changes since {fmtDate(since)}: {added.length} new, {removed.length} no longer listed
       </summary>
       <p className="muted small">
-        Compared by wording with the edition published on {fmtDate(since)}, so an entry whose wording was updated
-        appears in both lists. Entries usually leave the register a year after registration or when the interest ends.
+        {changes.removed_tracked_from !== undefined
+          ? `New entries are those registered since ${fmtDate(since)}. Entries no longer listed are counted from ${fmtDate(changes.removed_tracked_from ?? since)}, when this site began reading the register.`
+          : `Compared by wording with the edition published on ${fmtDate(since)}, so an entry whose wording was updated appears in both lists.`}{" "}
+        Entries usually leave the register when the interest ends or after a set time.
       </p>
       {added.length > 0 && (
         <>

@@ -63,6 +63,7 @@ interface PersonData {
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
   interests?: Interests | null;
   donations?: MemberDonations | null;
+  registers?: Interests[];
   groups?: MemberGroup[];
   devolved?: {
     memberships: { legislature: string; body: string; member: string; seat: string | null; party: string | null; start: string; end: string | null }[];
@@ -305,6 +306,9 @@ function Person({ number }: { number: string }) {
       {p.interests && (
         <InterestsSection interests={p.interests} name={p.name} isMP={p.current?.house === "commons"} />
       )}
+      {p.registers?.map((r) => (
+        <InterestsSection key={r.register} interests={r} name={p.name} isMP={false} />
+      ))}
       {p.donations && <DonationsSection donations={p.donations} name={p.name} />}
       {p.groups && <GroupsSection groups={p.groups} name={p.name} />}
 
@@ -335,15 +339,6 @@ function Person({ number }: { number: string }) {
       <section aria-labelledby="h-elsewhere">
         <h2 id="h-elsewhere">Elsewhere</h2>
         <Elsewhere label={`More on ${p.name}`} links={elsewhereFor(p)} />
-        {p.current?.house === "lords" && (
-          <p className="small">
-            Peers' interests are in the{" "}
-            <a href={ELSEWHERE.lordsInterests} rel="noreferrer">
-              Register of Lords' Interests
-            </a>
-            , which this site does not show.
-          </p>
-        )}
       </section>
       <p className="muted small">
         From Hansard, mySociety's member records and the UK Parliament's Members data. See the{" "}

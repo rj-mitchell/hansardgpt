@@ -260,6 +260,16 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                 # former MPs: the last edition before they left, a few old editions per run
                 stats["interests"]["history"] = refresh_history(regmem_path(settings).with_name("regmem_history.json"),
                                                                 former_members(con))
+                # the Lords (each sitting peer, weekly) and the devolved parliaments' registers
+                from hansard.sources.registers import refresh_devolved, refresh_lords, sitting_peers
+
+                try:
+                    stats["interests"]["lords"] = refresh_lords(settings.data_dir / "regmem_lords.json",
+                                                                sitting_peers(con))
+                except Exception as exc:
+                    log.warning("Lords interests not updated: %s", exc)
+                    stats["interests"]["lords"] = {"error": str(exc)[:200]}
+                stats["interests"]["devolved"] = refresh_devolved(settings.data_dir)
                 stats["interests"]["seconds"] = round(time.time() - t, 1)
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("register of interests not updated: %s", exc)
