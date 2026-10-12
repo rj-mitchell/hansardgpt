@@ -79,7 +79,7 @@ export function ElsewhereForSearch({
   if (!w) return null;
   const links: Link[] = [
     { href: ELSEWHERE.hansard(w, from, to), text: "Hansard search", note: "every mention of these words" },
-    { href: ELSEWHERE.twfySearch(w), text: "TheyWorkForYou", note: "including before 2010" },
+    { href: ELSEWHERE.twfySearch(w), text: "TheyWorkForYou", note: "including before 1997" },
     { href: ELSEWHERE.twfyAlert(w), text: "email alerts", note: "when these words are next said" },
     { href: ELSEWHERE.commonsLibrary(w), text: "House of Commons Library", note: "impartial background" },
   ];

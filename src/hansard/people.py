@@ -230,23 +230,29 @@ class People:
     def voting(self, person_id: str, recent: int = 15) -> dict[str, Any] | None:
         if not self._ensure_votes():
             return None
-        total, rebellions, first, last = self.con.execute("""
-            SELECT count(*), count(*) FILTER (WHERE pm.n >= 2 AND pv.vote <> pm.majority), min(pv.date), max(pv.date)
-            FROM party_votes pv LEFT JOIN party_majorities pm USING (division_id, whip_group)
-            WHERE pv.person_id = ?""", [person_id]).fetchone()
+        total, first, last = self.con.execute("""
+            SELECT count(*), min(pv.date), max(pv.date) FROM party_votes pv WHERE pv.person_id = ?""",
+                                              [person_id]).fetchone()
         rows = self.con.execute("""
             SELECT d.date, d.house, d.number, d.major_heading, d.minor_heading, pv.vote, pm.majority, d.twfy_url,
-                   d.official_url, d.division_id
+                   d.official_url, d.division_id, pv.whip_group
             FROM party_votes pv JOIN party_majorities pm USING (division_id, whip_group)
             JOIN divisions d ON d.division_id = pv.division_id
             WHERE pv.person_id = ? AND pm.n >= 2 AND pv.vote <> pm.majority
-            ORDER BY d.date DESC, d.number DESC LIMIT ?""", [person_id, recent]).fetchall()
-        recent_rebellions = [{
+            ORDER BY d.date DESC, d.number DESC""", [person_id]).fetchall()
+        all_rebellions = [{
             "date": r[0].isoformat(), "house": r[1], "number": r[2],
             "title": " — ".join(x for x in (r[3], r[4]) if x), "vote": r[5], "party_majority": r[6],
-            "twfy_url": r[7], "official_url": r[8], "division_id": r[9]} for r in rows]
-        vote_types(self.settings).annotate(recent_rebellions)
-        return {"votes": total, "rebellions": rebellions, "since": first.isoformat() if first else None,
+            "twfy_url": r[7], "official_url": r[8], "division_id": r[9], "whip_group": r[10]} for r in rows]
+        vote_types(self.settings).annotate(all_rebellions)
+        # voting differently from colleagues in a reported free vote breaks no whip: not a rebellion
+        from hansard.votes import free_parties, party_key
+
+        real = [r for r in all_rebellions if party_key(r.pop("whip_group")) not in free_parties(r.get("vote_type"))]
+        free_votes = len(all_rebellions) - len(real)
+        rebellions, recent_rebellions = len(real), real[:recent]
+        return {"votes": total, "rebellions": rebellions, "free_vote_differences": free_votes,
+                "since": first.isoformat() if first else None,
                 "until": last.isoformat() if last else None, "recent_rebellions": recent_rebellions,
                 "method": "A rebellion is a vote against the majority of the member's own party in that division, "
                           "using their party on the day. Some divisions are free votes, where parties set no line, so "
@@ -255,9 +261,9 @@ class People:
 
     # ---- finding people ----------------------------------------------------------------------------------------
     def search(self, text: str = "", current_only: bool = True, limit: int = 2000) -> list[dict[str, Any]]:
-        """Members for the people index: current MPs and peers (or anyone since 2010), optionally by name."""
+        """Members for the people index: current MPs and peers (or anyone since the archive starts), optionally by name."""
         where = ['m."end" >= ?' if not current_only else 'm."end" = DATE \'9999-12-31\'']
-        params: list[Any] = [] if current_only else [date(2010, 5, 6)]
+        params: list[Any] = [] if current_only else [self.settings.archive_start]
         if text:
             where.append("lower(n.name) LIKE ?")
             params.append(f"%{text.lower()}%")

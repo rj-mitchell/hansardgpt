@@ -120,6 +120,8 @@ export interface VoteType {
   title?: string;
   aye_means?: string;
   no_means?: string;
+  whips?: { party: string; direction: string | null; priority: string | null }[];
+  whip_text?: string;
 }
 
 export interface Filters {

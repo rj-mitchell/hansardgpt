@@ -78,22 +78,27 @@ def test_refresh_saves_each_part_and_keeps_the_old_copy_on_failure(tmp_path):
     client = httpx.Client(transport=_members_transport({1: [{"id": 1467, "gender": "M"}],
                                                         2: [{"id": 413, "gender": "M"}]}))
 
-    def no_wikidata():
+    def no_wikidata(*_a):
         raise OSError("403 robot policy")
 
-    first = refresh_demographics(cache, client=client, fetch_births_fn=no_wikidata)
-    assert first["status"] == "partial" and first["updated"] == ["genders"]
-    assert load_demographics(cache) == {"genders": {"1467": "M", "413": "M"}, "births": {}}
+    wiki = {"413": {"date": "1950-01-01", "precision": "year", "source": "https://en.wikipedia.org/wiki/X"},
+            "1467": {"date": "1999-01-01", "precision": "year", "source": "https://en.wikipedia.org/wiki/Y"}}
+    first = refresh_demographics(cache, client=client, fetch_births_fn=no_wikidata,
+                                 fetch_wikipedia_births_fn=lambda _c: wiki)
+    assert first["status"] == "partial" and first["updated"] == ["genders", "wikipedia_births"]
+    assert load_demographics(cache)["genders"] == {"1467": "M", "413": "M"}
+    assert load_demographics(cache)["births"]["413"]["precision"] == "year"
 
     # births arrive later; genders are fresh, so they are not fetched again
     second = refresh_demographics(cache, client=client,
                                   fetch_births_fn=lambda: {"1467": {"date": "1966-10-09", "precision": "day"}})
     assert second["updated"] == ["births"]
-    assert load_demographics(cache)["births"]["1467"]["date"] == "1966-10-09"
+    assert load_demographics(cache)["births"]["1467"]["date"] == "1966-10-09", "Wikidata wins over Wikipedia"
 
     # a failure on a forced refresh keeps what was there
     broken = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
-    third = refresh_demographics(cache, force=True, client=broken, fetch_births_fn=no_wikidata)
+    third = refresh_demographics(cache, force=True, client=broken, fetch_births_fn=no_wikidata,
+                                 fetch_wikipedia_births_fn=no_wikidata)
     assert third["status"] == "failed"
     assert load_demographics(cache)["genders"] == {"1467": "M", "413": "M"}
     assert refresh_demographics(cache, client=broken, fetch_births_fn=no_wikidata)["status"] == "fresh"
@@ -221,3 +226,29 @@ def test_a_member_missing_their_parliament_id_is_matched_by_wikidata_item(tmp_pa
     demo["births"]["413"] = {**demo["births"]["413"], "qid": "Q262742"}
     benn = next(p for p in build_reference(members, GEO_CSV, demographics=demo).persons if p["person_id"] == BENN)
     assert benn["datadotparl_id"] == "413" and benn["gender"] == "M" and str(benn["birth_date"]) == "1953-11-26"
+
+
+def test_birth_dates_from_wikipedia_infobox_templates_only():
+    from hansard.sources.demographics import birth_from_wikitext, fetch_wikipedia_births
+
+    box = "{{Infobox officeholder\n| name = A Member\n| birth_date = %s\n| party = X\n}}"
+    assert birth_from_wikitext(box % "{{birth date and age|df=yes|1975|4|2}}") == {"date": "1975-04-02",
+                                                                                   "precision": "day"}
+    assert birth_from_wikitext(box % "{{Birth year and age|1979}}") == {"date": "1979-01-01", "precision": "year"}
+    assert birth_from_wikitext(box % "{{birth year and age|1979|5}}")["precision"] == "month"
+    assert birth_from_wikitext(box % "c. 1970") is None, "free text is not used"
+    assert birth_from_wikitext(box % "{{birth date and age|1975|13|2}}") is None
+    assert birth_from_wikitext("He was born in 1960. {{birth date|1960|1|1}}") is None, "only the infobox field"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert set(request.url.params["titles"].split("|")) == {"A Member", "B Member (politician)"}
+        return httpx.Response(200, json={"query": {
+            "redirects": [{"from": "B Member (politician)", "to": "B Member"}],
+            "pages": [{"title": "A Member", "revisions": [{"slots": {"main": {"content": box % "{{bda|1980|2|3}}"}}}]},
+                      {"title": "B Member", "revisions": [{"slots": {"main": {"content": box % "unknown"}}}]}]}})
+
+    out = fetch_wikipedia_births(httpx.Client(transport=httpx.MockTransport(handler)), query_fn=lambda: [
+        ("5288", "https://en.wikipedia.org/wiki/A_Member"),
+        ("5238", "https://en.wikipedia.org/wiki/B_Member_(politician)")])
+    assert out == {"5288": {"date": "1980-02-03", "precision": "day",
+                            "source": "https://en.wikipedia.org/wiki/A_Member"}}

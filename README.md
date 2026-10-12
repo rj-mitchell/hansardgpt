@@ -26,7 +26,8 @@ which groups. If the archive has nothing relevant, the tool says **"No records f
 > Where They Stand is an independent project. It is not affiliated with or endorsed by the UK Parliament, and it
 > does not use Parliament's logo or the crowned portcullis.
 
-> Status: v1, covering May 2010 (the 2010 general election) to today. Commons, Lords, Westminster Hall, written
+> Status: v1, covering May 1997 (the 1997 general election) to today (the Lords from November 1999, Westminster
+> Hall from 2000, written answers from 2001, written statements from 2002). Commons, Lords, Westminster Hall, written
 > answers and statements (both Houses), Public Bill Committees and every division (vote).
 
 Besides briefings, the site has free pages built from the record (no AI):
@@ -147,7 +148,7 @@ your computer can open it. You need:
 
 * [Docker Desktop](https://www.docker.com/products/docker-desktop/) (free for personal use). Install it and start
   it. If its *Settings → Resources* page offers a memory setting, give it at least 8 GB.
-* Free disk space: about 5 GB for the most recent year or so, or about 20 GB for everything since 2010.
+* Free disk space: about 5 GB for the most recent year or so, or about 40 GB for everything since 1997.
 * An Anthropic API key for the written briefings. Searching works without one.
 
 **1. Get the code.** On GitHub, use the green **Code** button, then **Download ZIP**, and unzip it.
@@ -174,8 +175,8 @@ docker compose up -d
 
 Then open <http://localhost:8000>.
 
-* **The whole archive since 2010:** leave out `--from 2025-01-01`. The download is about 5 GB and takes
-  roughly an hour; keyword search covers everything straight away.
+* **The whole archive since 1997:** leave out `--from 2025-01-01`. The download is about 9–10 GB and takes
+  a few hours; keyword search covers everything straight away.
 * **Better semantic matching:** `docker compose run --rm app hansard embed --max-minutes 60` continues it, newest
   first, and can be repeated.
 * **Bring in the latest debates:** `docker compose run --rm app hansard sync`. It keeps to the start date you chose.
@@ -211,7 +212,7 @@ Recommended: 4–8 vCPU, 16 GB RAM and 60 GB of disk.
 
 | Data | Size |
 |---|---|
-| Raw XML since 2010 | 4.9 GB |
+| Raw XML since 2010 | 4.9 GB (roughly 4 GB more for 1997–2010) |
 | Parquet store | 1.2 GB |
 | Keyword index | 7.9 GB (4.6 GB of passages, 3.3 GB of full-text and filter indices) |
 | Vectors | about 8 GB |
@@ -411,5 +412,7 @@ whatever has been embedded so far.
 * **Party data.** Party on a date comes from parlparse memberships, so the tool reflects any gaps in that
   source.
 * **Recency of member data.** Committee and role data reflect what mySociety has published, refreshed daily.
-* **Earlier years.** Extending before 2010 needs the 1997 and 2005 boundary sets and the pre-2010
-  `ministers.json`. The code paths are in place, but this is not yet enabled or tested.
+* **Before 2010.** Seats before the 2010 boundaries have no ONS code: they take their region and seat type
+  from the later seat of the same name, or their region from `data_static/geo/pre2010_regions.csv` (117 seats
+  abolished or renamed; no seat type). Posts of members who left before 2010 come from parlparse's
+  `ministers.json`. Election results, majorities, early day motions and committee pages still start in 2010.

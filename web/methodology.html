@@ -58,7 +58,7 @@
           <li>Every division (vote) in both Houses, with how each member voted.</li>
         </ul>
         <p>
-          The record runs from the general election of 6 May 2010 to the present, and is updated twice a day. The
+          The record runs from the general election of 1 May 1997 to the present, and is updated twice a day. Some parts start later: the Lords in November 1999, Westminster Hall in 2000, written questions in 2001, written statements in 2002 and Public Bill Committees (then Standing Committees) in 2001. Election results, majorities and early day motions start in 2010. The
           <a href="/status">status page</a> shows the most recent record and the last update.
         </p>
 
@@ -145,8 +145,11 @@
             40, 40 to 54, 55 to 69, and 70 and over.
           </li>
           <li>
-            Dates of birth come from Wikidata, matched to each member by their UK Parliament identifier. Where only
-            the year of birth is recorded, the age is shown as approximate ("about 54").
+            Dates of birth come from Wikidata, matched to each member by their UK Parliament identifier. For the
+            few members Wikidata has no date for (mostly recently elected MPs and new peers), the date in the
+            birth-date field of their English Wikipedia article is used, found through the same Wikidata entry,
+            never by name. Where only the year of birth is recorded, the age is shown as approximate ("about 54").
+            Some members' dates of birth are not published anywhere, and they are left out of age groupings.
           </li>
           <li>
             Gender is as recorded by Parliament's own Members data, which records it as female or male. It is shown
@@ -196,7 +199,7 @@
         <ul>
           <li>
             The labels are worked out by fixed rules from that standard wording, without AI. About nine in ten divisions
-            since 2010 get a label; where the wording does not make the kind clear, none is shown.
+            since 1997 get a label; where the wording does not make the kind clear, none is shown.
           </li>
           <li>
             Each kind comes with a short, neutral note on what voting for or against it usually means. The
@@ -208,7 +211,10 @@
           </li>
           <li>
             For about 1,600 votes, a plain-English sentence on what voting aye (and sometimes no) meant is shown too,
-            from <a href="https://votes.theyworkforyou.com/">TheyWorkForYou Votes</a> (mySociety), with thanks.
+            from <a href="https://votes.theyworkforyou.com/">TheyWorkForYou Votes</a> (mySociety), with thanks. Where
+            TheyWorkForYou Votes reports how a party whipped a vote (for example, that it allowed a free vote), that
+            is shown too, and members voting differently from their colleagues in a reported free vote are not counted
+            as rebelling. Whips are reported only for some votes, so a vote without one may still have been free.
           </li>
           <li>
             A label describes the procedure, not anyone's reasons. Members vote against amendments they agree with for
@@ -355,11 +361,18 @@
           </li>
           <li>Region filters apply to MPs only, because members of the House of Lords do not have constituencies.</li>
           <li>
+            Seats before the 2010 boundary changes are not in the official lookups used for later seats. A seat
+            that kept its name takes the region and seat type of its later namesake; the rest (about 120 seats
+            that were abolished or renamed) take their region from a short list kept by hand, and have no seat type.
+            Roles held by members who left before 2010 come from mySociety's earlier list of ministers and
+            spokespeople.
+          </li>
+          <li>
             Party, role and constituency details come from public member data maintained by mySociety; any gaps
             there are reflected here.
           </li>
           <li>
-            The record begins in May 2010. For earlier debates, use
+            The record begins in May 1997. For earlier debates, use
             <a href="https://www.theyworkforyou.com/" rel="noreferrer">TheyWorkForYou</a> or
             <a href="https://api.parliament.uk/historic-hansard/" rel="noreferrer">Historic Hansard</a>.
           </li>
@@ -430,7 +443,8 @@
           <li>
             Members' gender and election results from the <a href="https://members.parliament.uk/">UK Parliament Members data</a>, under the
             Open Parliament Licence v3.0. Dates of birth from <a href="https://www.wikidata.org/">Wikidata</a>,
-            available under CC0 (public domain).
+            available under CC0 (public domain), and for a few members from the infobox of their
+            <a href="https://en.wikipedia.org/">Wikipedia</a> article.
           </li>
           <li>
             Boundaries, urban areas and census populations from the Office for National Statistics, National Records

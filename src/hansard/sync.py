@@ -32,7 +32,12 @@ from hansard.config import STATIC_DIR, Settings
 from hansard.index.build import Indexer, embed_pending
 from hansard.index.lance import SearchIndex
 from hansard.ingest import ingest
-from hansard.reference.build import ReferenceData, build_reference, write_reference
+from hansard.reference.build import (
+    REFERENCE_VERSION,
+    ReferenceData,
+    build_reference,
+    write_reference,
+)
 from hansard.store.parquet import compact
 from hansard.store.state import StateDB
 
@@ -127,7 +132,7 @@ def elections_path(settings: Settings) -> Path:
 
 def refresh_elections_data(settings: Settings, members_dir: Path, fetch: bool = True
                            ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Seats and election results for every MP since 2010 (refreshed weekly when ``fetch``), and what happened."""
+    """Seats and election results for every MP since 2010 (election results start then) (refreshed weekly when ``fetch``), and what happened."""
     from hansard.sources.elections import commons_member_ids, load_elections, refresh_elections
 
     status: dict[str, Any] = {"status": "not fetched"}
@@ -151,7 +156,7 @@ def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | No
                                         settings.sources.get("parlparse_branch", "master"))
         members_dir = parlparse.members_dir(settings.parlparse_dir)
     elections, elec_status = refresh_elections_data(settings, members_dir, fetch=fetch)
-    unchanged = (fetch and sha == state.get("parlparse_sha")
+    unchanged = (fetch and sha == state.get("parlparse_sha") and state.get("reference_version") == REFERENCE_VERSION
                  and (settings.reference_dir / "persons.parquet").exists()
                  and (settings.reference_dir / "election_results.parquet").exists()
                  and demo_status.get("status") not in ("updated", "partial")
@@ -164,7 +169,7 @@ def refresh_reference(settings: Settings, state: StateDB, members_dir: Path | No
                           demographics, elections)
     people = install_reference(settings, state, ref, sha)
     return {"parlparse_sha": sha, "reference_changed": True, "people_changed": sorted(people),
-            "unmatched_seats": ref.stats.get("unmatched_seats_since_2010", []), "demographics": demo_status,
+            "unmatched_seats": ref.stats.get("unmatched_seats", []), "demographics": demo_status,
             "elections": elec_status}
 
 
@@ -187,6 +192,7 @@ def install_reference(settings: Settings, state: StateDB, ref: ReferenceData, sh
         tmp.rename(settings.reference_dir)
     if sha:
         state.set("parlparse_sha", sha)
+    state.set("reference_version", REFERENCE_VERSION)
     return people
 
 
@@ -370,6 +376,13 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                 stats["vote_descriptions"] = refresh_descriptions(settings.data_dir / "raw" / "twfy_divisions.parquet")
             except Exception as exc:
                 log.warning("vote descriptions not updated: %s", exc)
+            try:  # how parties whipped, where TheyWorkForYou Votes has reported it (a slice of votes per update)
+                from hansard.sources.whips import refresh as refresh_whips
+
+                stats["whips"] = refresh_whips(settings.data_dir / "whips.json",
+                                               settings.data_dir / "raw" / "twfy_divisions.parquet")
+            except Exception as exc:
+                log.warning("whip reports not updated: %s", exc)
         try:  # what each vote was on (amendment, second reading and so on), used across the site
             from hansard.vote_types import vote_types
 

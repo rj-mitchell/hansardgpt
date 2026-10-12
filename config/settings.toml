@@ -5,9 +5,11 @@
 data_dir = "data"
 
 [archive]
-# v1 scope: the 2010 Parliament onwards (2010 general election). Earlier years
-# need the 1997/2005 boundary sets and ministers.json; see README.
-start_date = "2010-05-06"
+# From the 1997 general election. Seats before the 2010 boundaries take their region from the
+# same-named later seat or data_static/geo/pre2010_regions.csv; posts held by people who left
+# before 2010 come from parlparse's ministers.json. Some record types start later (the Lords
+# from November 1999, Westminster Hall 2000, written answers 2001, written statements 2002).
+start_date = "1997-05-01"
 # TheyWorkForYou scrapedxml directories to ingest.
 record_dirs = ["debates", "westminhall", "lordspages", "wrans", "lordswrans", "wms", "lordswms", "standing"]
 

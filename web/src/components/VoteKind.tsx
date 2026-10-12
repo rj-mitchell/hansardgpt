@@ -3,7 +3,7 @@ import type { VoteType } from "../types";
 /** The kind of vote (amendment, second reading…) as a link to its glossary entry, with what it usually means. */
 /** Whether there is anything to say about a vote's kind (callers wrap it in brackets only then). */
 export function hasVoteKind(vt?: VoteType): vt is VoteType {
-  return !!vt && (vt.kind !== "other" || !!vt.aye_means);
+  return !!vt && (vt.kind !== "other" || !!vt.aye_means || !!vt.whip_text);
 }
 
 export function VoteKind({ vt, detail = false }: { vt?: VoteType; detail?: boolean }) {
@@ -19,6 +19,12 @@ export function VoteKind({ vt, detail = false }: { vt?: VoteType; detail?: boole
         <span className="vote-kind-means">
           {vt.kind !== "other" ? ". " : ""}Voting aye: {vt.aye_means}
           {detail && vt.no_means ? ` Voting no: ${vt.no_means}` : ""}{" "}
+          <span className="muted small">(TheyWorkForYou Votes)</span>
+        </span>
+      )}
+      {vt.whip_text && (
+        <span className="vote-kind-whip">
+          {vt.kind !== "other" || vt.aye_means ? ". " : ""}Whipping: {vt.whip_text}{" "}
           <span className="muted small">(TheyWorkForYou Votes)</span>
         </span>
       )}

@@ -191,6 +191,7 @@ class VoteTypes:
         self.settings = settings
         self.path = Path(settings.data_dir) / "vote_types.json"
         self.descriptions_path = Path(settings.data_dir) / "raw" / "twfy_divisions.parquet"
+        self.whips_path = Path(settings.data_dir) / "whips.json"
         self._lock = threading.Lock()
         self._types: dict[str, dict[str, Any]] | None = None
         self._version: str | None = None
@@ -207,7 +208,8 @@ class VoteTypes:
         n, last, ayes = self._con.execute("SELECT count(*), max(date), sum(ayes) FROM divisions").fetchone()
         desc = self.descriptions_path
         stamp = int(desc.stat().st_mtime) if desc.exists() else 0  # a new copy of the descriptions rebuilds too
-        return f"{n}|{last}|{ayes}|{RULES}|{stamp}"
+        whips = int(self.whips_path.stat().st_mtime) if self.whips_path.exists() else 0
+        return f"{n}|{last}|{ayes}|{RULES}|{stamp}|{whips}"
 
     def all(self) -> dict[str, dict[str, Any]]:
         with self._lock:
@@ -227,6 +229,11 @@ class VoteTypes:
             for did, d in descriptions(self.descriptions_path).items():  # plain-English descriptions, where written
                 if did in types:
                     types[did] = {**types[did], **d}
+            from hansard.sources.whips import reports, whip_text
+
+            for did, found in reports(self.whips_path).items():  # how parties whipped, where reported
+                if did in types:
+                    types[did] = {**types[did], "whips": found, "whip_text": whip_text(found)}
             tmp = self.path.with_suffix(".tmp")
             tmp.write_text(json.dumps({"version": stamp, "types": types}))
             tmp.replace(self.path)

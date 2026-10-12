@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import "./pages";
 import { Timeline } from "./components/Timeline";
 
-// the parties most members have sat for since 2010 come first; the rest follow alphabetically
+// the parties most members have sat for since 1997 come first; the rest follow alphabetically
 const MAIN = ["labour", "conservative", "liberal-democrat", "scottish-national-party", "reform", "green", "plaid-cymru",
   "dup", "sinn-fein", "social-democratic-and-labour-party", "uup", "alliance", "crossbench"];
 

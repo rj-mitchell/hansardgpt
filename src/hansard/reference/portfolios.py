@@ -82,7 +82,8 @@ _RULES: list[tuple[str, re.Pattern[str]]] = [
     ("defence", re.compile(r"defence|armed forces|veterans|national security|arms export", _I)),
     ("justice", re.compile(
         r"(?<!climate )justice|lord chancellor|prisons|probation|sentencing|courts|\bvictims\b"
-        r"|(?<!international )human rights|civil liberties|prison|bribery|mental capacity|end of life|extradition", _I)),
+        r"|(?<!international )human rights|civil liberties|prison|bribery|mental capacity|end of life|extradition"
+        r"|constitutional affairs", _I)),
     ("law_officers", re.compile(r"attorney|solicitor[- ]general|advocate[- ]general", _I)),
     ("health", re.compile(
         r"health|social care|care and older people|dentistry|public health|primary care|hospitals"
@@ -93,7 +94,7 @@ _RULES: list[tuple[str, re.Pattern[str]]] = [
     ("work_pensions", re.compile(
         r"work and pensions|pensions|disabled people|\(employment\)|employment rights|future of work"
         r"|welfare|child poverty|child maintenance|family support|disabilit|carers|employment"
-        r"|workers' rights|fair work|retirement|demographic change|intergenerational", _I)),
+        r"|workers' rights|fair work|retirement|demographic change|intergenerational|social security", _I)),
     ("transport", re.compile(r"transport|\(buses\)|infrastructure|high speed rail", _I)),
     ("energy_climate", re.compile(
         r"energy|climate|net zero|clean power|decarbonisation|clean growth|green jobs|environmental audit", _I)),
@@ -106,12 +107,13 @@ _RULES: list[tuple[str, re.Pattern[str]]] = [
         r"|research|artificial intelligence|online safety|disinformation|engagement with space", _I)),
     ("environment", re.compile(
         r"environment(?!al audit)(?! and net zero)|rural|farming|\bfood\b|marine|fisheries|flooding"
-        r"|\bwater\b|\bwaste\b|nature|oceans|coastal|environmental audit|land use|horticultur|defra", _I)),
+        r"|\bwater\b|\bwaste\b|nature|oceans|coastal|environmental audit|land use|horticultur|defra|agricultur", _I)),
     ("housing_communities", re.compile(
         r"communities|local government|housing|planning|levelling up|decentralisation|devolution"
-        r"|northern powerhouse|\bcities\b|regional affairs|\blondon\b|land use", _I)),
+        r"|northern powerhouse|\bcities\b|regional affairs|\blondon\b|land use|office of the deputy prime minister"
+        r"|\bthe regions\b", _I)),
     ("culture", re.compile(
-        r"culture|media|\bsport\b|olympics|tourism|\barts\b|heritage|creative industries|gambling"
+        r"(?<!agri)(?<!horti)culture|media|\bsport\b|olympics|tourism|\barts\b|heritage|creative industries|gambling"
         r"|charities|civil society|voluntary sector|third sector|youth affairs|olympic|online safety|disinformation|dcms", _I)),
     ("northern_ireland", re.compile(r"northern ireland|windsor framework", _I)),
     ("scotland", re.compile(r"scotland|scottish", _I)),

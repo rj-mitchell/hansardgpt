@@ -145,7 +145,7 @@ class Trends:
                                "rate": [round(10000 * a / b, 2) if b else None for a, b in zip(c, t, strict=True)]})
         today = self.today or date.today()
         out = {"phrases": phrases, "by": by, "years": years, "series": series,
-               "partial_years": [y for y in years if y in (2010, today.year)],
+               "partial_years": [y for y in years if y in (self.settings.archive_start.year, today.year)],
                "total": sum(sum(s["counts"]) for s in series)}
         with self._lock:
             self._cache[key] = out

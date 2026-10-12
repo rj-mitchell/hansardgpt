@@ -85,7 +85,7 @@ def run_bootstrap(settings: Settings, *, sample: bool = False, since: date | Non
             settings = load_settings()
         stats["reference"] = build_reference_data(settings, pull=True)
         stats["fetch"] = fetch_xml(settings, since)
-    stats["reference"].pop("unmatched_seats_since_2010", None)
+    stats["reference"].pop("unmatched_seats", None)
     stats["ingest"] = ingest(dataclasses.replace(settings), workers=workers, since=since).as_dict()
     stats["index"] = index_pending(settings, rebuild_fts=True)
     if settings.embedding.get("enabled", True):

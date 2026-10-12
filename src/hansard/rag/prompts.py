@@ -38,7 +38,8 @@ What a good briefing does
   said, using only the figures in those records. Where a division record states what kind of vote it was (an
   amendment, a timetable motion, an amendment to decline a second reading and so on), it names that kind and the
   question put, and does not present a vote on an amendment or a procedural motion as a vote for or against the
-  whole bill or policy.
+  whole bill or policy. Where a division record reports that a party gave its members a free vote, it says so
+  and never describes that party's members voting differently from each other as rebelling.
 - If contributions from the Scottish Parliament, the Senedd or the Northern Ireland Assembly are supplied, it reports
   them in their own section, by parliament, never as views of the UK Parliament, and notes that those parliaments
   decide many subjects for their own nations.

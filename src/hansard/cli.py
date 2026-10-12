@@ -76,10 +76,10 @@ def reference(pull: bool = typer.Option(True, help="git pull parlparse members/ 
     """Build reference tables (people, seats, offices, regions) from parlparse."""
     _setup_logging()
     stats = build_reference_data(_settings(), pull=pull, members_dir=members)
-    unmatched = stats.pop("unmatched_seats_since_2010")
+    unmatched = stats.pop("unmatched_seats")
     typer.echo(json.dumps(stats, indent=2, default=str))
     if unmatched:
-        typer.echo(f"WARNING: {len(unmatched)} seats since 2010 without an ONS match: {unmatched[:10]}")
+        typer.echo(f"WARNING: {len(unmatched)} seats since 1997 without a region: {unmatched[:10]}")
 
 
 # --------------------------------------------------------------------------- data
@@ -291,6 +291,17 @@ def interests(lords: bool = typer.Option(False, help="Read every peer's entries 
     out["lords"] = refresh_lords(settings.data_dir / "regmem_lords.json", sitting_peers(con), force=lords)
     out["devolved"] = refresh_devolved(settings.data_dir)
     typer.echo(json.dumps(out, indent=2))
+
+
+@app.command()
+def whips(count: int = typer.Option(1500, help="votes to check in this run")):
+    """Check votes for whip reports published by TheyWorkForYou Votes (also done by sync, a slice at a time)."""
+    _setup_logging()
+    from hansard.sources.whips import refresh
+
+    settings = _settings()
+    typer.echo(json.dumps(refresh(settings.data_dir / "whips.json", settings.data_dir / "raw" / "twfy_divisions.parquet",
+                                  per_run=count, force=True), indent=2))
 
 
 @app.command()

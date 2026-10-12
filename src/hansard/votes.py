@@ -122,6 +122,18 @@ def _scope_note(f: Filters) -> str:
     return "; ".join(parts) or "all members"
 
 
+def party_key(name: str | None) -> str:
+    """'Liberal Democrat', 'liberal-democrat' and 'SNP' alike -> a comparable key."""
+    k = "".join(ch for ch in (name or "").lower() if ch.isalpha())
+    return {"snp": "scottishnationalparty", "labourcooperative": "labour", "libdem": "liberaldemocrat",
+            "liberaldemocrats": "liberaldemocrat"}.get(k, k)
+
+
+def free_parties(vt: dict[str, Any] | None) -> set[str]:
+    """Parties reported (by TheyWorkForYou Votes) as giving their members a free vote in this division."""
+    return {party_key(w["party"]) for w in (vt or {}).get("whips") or [] if w.get("direction") == "free"}
+
+
 def division_text(d: dict[str, Any]) -> list[str]:
     """Plain-text blocks describing a division, used as a citable source."""
     title = " — ".join(x for x in (d["major_heading"], d["minor_heading"]) if x)
@@ -139,12 +151,18 @@ def division_text(d: dict[str, Any]) -> list[str]:
         if vt.get("outcome"):
             what += f" Recorded outcome: {vt['outcome']}"
         blocks.append(what)
+    if vt and vt.get("whips"):
+        blocks.append(f"How the parties whipped, as reported by TheyWorkForYou Votes: {vt['whip_text']}. A member "
+                      "voting differently from their party in a free vote breaks no whip.")
     pv = "; ".join(f"{p}: {c['aye']} aye, {c['no']} no" for p, c in sorted(d["party_votes"].items()))
     if pv:
         blocks.append(f"Votes by party ({d['scope_note']}): {pv}.")
     if d["rebels"]:
+        free = free_parties(vt)
         names = "; ".join(f"{r['name']} ({r['party']}, {r['constituency'] or 'Lords'}) voted {r['vote']} "
-                          f"against the {r['party']} majority ({r['majority']})" for r in d["rebels"][:40])
+                          + (f"unlike most of their party ({r['majority']}), in a free vote for the {r['party']}"
+                             if party_key(r["party"]) in free else
+                             f"against the {r['party']} majority ({r['majority']})") for r in d["rebels"][:40])
         more = f" and {len(d['rebels']) - 40} more" if len(d["rebels"]) > 40 else ""
         blocks.append(f"Members voting against their own party's majority ({d['scope_note']}): {names}{more}.")
     else:

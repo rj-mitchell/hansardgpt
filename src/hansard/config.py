@@ -28,7 +28,7 @@ class Settings:
     # Convenience accessors -------------------------------------------------
     @property
     def archive_start(self) -> date:
-        return date.fromisoformat(self.section("archive").get("start_date", "2010-05-06"))
+        return date.fromisoformat(self.section("archive").get("start_date", "1997-05-01"))
 
     @property
     def record_dirs(self) -> list[str]:

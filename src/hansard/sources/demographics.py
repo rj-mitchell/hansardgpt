@@ -1,7 +1,9 @@
 """Gender and date of birth for MPs and peers, so a speaker's age on the day they spoke can be shown.
 
 * Gender comes from the UK Parliament Members API, which records it as F or M.
-* Date of birth comes from Wikidata (property P569), matched by the member's UK Parliament ID (P10428).
+* Date of birth comes from Wikidata (property P569), matched by the member's UK Parliament ID (P10428). For the few
+  members Wikidata has no date for, the birth date template in their English Wikipedia article's infobox is used
+  (the article found through the same Wikidata item, never by name), with the article recorded as the source.
   Precision is kept: a year-only date gives an approximate age. The Wikidata item is kept too: a few members have
   no UK Parliament ID in ParlParse but do have their Wikidata item, which then supplies the ID.
 
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -106,6 +109,82 @@ def fetch_births(timeout: float = 120) -> dict[str, dict[str, str]]:
         return parse_births(json.loads(resp.read()))
 
 
+# Members whose Wikidata item has no date of birth but who have an English Wikipedia article
+WIKIPEDIA_GAPS_QUERY = """
+SELECT ?mnis ?article WHERE {
+  ?person wdt:P10428 ?mnis .
+  FILTER NOT EXISTS { ?person wdt:P569 ?dob }
+  ?article schema:about ?person ; schema:isPartOf <https://en.wikipedia.org/> .
+}
+"""
+WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+_INFOBOX_BIRTH = re.compile(r"\|\s*birth_date\s*=\s*([^\n]*)", re.I)
+_TEMPLATE = re.compile(r"\{\{\s*(birth[ _-]date(?:[ _-]and[ _-]age)?|bda|birth[ _-]year(?:[ _-]and[ _-]age)?|"
+                       r"birth[ _-]date[ _-]and[ _-]age2)\s*\|([^{}]*)\}\}", re.I)
+
+
+def birth_from_wikitext(text: str) -> dict[str, str] | None:
+    """A date of birth from an article's infobox birth date template ({{birth date and age|1975|4|2}},
+    {{birth year and age|1979}} and the like). Anything else (free text, "c." dates) is not used."""
+    m = _INFOBOX_BIRTH.search(text or "")
+    if not m:
+        return None
+    t = _TEMPLATE.search(m.group(1))
+    if not t:
+        return None
+    nums = [a.strip() for a in t.group(2).split("|") if a.strip() and "=" not in a][:3]
+    try:
+        parts = [int(x) for x in nums]
+    except ValueError:
+        return None
+    if not parts or not 1850 <= parts[0] <= date.today().year:
+        return None
+    try:
+        if len(parts) >= 3:
+            return {"date": date(parts[0], parts[1], parts[2]).isoformat(), "precision": "day"}
+        if len(parts) == 2:
+            return {"date": date(parts[0], parts[1], 1).isoformat(), "precision": "month"}
+        return {"date": date(parts[0], 1, 1).isoformat(), "precision": "year"}
+    except ValueError:
+        return None
+
+
+def fetch_wikipedia_births(client: httpx.Client, query_fn=None) -> dict[str, dict[str, str]]:
+    """For members Wikidata has no date of birth for: the date in their English Wikipedia article's infobox,
+    with the article as its source. {Parliament member id: {"date", "precision", "source"}}."""
+    if query_fn is None:
+        def query_fn() -> list[tuple[str, str]]:
+            data = urllib.parse.urlencode({"query": WIKIPEDIA_GAPS_QUERY}).encode()
+            req = urllib.request.Request(WIKIDATA_SPARQL, data=data, headers={
+                "User-Agent": USER_AGENT, "Accept": "application/sparql-results+json"})
+            with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310 (fixed https URL)
+                body = json.loads(resp.read())
+            return [(b["mnis"]["value"], b["article"]["value"]) for b in body["results"]["bindings"]]
+    by_title: dict[str, str] = {}
+    for mnis, article in query_fn():
+        by_title[urllib.parse.unquote(article.rsplit("/wiki/", 1)[-1]).replace("_", " ")] = mnis
+    out: dict[str, dict[str, str]] = {}
+    titles = sorted(by_title)
+    for i in range(0, len(titles), 50):
+        resp = client.get(WIKIPEDIA_API, params={
+            "action": "query", "prop": "revisions", "rvprop": "content", "rvslots": "main", "format": "json",
+            "formatversion": "2", "redirects": "1", "titles": "|".join(titles[i:i + 50])})
+        resp.raise_for_status()
+        body = resp.json().get("query") or {}
+        renamed = {r["to"]: r["from"] for r in body.get("redirects") or []}
+        for page in body.get("pages") or []:
+            title = page.get("title", "")
+            mnis = by_title.get(renamed.get(title, title))
+            revs = page.get("revisions") or []
+            if not mnis or not revs:
+                continue
+            found = birth_from_wikitext(((revs[0].get("slots") or {}).get("main") or {}).get("content", ""))
+            if found:
+                out[mnis] = {**found, "source": "https://en.wikipedia.org/wiki/" + urllib.parse.quote(title.replace(" ", "_"))}
+        time.sleep(1)
+    return out
+
+
 def _read(cache: Path) -> dict[str, Any]:
     if not cache.exists():
         return {}
@@ -122,7 +201,8 @@ def _stale(part: dict[str, Any] | None, now: datetime) -> bool:
 
 
 def refresh_demographics(cache: Path, *, force: bool = False, client: httpx.Client | None = None,
-                         fetch_births_fn=fetch_births) -> dict[str, Any]:
+                         fetch_births_fn=fetch_births, fetch_wikipedia_births_fn=fetch_wikipedia_births
+                         ) -> dict[str, Any]:
     """Refresh whichever part is over a week old (or missing); keep the old copy of any part that fails.
 
     Returns {"status": "fresh" | "updated" | "partial" | "failed", ...}; "updated" and "partial" mean something
@@ -130,7 +210,7 @@ def refresh_demographics(cache: Path, *, force: bool = False, client: httpx.Clie
     """
     now = datetime.now(UTC)
     current = _read(cache)
-    wanted = [k for k in ("genders", "births") if force or _stale(current.get(k), now)]
+    wanted = [k for k in ("genders", "births", "wikipedia_births") if force or _stale(current.get(k), now)]
     if not wanted:
         return {"status": "fresh"}
     own = client is None
@@ -140,7 +220,8 @@ def refresh_demographics(cache: Path, *, force: bool = False, client: httpx.Clie
     try:
         for part in wanted:
             try:
-                data = fetch_genders(client) if part == "genders" else fetch_births_fn()
+                data = (fetch_genders(client) if part == "genders" else
+                        fetch_births_fn() if part == "births" else fetch_wikipedia_births_fn(client))
             except Exception as exc:  # network trouble: carry on with what we have
                 log.warning("could not refresh %s (%s); keeping the previous copy", part, exc)
                 errors[part] = repr(exc)
@@ -170,8 +251,10 @@ def _write(cache: Path, content: dict[str, Any]) -> None:
 def load_demographics(cache: Path) -> dict[str, dict[str, Any]]:
     """{"genders": {member id: "F"|"M"}, "births": {member id: {"date", "precision"}}} (empty if never fetched)."""
     raw = _read(cache)
-    return {"genders": (raw.get("genders") or {}).get("data", {}),
-            "births": (raw.get("births") or {}).get("data", {})}
+    births = dict((raw.get("births") or {}).get("data", {}))
+    for mnis, b in ((raw.get("wikipedia_births") or {}).get("data") or {}).items():
+        births.setdefault(mnis, b)  # Wikidata first; a Wikipedia infobox only where Wikidata has nothing
+    return {"genders": (raw.get("genders") or {}).get("data", {}), "births": births}
 
 
 # --------------------------------------------------------------------------- ages

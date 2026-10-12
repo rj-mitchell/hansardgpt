@@ -3,7 +3,12 @@
 from collections import Counter
 from datetime import date
 
-from hansard.reference.build import load_constituencies, normalise_place
+from hansard.reference.build import (
+    PRE2010_CSV,
+    load_constituencies,
+    load_pre2010_regions,
+    normalise_place,
+)
 
 from .conftest import BENN, CAMERON, GEO_CSV
 
@@ -62,12 +67,20 @@ def test_members_resolve_to_regions_across_the_2024_change(resolver):
     assert resolver.profile(CAMERON, date(2012, 3, 1)).region == "South East"
 
 
-def test_all_fixture_commons_memberships_since_2010_have_regions(reference):
+def test_seats_before_2010_take_the_region_of_their_namesake_or_the_curated_table(resolver):
+    before = resolver.profile(CAMERON, date(2005, 6, 1))
+    assert before.constituency == "Witney" and before.region == "South East" and before.gss_code is None
+    pre = load_pre2010_regions(PRE2010_CSV)
+    assert pre[normalise_place("Tyne Bridge")]["region"] == "North East"
+    assert all(r["region"] in ITL1 for r in pre.values())
+
+
+def test_all_fixture_commons_memberships_since_1997_have_regions(reference):
     ref, _ = reference
     missing = [m for m in ref.memberships
-               if m["house"] == "commons" and m["end"] >= date(2010, 5, 6) and not m["region"]]
+               if m["house"] == "commons" and m["end"] >= date(1997, 5, 1) and not m["region"]]
     assert missing == []
-    assert ref.stats["unmatched_seats_since_2010"] == []
+    assert ref.stats["unmatched_seats"] == []
 
 
 def test_name_normalisation():

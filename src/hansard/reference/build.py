@@ -37,6 +37,7 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from hansard.config import STATIC_DIR
 from hansard.dates import SENTINEL_END, parse_end, parse_start
 from hansard.reference.portfolios import (
     KIND_CHAIR,
@@ -174,12 +175,29 @@ def load_overrides(path: Path | None) -> dict[str, str]:
                 for r in csv.DictReader(fh) if r.get("parlparse_name")}
 
 
+# Raised whenever the way the reference is built changes, so the next sync rebuilds it even if the member data has not.
+REFERENCE_VERSION = "2026-10-12"
+EARLIEST_SEATS = date(1997, 5, 1)  # seats are resolved for memberships from the 1997 general election on
+PRE2010_CSV = STATIC_DIR / "geo" / "pre2010_regions.csv"
+
+
+def load_pre2010_regions(path: Path | None) -> dict[str, dict[str, Any]]:
+    """{normalised name: {"name", "nation", "region"}} for pre-2010 seats with no namesake in later sets."""
+    path = Path(path or PRE2010_CSV)
+    if not path.exists():
+        return {}
+    with path.open(newline="", encoding="utf-8") as f:
+        return {normalise_place(r["name"]): {"name": r["name"], "nation": r["nation"], "region": r["region"]}
+                for r in csv.DictReader(f)}
+
+
 def build_reference(
     members_dir: Path,
     geo_csv: Path,
     overrides_csv: Path | None = None,
     demographics: dict[str, dict[str, Any]] | None = None,
     elections: dict[str, Any] | None = None,
+    pre2010_csv: Path | None = None,
 ) -> ReferenceData:
     genders = (demographics or {}).get("genders", {})
     births = (demographics or {}).get("births", {})
@@ -241,7 +259,26 @@ def build_reference(
         by_set[c["boundary_set"]][normalise_place(c["name"])] = c
         by_gss[c["gss_code"]].append(c)
 
+    # Seats before the 2010 general election (the 1997 boundaries, and Scotland's from 2005) have no GSS code in
+    # the ONS lookups: they take their region, nation and seat type from the seat of the same name in the 2010 or
+    # 2024 set, or (for seats that were abolished or renamed) their nation and region from a small curated table.
+    pre2010 = load_pre2010_regions(pre2010_csv)
+
+    def seat_before_2010(post: dict[str, Any]) -> dict[str, Any] | None:
+        for raw in [post["area"]["name"], *post["area"].get("other_names", [])]:
+            key = normalise_place(raw)
+            key = overrides.get(key, key)
+            same = by_set["2010"].get(key) or by_set["2024"].get(key)
+            if same:
+                return {**same, "gss_code": None}
+            if key in pre2010:
+                return {**pre2010[key], "gss_code": None, "settlement": None, "urban_area": None,
+                        "urban_area_pop": None}
+        return None
+
     def seat_for(post: dict[str, Any], on: date) -> dict[str, Any] | None:
+        if on < date(2010, 5, 6):
+            return seat_before_2010(post)
         for ident in post.get("identifiers", []):
             if ident["scheme"] == "gss" and ident["identifier"] in by_gss:
                 entries = by_gss[ident["identifier"]]
@@ -276,10 +313,10 @@ def build_reference(
         elif post and post.get("organization_id") == "house-of-commons":
             house, constituency = COMMONS, post["area"]["name"]
             # Seat set is decided by where the membership falls; memberships that
-            # straddle the archive start resolve against the set in force then.
-            on = max(start, date(2010, 5, 6))
-            seat = seat_for(post, on) if end >= date(2010, 5, 6) else None
-            if seat is None and end >= date(2010, 5, 6):
+            # straddle the earliest year covered resolve against the set in force then.
+            on = max(start, EARLIEST_SEATS)
+            seat = seat_for(post, on) if end >= EARLIEST_SEATS else None
+            if seat is None and end >= EARLIEST_SEATS:
                 unmatched_seats.add(constituency)
         else:
             continue  # devolved legislatures etc. are out of scope
@@ -332,10 +369,52 @@ def build_reference(
         "election_results": len(ref.election_results),
         "memberships": len(ref.memberships),
         "names": len(ref.names),
-        "unmatched_seats_since_2010": sorted(unmatched_seats),
+        "unmatched_seats": sorted(unmatched_seats),
         **office_stats,
     }
     return ref
+
+
+LEGACY_FROM, LEGACY_TO = "1997-05-01", "2010-05-11"
+_OPPOSITION_WORDS = re.compile(r"shadow|spokes|opposition|parliamentary party|parliamentary leader", re.I)
+_PARLIAMENTARY = re.compile(r"\bspeaker\b|ways and means|chairman of committees|deputy chairman of committees", re.I)
+
+
+def legacy_ministers(path: Path) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    """parlparse's pre-2010 ``ministers.json`` (1997 to May 2010), turned into the shape of ``ministers-2010.json``.
+
+    That file names the department in ``organization_id`` and gives a bare role ("Minister of State"); opposition
+    portfolios are organisations with short names ("Home Affairs") holding shadow or spokesperson roles. The role is
+    written out with its department ("Minister of State (Home Office)") so it is classified like later posts."""
+    if not path.exists():
+        return {}, []
+    d = json.loads(path.read_text(encoding="utf-8"))
+    names = {o["id"]: o.get("name", o["id"]) for o in d.get("organizations", [])}
+    rows = [m for m in d.get("memberships", [])
+            if (m.get("end_date") or "9999") >= LEGACY_FROM and (m.get("start_date") or "") < "2010-05-06"]
+    by_org: dict[str, list[str]] = defaultdict(list)
+    for m in rows:
+        by_org[m.get("organization_id", "")].append(m.get("role") or "")
+    mixed = {"house-of-commons", "house-of-lords", "parliament"}  # government and opposition roles side by side
+    opposition_orgs = {o for o, roles in by_org.items() if o not in mixed
+                       and sum(bool(_OPPOSITION_WORDS.search(r)) for r in roles) * 2 >= len(roles)}
+    out = []
+    for m in rows:
+        org = m.get("organization_id", "")
+        name = names.get(org, org)
+        role = " ".join((m.get("role") or "").strip(" -").split())
+        if "ommittee" in name or "Panel" in name:
+            source, full = "parlparse/committee", role
+        elif _OPPOSITION_WORDS.search(role) or org in opposition_orgs or "party" in name.lower():
+            source, full = "parlparse/oppositionpost", role if name.lower() in role.lower() else f"{role} ({name})"
+        elif org in ("house-of-commons", "house-of-lords", "parliament") and _PARLIAMENTARY.search(role):
+            source, full = "parlparse/parliamentarypost", role
+        else:
+            source, full = "parlparse/governmentpost", role if name.lower() in role.lower() else f"{role} ({name})"
+        end = m.get("end_date")
+        out.append({**m, "role": full, "source": source,
+                    "end_date": min(end, LEGACY_TO) if end else end})
+    return names, out
 
 
 def load_offices(
@@ -352,6 +431,13 @@ def load_offices(
             # later files (the posts scraper) carry fresher committee names
             org_names[org["id"]] = org.get("name", org["id"])
         raw_rows.extend(d.get("memberships", []))
+    # Members who sat after 2010 have their whole careers in Parliament's own data above; the older parlparse file
+    # (1997 to 2010) is used only for people it does not cover, so no post is listed twice.
+    covered = {_resolve_chain(person_redirect, m.get("person_id", "")) for m in raw_rows}
+    legacy_names, legacy_rows = legacy_ministers(members_dir / "ministers.json")
+    for name_id, name in legacy_names.items():
+        org_names.setdefault(name_id, name)
+    raw_rows.extend(m for m in legacy_rows if _resolve_chain(person_redirect, m.get("person_id", "")) not in covered)
 
     rows_in = len(raw_rows)
     exact: dict[tuple, dict[str, Any]] = {}
