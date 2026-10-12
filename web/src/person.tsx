@@ -4,6 +4,9 @@ import { createRoot } from "react-dom/client";
 import "./pages";
 import { Timeline } from "./components/Timeline";
 import { EdmList, type EdmRow } from "./components/EdmList";
+import { DonationsSection, type MemberDonations } from "./components/Donations";
+import { GroupsSection, type MemberGroup } from "./components/Groups";
+import { ELSEWHERE, Elsewhere, type Link } from "./elsewhere";
 import { type Interests, InterestsSection } from "./components/Interests";
 import { hasVoteKind, VoteKind } from "./components/VoteKind";
 import { fmtDate } from "./render";
@@ -26,6 +29,7 @@ interface PersonData {
   age: number | null;
   age_approximate: boolean | null;
   first_elected: string | null;
+  parliament_id?: string | null;
   current: { house: string; constituency: string | null; party: string | null } | null;
   memberships: { house: string; constituency: string | null; party: string | null; start: string; end: string | null }[];
   offices: { kind: string; title: string; start: string; end: string | null }[];
@@ -58,6 +62,9 @@ interface PersonData {
   } | null;
   edms?: { tabled: number; signed: number; recent: EdmRow[] } | null;
   interests?: Interests | null;
+  donations?: MemberDonations | null;
+  registers?: Interests[];
+  groups?: MemberGroup[];
   devolved?: {
     memberships: { legislature: string; body: string; member: string; seat: string | null; party: string | null; start: string; end: string | null }[];
     counts: Record<string, number>;
@@ -299,6 +306,11 @@ function Person({ number }: { number: string }) {
       {p.interests && (
         <InterestsSection interests={p.interests} name={p.name} isMP={p.current?.house === "commons"} />
       )}
+      {p.registers?.map((r) => (
+        <InterestsSection key={r.register} interests={r} name={p.name} isMP={false} />
+      ))}
+      {p.donations && <DonationsSection donations={p.donations} name={p.name} />}
+      {p.groups && <GroupsSection groups={p.groups} name={p.name} />}
 
       {p.edms && p.edms.tabled + p.edms.signed > 0 && (
         <section aria-labelledby="h-edms">
@@ -324,12 +336,30 @@ function Person({ number }: { number: string }) {
           ))}
         </ul>
       </section>
+      <section aria-labelledby="h-elsewhere">
+        <h2 id="h-elsewhere">Elsewhere</h2>
+        <Elsewhere label={`More on ${p.name}`} links={elsewhereFor(p)} />
+      </section>
       <p className="muted small">
         From Hansard, mySociety's member records and the UK Parliament's Members data. See the{" "}
         <a href="/methodology">methodology</a>.
       </p>
     </article>
   );
+}
+
+/** Other free sites with what this page does not have: contact details, every vote, alerts, writing to them. */
+function elsewhereFor(p: PersonData): Link[] {
+  const house = p.current?.house === "lords" ? "lords" : p.current ? "commons" : (p.memberships.at(-1)?.house as "commons" | "lords" | undefined) ?? null;
+  const links: Link[] = [];
+  if (p.parliament_id) links.push({ href: ELSEWHERE.membersProfile(p.parliament_id), text: "Parliament's profile", note: "contact details" });
+  if (p.number) {
+    links.push({ href: ELSEWHERE.twfyPerson(p.number, house), text: "TheyWorkForYou", note: "earlier speeches and voting summaries" });
+    links.push({ href: ELSEWHERE.votesPerson(p.number), text: "TheyWorkForYou Votes", note: "every recorded vote" });
+    links.push({ href: ELSEWHERE.twfyPersonAlert(p.number), text: "email alerts", note: `when ${p.name} speaks` });
+  }
+  if (p.current) links.push({ href: ELSEWHERE.writeToThem(), text: "WriteToThem", note: `write to ${p.name}` });
+  return links;
 }
 
 const number = window.location.pathname.match(/^\/people\/(\d+)/)?.[1];

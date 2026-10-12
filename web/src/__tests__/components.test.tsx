@@ -236,3 +236,13 @@ describe("shared briefings", () => {
     window.history.pushState(null, "", "/");
   });
 });
+
+describe("elsewhere", () => {
+  it("offers Hansard search for the same words, labelled as an alternative when nothing was found", async () => {
+    const { ElsewhereForSearch } = await import("../elsewhere");
+    const { container } = render(<ElsewhereForSearch words="rail fares" from="2023-01-01" noRecords />);
+    expect(container.textContent).toMatch(/^Try instead:/);
+    expect(screen.getByRole("link", { name: "Hansard search" }).getAttribute("href")).toContain("searchTerm=rail%20fares&startDate=2023-01-01");
+    expect(screen.getByRole("link", { name: "email alerts" })).toBeInTheDocument();
+  });
+});

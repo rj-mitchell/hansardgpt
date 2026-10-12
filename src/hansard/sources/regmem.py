@@ -113,19 +113,19 @@ def parse(xml: bytes) -> dict[str, Any]:
             if items:
                 cats.append({"type": cat.get("type") or "", "name": cat.get("name") or "", "items": items})
         cats.sort(key=lambda c: _category_key(c["type"]))
-        members[pid] = {"name": rm.get("membername"), "categories": cats}
+        members[pid] = {"name": rm.get("membername"), "categories": cats, "date": rm.get("date")}
     return {"edition": edition, "members": members}
 
 
-def latest_edition(client: httpx.Client) -> tuple[str, str] | None:
+def latest_edition(client: httpx.Client, base: str = BASE) -> tuple[str, str] | None:
     """(file name, date) of the newest edition listed."""
-    resp = client.get(BASE)
+    resp = client.get(base)
     resp.raise_for_status()
     found = sorted(_FILE.findall(resp.text), key=lambda x: x[1])
     return found[-1] if found else None
 
 
-def refresh(path: Path, client: httpx.Client | None = None) -> dict[str, Any]:
+def refresh(path: Path, client: httpx.Client | None = None, base: str = BASE) -> dict[str, Any]:
     """Fetch the newest edition if it is newer than the copy on disk. Keeps the old copy on any failure."""
     path = Path(path)
     current = None
@@ -137,20 +137,20 @@ def refresh(path: Path, client: httpx.Client | None = None) -> dict[str, Any]:
     own = client is None
     client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
     try:
-        latest = latest_edition(client)
+        latest = latest_edition(client, base)
         if latest is None:
             return {"edition": current, "updated": False, "error": "no editions listed"}
         name, day = latest
         if current == day:
             return {"edition": day, "updated": False}
-        resp = client.get(BASE + name)
+        resp = client.get(base + name)
         resp.raise_for_status()
         data = parse(resp.content)
         if not data["members"]:
             return {"edition": current, "updated": False, "error": f"{name}: no members found"}
         data["edition"] = day
         data["fetched"] = datetime.now(UTC).isoformat(timespec="seconds")
-        data["source"] = BASE + name
+        data["source"] = base + name
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data))
@@ -161,9 +161,9 @@ def refresh(path: Path, client: httpx.Client | None = None) -> dict[str, Any]:
             client.close()
 
 
-def editions(client: httpx.Client) -> list[tuple[str, str]]:
+def editions(client: httpx.Client, base: str = BASE) -> list[tuple[str, str]]:
     """Every edition listed, oldest first: (file name, date)."""
-    resp = client.get(BASE)
+    resp = client.get(base)
     resp.raise_for_status()
     return sorted(set(_FILE.findall(resp.text)), key=lambda x: x[1])
 
@@ -234,7 +234,7 @@ def refresh_history(path: Path, leavers: dict[str, str], *, client: httpx.Client
 
 
 def refresh_previous(path: Path, latest: str | None, *, client: httpx.Client | None = None,
-                     days: int = 365) -> dict[str, Any]:
+                     days: int = 365, base: str = BASE) -> dict[str, Any]:
     """Keep the edition from about a year before ``latest`` (the newest published on or before that day), so a
     member's page can show what is new in the register and what is no longer listed."""
     path = Path(path)
@@ -250,13 +250,13 @@ def refresh_previous(path: Path, latest: str | None, *, client: httpx.Client | N
     own = client is None
     client = client or httpx.Client(timeout=120, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
     try:
-        before = [(n, d) for n, d in editions(client) if d <= target]
+        before = [(n, d) for n, d in editions(client, base) if d <= target]
         if not before:
             return {"edition": current, "updated": False}
         name, day = before[-1]
         if current == day:
             return {"edition": day, "updated": False}
-        resp = client.get(BASE + name)
+        resp = client.get(base + name)
         resp.raise_for_status()
         data = parse(resp.content)
         if not data["members"]:

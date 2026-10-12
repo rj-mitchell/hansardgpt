@@ -27,6 +27,8 @@
             <li><a href="#majorities">Majorities and first-term MPs</a></li>
             <li><a href="#votes">What each vote was on</a></li>
             <li><a href="#devolution">Devolved subjects</a></li>
+            <li><a href="#donations">Donations</a></li>
+            <li><a href="#groups">All-party groups</a></li>
             <li><a href="#neutrality">Neutrality</a></li>
             <li><a href="#warnings">What the warnings mean</a></li>
             <li><a href="#saved">Saved and shared briefings</a></li>
@@ -238,6 +240,61 @@
           </li>
         </ul>
 
+        <h2 id="donations">Donations</h2>
+        <p>
+          MP pages and the <a href="/donations">donations</a> page show political donations from the Electoral
+          Commission's register, which lists donations above the reporting limits since 2001. The Commission names
+          each recipient but gives no Parliament ID, so donations are matched to MPs by name and date:
+        </p>
+        <ul>
+          <li>
+            <strong>Donations to an MP</strong> (recorded by the Commission as given to an MP, a party leadership
+            candidate or a party member) are matched only to MPs sitting at the time of each donation, using the names
+            they went by then. A match must be unique: if two sitting MPs share a name, the donation is not linked to
+            either. Short forms of first names (Tom and Thomas), hyphens, titles and one-letter spelling slips in the
+            register are allowed for. A surname alone is used only when the Commission records the recipient as an MP,
+            only one sitting MP had that surname, and any first initial agrees. Every donation to the same recipient
+            must point to the same MP; if they point to different people, none is linked.
+          </li>
+          <li>
+            <strong>Donations to an MP's local party</strong> are linked only when the local party's name is exactly
+            the constituency's name (apart from words such as "CLP" or "Conservative Association") and the seat's MP
+            on that date was from the same party. They are shown separately, as donations to the local party, not to
+            the MP.
+          </li>
+        </ul>
+        <p>
+          Around 99% of donations recorded as given to an MP are linked; the rest were mostly made before the person
+          was elected or after they left. Donations to central parties are not linked to anyone. Every entry links to
+          the Commission's own record. A donation is not a finding of wrongdoing, and does not show that it
+          influenced anything a member said or did.
+        </p>
+
+        <h2 id="groups">All-party groups</h2>
+        <p>
+          The <a href="/groups">all-party groups</a> pages, and the groups on MP and peer pages, come from the Register
+          of All-Party Parliamentary Groups and the devolved parliaments' lists of cross-party groups, via mySociety's
+          <a href="https://github.com/mysociety/appg-membership">APPG dataset</a> (CC BY 4.0), refreshed weekly.
+          Parliament's own register site turns away automated downloads, so the site uses mySociety's copy.
+        </p>
+        <ul>
+          <li>
+            <strong>Officers, secretariats and registered benefits</strong> are as given in the register. Benefits in
+            kind are registered in bands of £1,500, so funders' totals are the least they could be.
+          </li>
+          <li>
+            <strong>Members</strong> other than officers come from lists the groups supplied (or the devolved
+            parliaments' official lists), so they may be incomplete or out of date. Lists that mySociety found by AI web
+            search are left out, because mySociety says they are not yet checked.
+          </li>
+          <li>
+            People are linked to MPs and peers by their ParlParse or UK Parliament ID. Where a list gives only a name,
+            it is linked only if it is exactly the name of one member sitting when the list was published (peers'
+            titles are unique). Anything else, such as companies listed as members, is shown as listed.
+          </li>
+        </ul>
+        <p>Contact addresses and email addresses in the register are left out.</p>
+
         <h2 id="neutrality">Neutrality</h2>
         <p>
           Where They Stand takes no position on any issue, party or person. Briefings report what was said and by
@@ -301,7 +358,11 @@
             Party, role and constituency details come from public member data maintained by mySociety; any gaps
             there are reflected here.
           </li>
-          <li>The record begins in May 2010.</li>
+          <li>
+            The record begins in May 2010. For earlier debates, use
+            <a href="https://www.theyworkforyou.com/" rel="noreferrer">TheyWorkForYou</a> or
+            <a href="https://api.parliament.uk/historic-hansard/" rel="noreferrer">Historic Hansard</a>.
+          </li>
           <li>
             The site is in beta: new and still being tested. Committee evidence transcripts are collected from 2022
             only, and committee reports are linked rather than read; the <a href="/resources">other resources</a>
@@ -323,6 +384,12 @@
           </li>
           <li>Member, party, constituency and office-holder data from mySociety's ParlParse.</li>
           <li>
+            The registers of interests of the House of Lords (read weekly for each sitting peer from the UK Parliament
+            Members API, under the Open Parliament Licence), the Scottish Parliament, the Senedd and the Northern
+            Ireland Assembly (from the copies published by TheyWorkForYou). Each is shown on the member's page under
+            its own name, with what has changed over the past year.
+          </li>
+          <li>
             The Register of Members' Financial Interests, from the copy of each edition published by TheyWorkForYou,
             under the Open Parliament Licence v3.0. MP pages show the latest edition as registered; donors' addresses
             are left out. A registered interest is a declaration, not a finding of wrongdoing.
@@ -341,6 +408,17 @@
             TheyWorkForYou, under the Open Parliament Licence and the equivalent licences of each parliament, with
             members' devolved seats and parties from ParlParse. They are kept apart from Westminster search, and
             appear in briefings only when you turn them on, in their own labelled section.
+          </li>
+          <li>
+            Political donations from the <a href="https://search.electoralcommission.org.uk/">Electoral Commission's
+            register of donations</a>, refreshed weekly and matched to MPs as described under
+            <a href="#donations">Donations</a>. Donors' addresses and postcodes are left out.
+          </li>
+          <li>
+            All-party and cross-party groups from mySociety's
+            <a href="https://github.com/mysociety/appg-membership">APPG groups and memberships</a> dataset, under
+            Creative Commons Attribution 4.0, built from the Register of All-Party Parliamentary Groups (Open
+            Parliament Licence) and the devolved parliaments' lists.
           </li>
           <li>
             Early day motions and their signatures from the UK Parliament

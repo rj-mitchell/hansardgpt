@@ -130,3 +130,15 @@ describe("stageQuestion", () => {
     );
   });
 });
+
+describe("links to other sites", () => {
+  it("builds searches with the words and dates", async () => {
+    const { ELSEWHERE } = await import("../elsewhere");
+    expect(ELSEWHERE.hansard("onshore wind", "2020-01-01", "2024-12-31")).toBe(
+      "https://hansard.parliament.uk/search/Contributions?searchTerm=onshore%20wind&startDate=2020-01-01&endDate=2024-12-31",
+    );
+    expect(ELSEWHERE.hansard("wind")).toBe("https://hansard.parliament.uk/search/Contributions?searchTerm=wind");
+    expect(ELSEWHERE.twfyPerson(10777, "lords")).toBe("https://www.theyworkforyou.com/peer/?p=10777");
+    expect(ELSEWHERE.writeToThem("SW1A 0AA")).toBe("https://www.writetothem.com/?pc=SW1A%200AA");
+  });
+});

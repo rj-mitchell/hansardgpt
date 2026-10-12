@@ -3,6 +3,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./pages";
 import { VoteKind } from "./components/VoteKind";
+import { ELSEWHERE, Elsewhere } from "./elsewhere";
 import { fmtDate } from "./render";
 import type { VoteType } from "./types";
 
@@ -153,6 +154,13 @@ function Week({ start }: { start: string | null }) {
         Listed from the record as published, which can take a day or two to appear. Items with fewer than three
         contributions are counted but not listed. Ask about anything here on the <a href="/">main page</a>.
       </p>
+      <Elsewhere
+        label="Coming up"
+        links={[
+          { href: ELSEWHERE.whatsOn, text: "Parliament's What's on calendar", note: "business for the days ahead" },
+          { href: ELSEWHERE.parliamentTv, text: "Parliament TV", note: "watch live or catch up" },
+        ]}
+      />
     </article>
   );
 }

@@ -2961,3 +2961,11 @@ main:focus {
   font-size: var(--step-0);
   margin-block: var(--space-m) var(--space-2xs);
 }
+
+/* "Elsewhere": a line of links to other free sites for what this one does not do */
+.elsewhere {
+  margin-block: var(--space-s);
+}
+.elsewhere a {
+  white-space: normal;
+}

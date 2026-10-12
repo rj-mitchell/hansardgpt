@@ -274,13 +274,55 @@ def committees(force: bool = typer.Option(True, help="rebuild even if the copy i
 
 
 @app.command()
-def interests():
-    """Fetch the newest edition of the Register of Members' Financial Interests (also done by every sync)."""
+def interests(lords: bool = typer.Option(False, help="Read every peer's entries now, even if read this week")):
+    """Fetch the newest registers of interests: Commons, Lords and the devolved parliaments (also done by sync)."""
     _setup_logging()
+    import duckdb
+
+    from hansard.reference.profiles import attach_reference
+    from hansard.sources.registers import refresh_devolved, refresh_lords, sitting_peers
     from hansard.sources.regmem import refresh
     from hansard.sync import regmem_path
 
-    typer.echo(json.dumps(refresh(regmem_path(_settings())), indent=2))
+    settings = _settings()
+    out: dict = {"commons": refresh(regmem_path(settings))}
+    con = duckdb.connect()
+    attach_reference(con, settings.reference_dir)
+    out["lords"] = refresh_lords(settings.data_dir / "regmem_lords.json", sitting_peers(con), force=lords)
+    out["devolved"] = refresh_devolved(settings.data_dir)
+    typer.echo(json.dumps(out, indent=2))
+
+
+@app.command()
+def groups(force: bool = typer.Option(True, help="Download again even if the copy is less than a week old")):
+    """Download the all-party parliamentary groups dataset and rebuild (also done weekly by sync)."""
+    _setup_logging()
+    import duckdb
+
+    from hansard.reference.profiles import attach_reference
+    from hansard.sources.appgs import refresh
+    from hansard.sync import appgs_path
+
+    settings = _settings()
+    con = duckdb.connect()
+    attach_reference(con, settings.reference_dir)
+    typer.echo(json.dumps(refresh(appgs_path(settings), con, force=force), indent=2))
+
+
+@app.command()
+def donations(force: bool = typer.Option(True, help="Download again even if the copy is less than a week old")):
+    """Download the Electoral Commission's register of donations and match it to MPs (also done weekly by sync)."""
+    _setup_logging()
+    import duckdb
+
+    from hansard.reference.profiles import attach_reference
+    from hansard.sources.donations import refresh
+    from hansard.sync import donations_path
+
+    settings = _settings()
+    con = duckdb.connect()
+    attach_reference(con, settings.reference_dir)
+    typer.echo(json.dumps(refresh(donations_path(settings), con, force=force), indent=2))
 
 
 @app.command()
@@ -370,9 +412,27 @@ def backup(to: Path = typer.Option(None, help="folder for backups (default: <dat
            keep: int = typer.Option(14, help="how many daily backups to keep")):
     """Back up what cannot be rebuilt: saved briefings, reports, feedback, usage and visit counts."""
     from hansard.backup import make_backup
+    from hansard.offsite import OffsiteError, send
 
     _setup_logging()
-    typer.echo(f"Backed up to {make_backup(_settings(), to, keep)}")
+    archive = make_backup(_settings(), to, keep)
+    typer.echo(f"Backed up to {archive}")
+    try:  # and a copy off the server, when a Backblaze B2 bucket is set up
+        out = send(archive)
+    except OffsiteError as exc:
+        typer.echo(f"The off-site copy failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo("Off-site copy: " + (f"stored in {out['bucket']} ({out['stored']} kept there)"
+                                    if out.get("ok") else out["offsite"]))
+
+
+@app.command()
+def offsite():
+    """Check the off-site backup bucket: whether the key works, and how many backups are stored there."""
+    from hansard.offsite import check
+
+    _setup_logging()
+    typer.echo(json.dumps(check(), indent=2))
 
 
 @app.command()

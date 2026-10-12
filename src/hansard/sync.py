@@ -109,6 +109,14 @@ def regmem_path(settings: Settings) -> Path:
     return settings.data_dir / "regmem.json"
 
 
+def appgs_path(settings: Settings) -> Path:
+    return settings.data_dir / "appgs.sqlite"
+
+
+def donations_path(settings: Settings) -> Path:
+    return settings.data_dir / "donations.sqlite"
+
+
 def edms_path(settings: Settings) -> Path:
     return settings.data_dir / "edms.sqlite"
 
@@ -252,10 +260,52 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                 # former MPs: the last edition before they left, a few old editions per run
                 stats["interests"]["history"] = refresh_history(regmem_path(settings).with_name("regmem_history.json"),
                                                                 former_members(con))
+                # the Lords (each sitting peer, weekly) and the devolved parliaments' registers
+                from hansard.sources.registers import refresh_devolved, refresh_lords, sitting_peers
+
+                try:
+                    stats["interests"]["lords"] = refresh_lords(settings.data_dir / "regmem_lords.json",
+                                                                sitting_peers(con))
+                except Exception as exc:
+                    log.warning("Lords interests not updated: %s", exc)
+                    stats["interests"]["lords"] = {"error": str(exc)[:200]}
+                stats["interests"]["devolved"] = refresh_devolved(settings.data_dir)
                 stats["interests"]["seconds"] = round(time.time() - t, 1)
             except Exception as exc:  # never let an outside service stop the sync
                 log.warning("register of interests not updated: %s", exc)
                 stats["interests"] = {"error": str(exc)[:200]}
+
+        t = time.time()
+        if fetch and settings.section("appgs").get("enabled", True):
+            try:  # all-party parliamentary groups, from mySociety's dataset (weekly)
+                import duckdb
+
+                from hansard.reference.profiles import attach_reference
+                from hansard.sources.appgs import refresh as refresh_appgs
+
+                con = duckdb.connect()
+                attach_reference(con, settings.reference_dir)
+                stats["appgs"] = refresh_appgs(appgs_path(settings), con)
+                stats["appgs"]["seconds"] = round(time.time() - t, 1)
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("all-party groups not updated: %s", exc)
+                stats["appgs"] = {"error": str(exc)[:200]}
+
+        t = time.time()
+        if fetch and settings.section("donations").get("enabled", True):
+            try:  # the Electoral Commission's register of donations, matched to MPs (weekly)
+                import duckdb
+
+                from hansard.reference.profiles import attach_reference
+                from hansard.sources.donations import refresh as refresh_donations
+
+                con = duckdb.connect()
+                attach_reference(con, settings.reference_dir)
+                stats["donations"] = refresh_donations(donations_path(settings), con)
+                stats["donations"]["seconds"] = round(time.time() - t, 1)
+            except Exception as exc:  # never let an outside service stop the sync
+                log.warning("donations not updated: %s", exc)
+                stats["donations"] = {"error": str(exc)[:200]}
 
         t = time.time()
         if fetch and settings.section("devolved").get("enabled", True):

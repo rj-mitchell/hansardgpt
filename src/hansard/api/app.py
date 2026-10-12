@@ -977,6 +977,94 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 holder["register"] = Register(regmem_path(settings))
         return holder["register"]
 
+    def get_donations():
+        from hansard.sources.donations import Donations
+        from hansard.sync import donations_path
+
+        with lock:
+            if "donations" not in holder:
+                holder["donations"] = Donations(donations_path(settings))
+        return holder["donations"]
+
+    def get_groups():
+        from hansard.sources.appgs import Groups
+        from hansard.sync import appgs_path
+
+        with lock:
+            if "groups" not in holder:
+                holder["groups"] = Groups(appgs_path(settings))
+        return holder["groups"]
+
+    @app.get("/api/groups")
+    def groups_index(q: str = "", parliament: str = "uk"):
+        """All-party parliamentary groups (or a devolved parliament's cross-party groups), and their biggest
+        registered funders. Free: no AI."""
+        from hansard.sources.appgs import PARLIAMENTS
+
+        if parliament not in PARLIAMENTS:
+            raise HTTPException(404, "Unknown parliament.")
+        return get_groups().index(q[:200], parliament)
+
+    @app.get("/api/groups/funder")
+    def groups_funder(name: str):
+        return {"funder": name, "benefits": get_groups().funder(name[:300])}
+
+    @app.get("/api/groups/{parliament}/{slug}")
+    def group_detail(parliament: str, slug: str):
+        g = get_groups().group(slug, parliament)
+        if g is None:
+            raise HTTPException(404, "There is no group at this address.")
+        people = get_people()
+        for m in g["members"]:
+            m["member"] = people.brief(m["person_id"], m["updated"]) if m["person_id"] else None
+        return g
+
+    @app.get("/groups/{parliament}/{slug}", include_in_schema=False)
+    def group_page(parliament: str, slug: str, request: Request):
+        index = dist / "group.html"
+        page = index.read_text() if index.is_file() else "<!doctype html><html><head></head><body></body></html>"
+        g = get_groups().group(slug, parliament)
+        base = str(request.base_url).rstrip("/")
+        if g is None:
+            return Response(page_with_meta(page, title="Group not found — Where They Stand",
+                                           description="There is no group at this address.",
+                                           url=f"{base}/groups/{parliament}/{slug}", image=None),
+                            status_code=404, media_type="text/html")
+        desc = (g["purpose"] or g["title"])[:280]
+        return Response(page_with_meta(page, title=f"{g['title']} — Where They Stand", description=desc,
+                                       url=f"{base}/groups/{parliament}/{slug}", image=None, noindex=False),
+                        media_type="text/html")
+
+    @app.get("/api/donations")
+    def donations_index():
+        """The biggest donors to MPs in the last five years and the latest donations, as registered with the
+        Electoral Commission and matched to MPs. Free: no AI."""
+        out = get_donations().index()
+        people = get_people()
+        for r in out.get("recent", []):
+            r["member"] = people.brief(r["person_id"], r["accepted"]) if r.get("person_id") else None
+        return out
+
+    @app.get("/api/donations/donors")
+    def donations_donors(q: str = ""):
+        return {"query": q, "donors": get_donations().donors(q[:200])}
+
+    @app.get("/api/donations/donor")
+    def donations_by_donor(name: str):
+        people = get_people()
+        rows = get_donations().donor(name[:300])
+        for r in rows:
+            r["member"] = people.brief(r["person_id"], r["accepted"]) if r.get("person_id") else None
+        return {"donor": name, "donations": rows}
+
+    def get_registers():
+        from hansard.sources.registers import Registers
+
+        with lock:
+            if "registers" not in holder:
+                holder["registers"] = Registers(settings.data_dir)
+        return holder["registers"]
+
     def get_edms():
         from hansard.sources.edms import EdmStore
         from hansard.sync import edms_path
@@ -1178,7 +1266,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             devolved = None
         return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
                 "devolved": devolved,
-                "interests": get_register().for_person(pid), "committee_evidence": evidence}
+                "interests": get_register().for_person(pid), "registers": get_registers().for_person(pid),
+                "committee_evidence": evidence,
+                "donations": get_donations().for_person(pid), "groups": get_groups().for_person(pid)}
 
     @app.get("/api/postcode/{postcode}")
     def postcode(postcode: str, request: Request, user=Depends(current_user)):
@@ -1241,6 +1331,13 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             ev = []
         return sitemap([f"{base}/committees/{c}" for c in cs] + [f"{base}/inquiries/{i}" for i in iq]
                        + [f"{base}/evidence/{e}" for e in ev])
+
+    @app.get("/sitemap-groups.xml", include_in_schema=False)
+    def sitemap_groups(request: Request):
+        base = str(request.base_url).rstrip("/")
+        with get_groups().connect() as con:
+            rows = con.execute("SELECT parliament, slug FROM groups").fetchall() if con is not None else []
+        return sitemap([f"{base}/groups/{p}/{s}" for p, s in rows])
 
     @app.get("/sitemap-edms.xml", include_in_schema=False)
     def sitemap_edms(request: Request):
@@ -1411,7 +1508,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
 
     @app.get("/api/admin/usage")
     def usage(user=Depends(admin_user)):
-        return {**summary(state), "visits": visit_summary(state), "alerts": alerts(state, settings.usage),
+        from hansard.offsite import backup_alerts
+
+        backups = Path(os.environ.get("HANSARD_BACKUP_DIR", "/backups"))
+        return {**summary(state), "visits": visit_summary(state),
+                "alerts": alerts(state, settings.usage) + backup_alerts(backups),
                 "failures": recent_failures(state), "popular_questions": popular_questions(state)}
 
     @app.get("/api/admin/sync")
