@@ -118,6 +118,10 @@ def appgs_path(settings: Settings) -> Path:
     return settings.data_dir / "appgs.sqlite"
 
 
+def directorships_path(settings: Settings) -> Path:
+    return settings.data_dir / "directorships.json"
+
+
 def donations_path(settings: Settings) -> Path:
     return settings.data_dir / "donations.sqlite"
 
@@ -383,6 +387,19 @@ def run_sync(settings: Settings, *, fetch: bool = True, embed_minutes: float | N
                                                settings.data_dir / "raw" / "twfy_divisions.parquet")
             except Exception as exc:
                 log.warning("whip reports not updated: %s", exc)
+            if settings.section("directorships").get("enabled", True):
+                try:  # company directorships from Companies House (a slice of members per update; needs a key)
+                    from hansard.sources import parlparse
+                    from hansard.sources.companies import refresh as refresh_directorships
+
+                    t = time.time()
+                    stats["directorships"] = refresh_directorships(
+                        directorships_path(settings), settings.reference_dir,
+                        parlparse.members_dir(settings.parlparse_dir) / "people.json")
+                    stats["directorships"]["seconds"] = round(time.time() - t, 1)
+                except Exception as exc:  # never let an outside service stop the sync
+                    log.warning("directorships not updated: %s", exc)
+                    stats["directorships"] = {"error": str(exc)[:200]}
         try:  # what each vote was on (amendment, second reading and so on), used across the site
             from hansard.vote_types import vote_types
 

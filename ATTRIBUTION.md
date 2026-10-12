@@ -49,7 +49,15 @@ licences of the devolved parliaments.
 Donations to MPs and to their local parties come from the
 [Electoral Commission's register of donations](https://search.electoralcommission.org.uk/), refreshed weekly,
 with donors' addresses and postcodes left out. Matching donations to MPs is this site's own work (see the
-methodology page); each entry links to the Commission's record of it.
+methodology page); each entry links to the Commission's record of it. Contains Electoral Commission Information ©
+Electoral Commission and/or database right.
+
+## Company roles
+
+Directorships and other company roles come from the [Companies House](https://find-and-update.company-information.service.gov.uk/)
+register, through its free public data API, with addresses, nationality and dates of birth left out. Contains
+Companies House data. Matching Companies House records to members (by name and month and year of birth) is this
+site's own work; each entry links to the Companies House record.
 
 ## All-party and cross-party groups
 

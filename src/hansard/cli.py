@@ -305,6 +305,31 @@ def whips(count: int = typer.Option(1500, help="votes to check in this run")):
 
 
 @app.command()
+def directorships(count: int = typer.Option(400, help="members to look up in this run"),
+                  show: str = typer.Option("", help="print what is held for members whose name contains this")):
+    """Look up MPs' and peers' company directorships at Companies House (also done by sync, a slice at a time).
+    Needs HANSARD_COMPANIES_HOUSE_KEY."""
+    _setup_logging()
+    from hansard.sources import parlparse
+    from hansard.sources.companies import Directorships, refresh
+    from hansard.sync import directorships_path
+
+    settings = _settings()
+    path = directorships_path(settings)
+    if show:
+        data = json.loads(path.read_text()) if path.exists() else {}
+        for pid, rec in (data.get("people") or {}).items():
+            if show.lower() in (rec.get("name") or "").lower():
+                d = Directorships(path).for_person(pid) or {}
+                typer.echo(f"{rec['name']} ({len(d.get('officers', []))} Companies House record(s))")
+                for a in d.get("appointments", []):
+                    typer.echo(f"  {a['role']}, {a['company']} ({a['status']}), {a['from'] or '?'} to {a['until'] or 'now'}")
+        return
+    typer.echo(json.dumps(refresh(path, settings.reference_dir,
+                                  parlparse.members_dir(settings.parlparse_dir) / "people.json", per_run=count), indent=2))
+
+
+@app.command()
 def groups(force: bool = typer.Option(True, help="Download again even if the copy is less than a week old")):
     """Download the all-party parliamentary groups dataset and rebuild (also done weekly by sync)."""
     _setup_logging()

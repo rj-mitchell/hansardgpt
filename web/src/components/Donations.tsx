@@ -111,7 +111,7 @@ export function DonationsSection({ donations, name }: { donations: MemberDonatio
         <a href="https://search.electoralcommission.org.uk/" rel="noreferrer">
           Electoral Commission's register
         </a>
-        .
+        . Contains Electoral Commission Information © Electoral Commission and/or database right.
       </p>
       {donations.top_donors && donations.top_donors.length > 1 && (
         <p className="small">
