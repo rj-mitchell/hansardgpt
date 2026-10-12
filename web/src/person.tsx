@@ -192,9 +192,6 @@ function Person({ number }: { number: string }) {
 
       <section aria-labelledby="h-recent">
         <h2 id="h-recent">Recent contributions</h2>
-        <p className="small feed-link">
-          <a href={`/feeds/people/${p.number}.xml`}>Follow what {p.name} says in a feed reader (RSS)</a>
-        </p>
         {p.contributions.length === 0 ? (
           <p className="muted">No contributions in the record since 1997.</p>
         ) : (
@@ -351,6 +348,9 @@ function Person({ number }: { number: string }) {
         <h2 id="h-elsewhere">Elsewhere</h2>
         <Elsewhere label={`More on ${p.name}`} links={elsewhereFor(p)} />
       </section>
+      <p className="small feed-link">
+        <a href={`/feeds/people/${p.number}.xml`}>Follow what {p.name} says in a feed reader (RSS)</a>
+      </p>
       <p className="muted small">
         From Hansard, mySociety's member records and the UK Parliament's Members data. See the{" "}
         <a href="/methodology">methodology</a>.

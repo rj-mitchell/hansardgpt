@@ -353,8 +353,7 @@ export default function App() {
         <p className="phase-banner">
           <strong className="phase-tag">Beta</strong>{" "}
           <span>
-            This is a new service and it is still being tested. Briefings can contain mistakes, so check the cited
-            sources. <a href="/corrections#report">Tell us about a problem</a>.
+            This is a new service and it is still being tested. <a href="/corrections#report">Tell us about a problem</a>.
           </span>
         </p>
         <div className="running-head">
@@ -415,23 +414,24 @@ export default function App() {
       <main className="thread" id="main" tabIndex={-1}>
         {turns.length === 0 && (
           <section className="empty">
-            <h2>Research the record of Parliament</h2>
+            <h2>
+              Ask about the record of Parliament <span className="ai-tag">AI-powered</span>
+            </h2>
             <p>
-              Put a question and receive a briefing on the positions taken by ministers, the opposition, city, town
-              and rural MPs, and peers, drawn only from the Official Report. The service expresses no view of its own.
-              Each statement is cited to the verbatim record, with the speaker's office and constituency on that date
-              and the column or question reference.
+              Ask a question in your own words. The site finds the most relevant speeches, answers, statements and
+              votes in the official record since 1997, and AI (Claude) writes a short briefing from them: who said
+              what, and where they stand, with every statement cited to the exact words in Hansard.
             </p>
-            <p className="muted small">
-              Where They Stand is in beta: it is new and still being tested, so check the cited sources. Looking for
-              every mention of a word?{" "}
+            {composer("composer composer-inline")}
+            <p className="ai-caution">
+              AI can make mistakes: check the cited sources before relying on a briefing. Prefer no AI? Choose
+              &ldquo;Sources only&rdquo; to see the most relevant records without a written briefing, or use{" "}
               <a href="https://hansard.parliament.uk/search" target="_blank" rel="noreferrer">
                 Hansard's own search
               </a>{" "}
-              does that best, and the <a href="/resources">other resources</a> page lists more sites worth using
-              alongside this one.
+              to find every mention of a word. The <a href="/resources">other resources</a> page lists more sites
+              worth using alongside this one.
             </p>
-            {composer("composer composer-inline")}
             <h3 className="examples-head">Example questions</h3>
             <ol className="examples">
               {examplesFor(new Date()).map((ex) => (
@@ -445,6 +445,23 @@ export default function App() {
                 </li>
               ))}
             </ol>
+            <h3 className="examples-head">How this differs from a search</h3>
+            <ul className="ask-why">
+              <li>
+                <strong>Answers, not a list of hits.</strong> Hansard's own search and TheyWorkForYou find every
+                mention of the words you type, and leave you to read through them. Here you ask a question; the site
+                finds the contributions that answer it, even when they use different words, and sums them up.
+              </li>
+              <li>
+                <strong>Balanced by design.</strong> Each briefing draws on ministers and the opposition, backbenchers
+                and peers, across parties and parts of the country, and shows that spread. It takes no view of its
+                own.
+              </li>
+              <li>
+                <strong>Checkable.</strong> Every statement links to the record it comes from, with the speaker's
+                party, seat and role on the day. Statements the record does not support are removed.
+              </li>
+            </ul>
           </section>
         )}
         {turns.map((t) => (
