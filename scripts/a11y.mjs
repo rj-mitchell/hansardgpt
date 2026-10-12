@@ -9,7 +9,8 @@ const axe = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const base = process.argv[2] ?? "http://localhost:8000";
 const pages = ["/", "/about", "/methodology", "/glossary", "/developers", "/press", "/topics", "/bills", "/people",
   "/charts", "/this-week", "/committees", "/witnesses", "/devolved", "/edms", "/timeline", "/compare", "/corrections",
-  "/accessibility", "/privacy", "/terms", "/changelog", "/status", "/no-such-page"];
+  "/accessibility", "/privacy", "/terms", "/changelog", "/status", "/groups", "/donations", "/directorships",
+  "/resources", "/no-such-page"];
 
 const browser = await chromium.launch();
 let failures = 0;
