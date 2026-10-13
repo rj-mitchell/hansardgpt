@@ -130,3 +130,45 @@ def test_majority_and_tenure_filters_check_the_day(engine):
     assert all(r["speaker"]["first_term"] is True for r in first.records)
     returning = engine.search("the", Filters(tenure=["returning"]), limit=200)
     assert returning.records and all(r["speaker"]["first_term"] is False for r in returning.records)
+
+
+def _api(calls: list[str], throttle_after: int | None = None):
+    """A stand-in Members API: member N sat for seat N (member "9" left in 2015); every seat has one result."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if throttle_after is not None and len(calls) > throttle_after:
+            return httpx.Response(429)
+        n = request.url.path.split("/")[-2]
+        if "Biography" in request.url.path:
+            end = "2015-03-30T00:00:00" if n == "9" else None
+            return httpx.Response(200, json={"value": {"representations": [
+                {"house": 1, "id": int(n), "name": f"Seat {n}", "startDate": "2010-05-06T00:00:00", "endDate": end}]}})
+        return httpx.Response(200, json={"value": [{"electionDate": "2010-05-06T00:00:00", "isGeneralElection": True,
+                                                    "isNotional": False, "majority": int(n), "result": "Hold"}]})
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_a_throttled_refresh_keeps_its_progress_and_carries_on(tmp_path):
+    cache, calls = tmp_path / "elections.json", []
+    members = ["1", "2", "3", "9"]
+    first = refresh_elections(cache, members, client=_api(calls, throttle_after=3), sleep=lambda s: None)
+    assert first["status"] == "partial" and "slow down" in first["stopped"] and len(calls) == 4  # stopped at once
+    second = refresh_elections(cache, members, client=_api(calls), sleep=lambda s: None)
+    assert second["status"] == "updated" and second["remaining"] == 0
+    assert len(calls) == 4 + 5  # only what was left: one member and four seats
+    assert refresh_elections(cache, members, client=_api(calls), sleep=lambda s: None)["status"] == "fresh"
+
+
+def test_the_weekly_refresh_covers_sitting_members_only(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    cache, calls = tmp_path / "elections.json", []
+    members = ["1", "2", "9"]
+    refresh_elections(cache, members, client=_api(calls), sleep=lambda s: None)
+    calls.clear()
+    week_later = datetime.now(UTC) + timedelta(days=8)
+    out = refresh_elections(cache, members, client=_api(calls), sleep=lambda s: None, now=lambda: week_later)
+    assert out["status"] == "updated"
+    assert sorted(calls) == sorted(["/api/Members/1/Biography", "/api/Members/2/Biography",
+                                    "/api/Location/Constituency/1/ElectionResults",
+                                    "/api/Location/Constituency/2/ElectionResults"])  # not member 9, who left
