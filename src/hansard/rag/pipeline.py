@@ -25,7 +25,7 @@ from hansard.rag.neutral import flag_loaded
 from hansard.rag.prompts import NO_RECORDS
 from hansard.rag.query_parse import QueryPlan, parse_offline, parse_with_model, resolve_speakers
 from hansard.rag.sources import build_sources
-from hansard.rag.verify import check_quotes, verify
+from hansard.rag.verify import check_quotes, drop_preambles, verify
 from hansard.sources.demographics import AGE_BAND_LABEL, GENDER_LABEL
 from hansard.sources.elections import MAJORITY_BAND_LABEL, TENURE_LABEL
 from hansard.votes import VoteFinder
@@ -69,6 +69,8 @@ def plan_note(plan: QueryPlan, scope: Scope) -> str:
     if f.majority_bands:
         bits.append("MPs in seats that were " + ", ".join(MAJORITY_BAND_LABEL[b] for b in f.majority_bands)
                     + " at the time")
+    if f.seat_types:
+        bits.append("MPs for " + " and ".join(f.seat_types) + " seats (on the day they spoke)")
     if not scope.written:
         bits.append("written answers/statements excluded")
     if not scope.pbc:
@@ -392,6 +394,7 @@ class Pipeline:
             yield {"type": "error", "message": "The model declined to answer this question."}
             return
         report = verify(final["blocks"], sources)
+        drop_preambles(report.segments)       # "Across the records retrieved, ..." openers
         britishise_segments(report.segments)  # the model's own words only; quotations stay verbatim
         flag_loaded(report.segments)          # judgemental words in its own voice are highlighted, not hidden
         check_quotes(report, sources)         # quotations not found word for word in their sources are marked

@@ -1310,7 +1310,8 @@ legend,
   margin-block-start: var(--space-xs);
 }
 
-.unsupported {
+/* statements without a citation are only marked when the reader asks to see them */
+.show-uncited .unsupported {
   background: var(--warn-subtle);
   text-decoration: underline dotted var(--warn);
   text-underline-offset: 0.2em;
@@ -1552,6 +1553,28 @@ html:has(.thread .turn) {
   scroll-padding-block-end: 9rem;
 }
 
+/* Under a briefing the question box and, when open, the settings above it are pinned to the foot of the screen. */
+.composer-dock {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.composer-dock > * {
+  pointer-events: auto;
+}
+
+.composer-dock .composer {
+  position: static;
+}
+
+.composer-dock .controls {
+  max-block-size: 55vh;
+  overflow: auto;
+  box-shadow: 0 -0.25rem 1rem rgb(0 0 0 / 0.08);
+}
+
 /* On the empty home page the question box sits under the introduction, above the examples. */
 .composer-inline {
   position: static;
@@ -1695,6 +1718,25 @@ html:has(.thread .turn) {
 @media (hover: hover) and (pointer: fine) {
   .close:hover {
     background: color-mix(in oklch, var(--gilt-on-cloth) 18%, transparent);
+  }
+}
+
+/* a plain way back, in reach of the thumb: on a phone the source covers the whole screen */
+.drawer-foot {
+  flex: none;
+  padding-block: var(--space-xs) calc(var(--space-xs) + env(safe-area-inset-bottom, 0px));
+  padding-inline: var(--space-m);
+  border-block-start: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.drawer-foot button {
+  inline-size: 100%;
+}
+
+@media (min-width: 64rem) {
+  .drawer-foot {
+    display: none; /* beside the briefing on a wide screen: the close button is enough */
   }
 }
 
@@ -3075,4 +3117,34 @@ main:focus {
     align-items: center;
     min-block-size: 2rem;
   }
+}
+
+/* suggested follow-up questions under the latest briefing */
+.follow-ups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2xs, 0.35rem) var(--space-xs);
+  margin-block: var(--space-s);
+}
+
+.follow-up {
+  font-family: var(--serif);
+  font-size: var(--step-0);
+  text-align: start;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding-block: 0.35em;
+  padding-inline: 0.9em;
+  min-block-size: 2.75rem;
+}
+
+.follow-up:hover {
+  border-color: var(--ink-faint);
+}
+
+.follows {
+  margin-block-end: 0;
 }

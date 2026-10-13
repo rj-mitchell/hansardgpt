@@ -94,7 +94,10 @@ class Answerer:
         cfg = self.settings.answer
         history_note = ""
         if history:
-            history_note = "Earlier in this conversation (for context only; cite only the search results below):\n" + \
+            history_note = "If this question follows on from an earlier one, answer what it asks, building on the " \
+                "earlier briefing rather than repeating it (do not restate points already made unless the new " \
+                "records change them). Earlier in this conversation (for context only; cite only the search " \
+                "results below):\n" + \
                 "\n".join(f"Q: {h['question']}\nA (summary): {h.get('answer', '')[:600]}" for h in history[-3:])
         content: list[dict[str, Any]] = [s.search_result() for s in sources]
         content.append({"type": "text", "text": user_instruction(question, mode, plan_note, history_note, group_by,

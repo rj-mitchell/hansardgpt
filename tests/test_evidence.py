@@ -113,10 +113,10 @@ def test_briefings_can_include_committee_evidence(indexed_settings):
                          sleep=lambda _s: None)
         p = Pipeline(indexed_settings, Engine(indexed_settings, embedder=HashingEmbedder(64)))
         plan = parse_offline("What has been said about rail fares?", indexed_settings.regions)
-        _, _, off = p.find(plan, AskRequest(question=plan.question))
-        assert not [s for s in off if s.kind == "evidence"], "off unless the reader asks"
         EvidenceStore(paths[0]).save(77, *parse_transcript(long_doc))
-        _, _, on = p.find(plan, AskRequest(question=plan.question, scope=Scope(evidence=True)))
+        _, _, off = p.find(plan, AskRequest(question=plan.question, scope=Scope(evidence=False)))
+        assert not [s for s in off if s.kind == "evidence"], "left out when the reader unticks it"
+        _, _, on = p.find(plan, AskRequest(question=plan.question))  # searched by default
         ev = [s for s in on if s.kind == "evidence"]
         assert len(ev) == 1, "the witness's answer only: not the chair's question"
         assert ev[0].meta["witness"]["organisation"] == "Passenger Watch"

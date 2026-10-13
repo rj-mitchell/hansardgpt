@@ -68,8 +68,9 @@ def sides_from_question(question: str, filters: Filters, speakers: list[dict[str
 def instruction(sides: list[dict[str, str]]) -> str:
     names = " and ".join(s["label"] for s in sides)
     return (
-        f"The question compares {names}. Each search result title begins with the side it belongs to. Open with a "
-        "short headline on the main differences and any common ground. Then one section per side, in the order "
+        f"The question compares {names}. Each search result title begins with the side it belongs to. Open with "
+        "the '**In brief**' summary: two to four bullets on the main differences and any common ground, each with "
+        "cited examples. Then one section per side, in the order "
         "given, each with a bold label naming the side and its stance and cited examples from that side only. Then "
         "a section 'Where they agree and differ', in which every point quotes and cites an example from each side "
         "it mentions. Give each side similar space; if the records for one side are thin, say so in the closing "

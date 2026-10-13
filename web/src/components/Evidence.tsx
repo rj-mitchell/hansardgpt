@@ -1,6 +1,6 @@
 import { AGE_BAND_LABEL, GENDER_LABEL, MAJORITY_LABEL, TENURE_LABEL } from "../people";
 import { fmtDate } from "../render";
-import type { Evidence } from "../types";
+import type { Evidence, Settings } from "../types";
 
 const SEAT_LABEL: Record<string, string> = { city: "City", town: "Town", rural: "Rural" };
 
@@ -30,14 +30,29 @@ function relabel(counts: Record<string, number> | undefined, labels: Record<stri
 }
 
 /** Gender and age rows appear only when the question is about them, so they never distract from the rest. */
+/** What the search covered, in words, so a reader can see the devolved parliaments and committee evidence were
+ * searched even when nothing from them was found. */
+export function searchedText(scope: Settings["scope"]): string {
+  const parts = ["Commons and Lords debates"];
+  if (scope.written) parts.push("written answers and statements");
+  if (scope.pbc) parts.push("Public Bill Committees");
+  if (scope.votes) parts.push("votes");
+  if (scope.edms ?? true) parts.push("early day motions");
+  if (scope.devolved) parts.push("the Scottish Parliament, the Senedd and the NI Assembly");
+  if (scope.evidence) parts.push("witnesses' evidence to committees");
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+}
+
 export function EvidenceBar({
   evidence,
   demographics = false,
   seats = false,
+  scope,
 }: {
   evidence?: Evidence;
   demographics?: boolean;
   seats?: boolean;
+  scope?: Settings["scope"];
 }) {
   if (!evidence || evidence.records === 0) return null;
   const years =
@@ -59,6 +74,11 @@ export function EvidenceBar({
           ? `, and ${evidence.committee_evidence} witness answer${evidence.committee_evidence === 1 ? "" : "s"} to committees`
           : ""}
       </p>
+      {scope && (
+        <p className="evidence-searched muted small">
+          Searched: {searchedText(scope)}. <a href="#settings">Change what is searched</a>
+        </p>
+      )}
       {evidence.imbalance && (
         <p className="evidence-warning">
           {evidence.imbalance.count} of these {evidence.imbalance.total} contributions are from {evidence.imbalance.party}{" "}

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -116,8 +116,8 @@ class ScopeBody(BaseModel):
     pbc: bool = True
     votes: bool = True
     edms: bool = True
-    devolved: bool = False
-    evidence: bool = False
+    devolved: bool = True
+    evidence: bool = True
 
 
 class FeedbackBody(BaseModel):
@@ -164,6 +164,7 @@ class AskBody(BaseModel):
     plan: dict[str, Any] | None = None
     history: list[dict[str, str]] = Field(default_factory=list, max_length=10)
     sources_only: bool = False  # find and show the sources, but write no briefing (free)
+    follows: str | None = Field(default=None, max_length=2000)  # a follow-up: the question it follows (kept with it)
     compare: list[dict[str, str]] = Field(default_factory=list, max_length=3)  # sides, from the Compare page
 
 
@@ -1288,15 +1289,51 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return {"people": get_people().search(q.strip()[:80], current_only=not everyone)}
 
     @app.get("/api/people/{number}")
-    def person(number: int):
-        return remembered(f"person:{number}", lambda: person_page_data(number))
+    def person(number: int, part: Literal["all", "core", "activity", "interests"] = "all"):
+        """A member's page. The page asks for it in three parts so the first shows at once: ``core`` (who they are,
+        seats, roles, membership), ``activity`` (contributions, votes, motions, devolved and committee evidence)
+        and ``interests`` (registers, donations, company roles, groups). Without ``part``, everything."""
+        if part == "all":
+            return remembered(f"person:{number}", lambda: {**person_core(number), **person_activity(number),
+                                                            **person_interests(number)})
+        fn = {"core": person_core, "activity": person_activity, "interests": person_interests}[part]
+        return remembered(f"person:{number}:{part}", lambda: fn(number))
 
-    def person_page_data(number: int):
+    @app.get("/api/people/{number}/contributions")
+    def person_contributions(number: int, offset: int = Query(0, ge=0, le=2000), limit: int = Query(10, ge=1, le=50)):
+        """More of a member's contributions, newest first (substantive ones: not "Will the member give way?")."""
+        pp = get_people()
+        pid = pp.resolve(number)
+        if not pid:
+            raise HTTPException(404, "There is no member with that number.")
+        rows = remembered(f"person:{number}:contrib:{offset + limit + 1}",
+                          lambda: pp.contributions(pid, limit=offset + limit + 1))
+        return {"contributions": rows[offset:offset + limit], "more": len(rows) > offset + limit}
+
+    def person_core(number: int) -> dict[str, Any]:
         pp = get_people()
         pid = pp.resolve(number)
         page = pp.page(pid) if pid else None
         if page is None:
             raise HTTPException(404, "There is no member with that number.")
+        try:
+            store, members = get_devolved()
+            ms = members.memberships(pid)
+            now = [m for m in ms if m["end"] is None]
+            if now and not page.get("current"):  # a sitting MSP, MS or MLA (and not an MP or peer)
+                m = now[-1]
+                page = {**page, "status": f"{m['member']} for {m['seat']} ({m['body']})"
+                                          + (f", {m['party']}" if m["party"] else "")}
+        except (OSError, ValueError):
+            pass
+        return page
+
+    def person_activity(number: int) -> dict[str, Any]:
+        pp = get_people()
+        pid = pp.resolve(number)
+        if not pid:
+            raise HTTPException(404, "There is no member with that number.")
+        page = remembered(f"person:{number}:core", lambda: person_core(number))
         edms = None
         if page.get("parliament_id"):
             try:
@@ -1316,19 +1353,21 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             ms = members.memberships(pid)
             if ms:
                 devolved = {"memberships": ms, **store.for_person(pid)}
-                now = [m for m in ms if m["end"] is None]
-                if now and not page.get("current"):  # a sitting MSP, MS or MLA (and not an MP or peer)
-                    m = now[-1]
-                    page = {**page, "status": f"{m['member']} for {m['seat']} ({m['body']})"
-                                              + (f", {m['party']}" if m["party"] else "")}
         except (OSError, ValueError):
             devolved = None
+        contributions = pp.contributions(pid, limit=11)
+        return {"contributions": contributions[:10], "contributions_more": len(contributions) > 10,
+                "voting": pp.voting(pid), "edms": edms, "devolved": devolved, "committee_evidence": evidence}
+
+    def person_interests(number: int) -> dict[str, Any]:
         from hansard.sources.companies import mark_declared as _mark_declared
 
+        pp = get_people()
+        pid = pp.resolve(number)
+        if not pid:
+            raise HTTPException(404, "There is no member with that number.")
         interests, registers = get_register().for_person(pid), get_registers().for_person(pid)
-        return {**page, "contributions": pp.contributions(pid), "voting": pp.voting(pid), "edms": edms,
-                "devolved": devolved,
-                "interests": interests, "registers": registers, "committee_evidence": evidence,
+        return {"interests": interests, "registers": registers,
                 "donations": get_donations().for_person(pid), "groups": get_groups().for_person(pid),
                 "directorships": _mark_declared(get_directorships().for_person(pid),
                                                json.dumps([interests, registers], default=str))}
@@ -1625,6 +1664,16 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 get_people()
                 get_weeks().latest()
                 get_bills()
+                # what an MP's page draws on, so the first page after a restart is not the slow one
+                from hansard.vote_types import vote_types as _vote_types
+
+                _vote_types(settings).all()
+                for load in (get_register, get_registers, get_devolved, get_donations, get_groups, get_committees,
+                             get_edms, get_directorships):
+                    try:
+                        load()
+                    except Exception as exc:  # a source not set up on this server: load it on first use as before
+                        log.info("warm-up skipped %s: %s", load.__name__, exc)
                 log.info("warmed up in %.1fs", time.time() - t)
             except Exception as exc:  # never stop the site starting
                 log.warning("warm-up incomplete: %s", exc)

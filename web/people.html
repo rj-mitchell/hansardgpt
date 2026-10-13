@@ -48,7 +48,9 @@
 
         <h2 id="find">Find a member</h2>
         <label for="people-search">Name, constituency or party</label>
-        <input id="people-search" type="search" class="people-search" placeholder="for example Benn, Leeds or Green" />
+        <p class="muted small" id="people-search-hint">Sitting MPs and peers are listed below. Type three letters or more
+          to include former MPs and peers since 1997.</p>
+        <input id="people-search" type="search" class="people-search" aria-describedby="people-search-hint" placeholder="for example Benn, Leeds or Green" />
         <div id="people-live" aria-live="polite"><p class="muted">Loading…</p></div>
       </main>
       <!--#include footer-->

@@ -49,6 +49,7 @@ class Filters:
     age_bands: list[str] = field(default_factory=list)       # see sources.demographics.AGE_BANDS; age on the day
     tenure: list[str] = field(default_factory=list)          # "first-term", "returning" (MPs, on the day)
     majority_bands: list[str] = field(default_factory=list)  # "marginal", "middle", "safe" (MPs, on the day)
+    seat_types: list[str] = field(default_factory=list)      # "city", "town", "rural" (MPs' seats, on the day)
 
     def as_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -65,8 +66,8 @@ class Scope:
     pbc: bool = True       # Public Bill Committee debates
     votes: bool = True     # division (voting) records
     edms: bool = True      # early day motions and who signed them
-    devolved: bool = False  # the Scottish Parliament, the Senedd and the NI Assembly (kept apart; opt in)
-    evidence: bool = False  # witnesses' oral evidence to select committees (kept apart; opt in)
+    devolved: bool = True   # the Scottish Parliament, the Senedd and the NI Assembly (reported in their own section)
+    evidence: bool = True   # witnesses' oral evidence to select committees (reported in their own section)
 
     def sources(self) -> list[str]:
         s = set(ORAL_SOURCES)
@@ -207,6 +208,22 @@ class Engine:
             people = [p for p in people if p in set(filters.person_ids)]
         return sorted(people), births
 
+    def seat_type_spans(self, filters: Filters) -> dict[str, list[tuple[date, date, str]]]:
+        """For each MP who sat for a seat of the asked-for types (city, town, rural) in the date range: when."""
+        params: list[Any] = [filters.seat_types, filters.date_from or self.settings.archive_start]
+        clause = ""
+        if filters.date_to:
+            clause = "AND start <= ?"
+            params.append(filters.date_to)
+        rows = self.resolver.con.execute(
+            f"""SELECT person_id, start, "end", settlement FROM ref_memberships
+                WHERE house = 'commons' AND list_contains(?, settlement) AND "end" >= ? {clause}""",
+            params).fetchall()
+        out: dict[str, list[tuple[date, date, str]]] = {}
+        for pid, start, end, kind in rows:
+            out.setdefault(pid, []).append((start, end, kind))
+        return out
+
     def search(self, query: str, filters: Filters | None = None, scope: Scope | None = None,
                portfolios: list[str] | None = None, recency: float | None = None,
                role_weight: float | None = None, limit: int = 12, diversify: bool = False,
@@ -215,7 +232,7 @@ class Engine:
         r = self.settings.ranking
         if filters.parties:
             filters = Filters(**{**filters.__dict__, "parties": self.expand_parties(filters.parties)})
-        post_filters = bool(filters.age_bands or filters.tenure or filters.majority_bands)
+        post_filters = bool(filters.age_bands or filters.tenure or filters.majority_bands or filters.seat_types)
         if (filters.tenure or filters.majority_bands) and not (filters.genders or filters.age_bands):
             # First terms and majorities depend on the day, so each candidate is checked below; listing every MP
             # in the search itself would only slow it down. Limiting it to the Commons is enough.
@@ -224,6 +241,16 @@ class Engine:
                 filters = Filters(**{**filters.__dict__, "houses": ["commons"]})
         else:
             people, births = self.demographic_people(filters)
+        seat_spans: dict[str, list[tuple[date, date, str]]] = {}
+        if filters.seat_types:
+            # MPs who held a seat of these types during the dates asked about; each record is then checked
+            # against the seat its speaker held on the day
+            seat_spans = self.seat_type_spans(filters)
+            people = sorted(set(seat_spans) & set(people)) if people is not None else sorted(seat_spans)
+            if filters.person_ids:
+                people = [p for p in people if p in set(filters.person_ids)]
+            if not filters.houses:
+                filters = Filters(**{**filters.__dict__, "houses": ["commons"]})
         if people is not None:
             # an impossible id keeps the search empty when nobody matches
             filters = Filters(**{**filters.__dict__, "person_ids": people or ["-none-"]})
@@ -242,6 +269,10 @@ class Engine:
             if bands:
                 birth = births.get(pid)
                 if birth is None or age_band(age_on(birth, hit["date"])) not in bands:
+                    return False
+            if seat_spans:
+                on = hit["date"]
+                if not any(a <= on <= b for a, b, _ in seat_spans.get(pid, [])):
                     return False
             if tenure or majority:
                 f = seat(pid, hit["date"]) if pid else {}

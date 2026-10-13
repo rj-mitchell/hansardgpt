@@ -69,6 +69,13 @@ def test_people_api_and_page(indexed_settings, tmp_path):
     client = TestClient(app)
     body = client.get("/api/people/10669").json()
     assert body["name"] == "Hilary Benn" and "contributions" in body and "voting" in body
+    # the page loads in parts, the slower ones after who the member is
+    core = client.get("/api/people/10669?part=core").json()
+    assert core["name"] == "Hilary Benn" and "contributions" not in core and "interests" not in core
+    assert "voting" in client.get("/api/people/10669?part=activity").json()
+    assert "donations" in client.get("/api/people/10669?part=interests").json()
+    more = client.get("/api/people/10669/contributions?offset=0&limit=1").json()
+    assert len(more["contributions"]) <= 1 and isinstance(more["more"], bool)
     assert client.get("/api/people/99999999").status_code == 404
     assert any(p["number"] == 10669 for p in client.get("/api/people?q=benn").json()["people"])
     assert client.get("/api/postcode/xyz").status_code == 400
@@ -76,3 +83,30 @@ def test_people_api_and_page(indexed_settings, tmp_path):
     assert page.status_code == 200 and "<title>Hilary Benn — Where They Stand</title>" in page.text
     assert 'content="noindex"' not in page.text  # member pages are for search engines
     assert "/people/10669/hilary-benn" in client.get("/sitemap-people.xml").text
+
+
+def test_search_matches_every_word_and_former_members(people):
+    # "hilary benn" and "benn hilary" both find him: each word may be anywhere in a name he has used or a seat held
+    for q in ("hilary benn", "benn hilary", "benn leeds"):
+        assert any(r["number"] == 10669 for r in people.search(q, current_only=False)), q
+    assert not people.search("hilary nobodyatall", current_only=False)
+    assert all("current" in r and "until" in r for r in people.search("benn", current_only=False))
+
+
+def test_slight_interventions_are_not_listed_as_contributions():
+    import duckdb
+
+    from hansard.people import TRIVIAL_PATTERN, TRIVIAL_SQL
+
+    con = duckdb.connect()
+
+    def trivial(text: str) -> bool:
+        return con.execute(f"SELECT {TRIVIAL_SQL.replace('text', '$1').replace('?', '$2')}",
+                           [text, TRIVIAL_PATTERN]).fetchone()[0]
+
+    assert trivial("Will the hon. Gentleman give way?")
+    assert trivial("On a point of order, Madam Deputy Speaker.")
+    assert trivial("I beg to move, That the Bill be now read a Second time.")
+    assert not trivial("Does the Minister agree that bus services in rural areas are a lifeline for older people?")
+    assert not trivial("I thank my right hon. Friend for giving way. Does he agree that the steel industry needs a "
+                       "long-term plan for energy costs, as other countries have?")

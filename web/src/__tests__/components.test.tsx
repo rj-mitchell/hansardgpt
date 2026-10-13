@@ -89,8 +89,21 @@ describe("answer view", () => {
     render(<AnswerView question="q" answer={answer} streamText="" sources={[]} onCite={onCite} />);
     fireEvent.click(screen.getByRole("button", { name: "Open source 1" }));
     expect(onCite).toHaveBeenCalledWith({ source: 1, quotes: ["inflation in costs"] });
-    expect(screen.getByText(/Every substantive statement is cited/)).toBeInTheDocument();
+    expect(screen.getByText(/1 citation, each checked against the source text/)).toBeInTheDocument();
     expect(screen.getByText(/Written by AI \(Claude\) from the cited Hansard records only/)).toBeInTheDocument();
+  });
+
+  it("notes uncited statements after the answer and marks them only on request", () => {
+    const uncited: Answer = {
+      ...answer,
+      segments: [...answer.segments, { text: " Everyone agreed.", sources: [], cited: [], status: "unsupported" }],
+      unsupported_segments: 1,
+    };
+    const { container } = render(<AnswerView question="q" answer={uncited} streamText="" sources={[]} onCite={vi.fn()} />);
+    expect(screen.getByText(/One statement in this briefing is/)).toBeInTheDocument();
+    expect(container.querySelector(".answer-body.show-uncited")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show it" }));
+    expect(container.querySelector(".answer-body.show-uncited .unsupported")).not.toBeNull();
   });
 
   it("flags judgemental words in the briefing's own voice", () => {
