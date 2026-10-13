@@ -269,3 +269,14 @@ def test_a_lead_in_after_an_uncited_sentence_is_not_flagged_but_the_sentence_is(
     assert [(s.status, s.text) for s in segs] == [("unsupported", "Labour MPs criticised the government. "),
                                                    ("connective", "Jane Smith said on 4 May that ")]
     assert [s.status for s in _classify_uncited("- Keir Mather (Selby), 10 August 2026, said ", True)] == ["connective"]
+
+
+def test_openers_about_the_records_are_dropped():
+    from hansard.rag.verify import Segment, drop_preambles
+
+    segs = [Segment("Across the records retrieved, ministers defended the policy."),
+            Segment("**In brief**\n- In the records supplied, Labour MPs criticised it."),
+            Segment("In 2019 the minister said so.")]
+    assert drop_preambles(segs) == 2
+    assert [s.text for s in segs] == ["Ministers defended the policy.", "**In brief**\n- Labour MPs criticised it.",
+                                      "In 2019 the minister said so."]

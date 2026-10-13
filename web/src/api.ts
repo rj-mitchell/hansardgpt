@@ -65,9 +65,10 @@ export function askBody(
   question: string,
   settings: Settings,
   plan?: Plan,
-  history: { question: string; answer?: string }[] = [],
+  history: { question: string; answer?: string; topic?: string; scope?: string }[] = [],
   sourcesOnly = false,
   compare: CompareSide[] = [],
+  follows?: string,
 ) {
   return {
     question,
@@ -90,6 +91,7 @@ export function askBody(
         }
       : undefined,
     history,
+    follows: follows || undefined,
   };
 }
 

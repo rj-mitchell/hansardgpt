@@ -25,6 +25,8 @@ const GROUP_LABEL: Record<string, string> = {
   majority: "Majority (marginal or safe)",
 };
 const MAJORITY_BANDS = ["marginal", "middle", "safe"];
+const SEAT_TYPES = ["city", "town", "rural"];
+const SEAT_TYPE_LABEL: Record<string, string> = { city: "City seats", town: "Town seats", rural: "Rural seats" };
 
 type ChipDef = { key: string; label: string; remove: (p: Plan) => Plan };
 
@@ -50,6 +52,9 @@ export function chipsFor(plan: Plan, meta: Meta | null): ChipDef[] {
   (f.tenure ?? []).forEach((t) => chips.push({ key: `t-${t}`, label: TENURE_LABEL[t] ?? t, remove: without("tenure", t) }));
   (f.majority_bands ?? []).forEach((b) =>
     chips.push({ key: `m-${b}`, label: `Majority: ${(MAJORITY_LABEL[b] ?? b).toLowerCase()}`, remove: without("majority_bands", b) }),
+  );
+  (f.seat_types ?? []).forEach((t) =>
+    chips.push({ key: `st-${t}`, label: `MPs for ${(SEAT_TYPE_LABEL[t] ?? t).toLowerCase()}`, remove: without("seat_types", t) }),
   );
   if (plan.group_by && plan.group_by !== "role")
     chips.push({ key: "group", label: `Grouped by ${GROUP_LABEL[plan.group_by].toLowerCase()}`, remove: (p) => ({ ...p, group_by: "role" }) });
@@ -118,7 +123,7 @@ function PlanEditor({ draft, meta, onChange }: { draft: Plan; meta: Meta | null;
   const f = draft.filters;
   const setF = (patch: Partial<Plan["filters"]>) => onChange({ ...draft, filters: { ...f, ...patch } });
   const toggle = (
-    field: "houses" | "offices" | "regions" | "genders" | "age_bands" | "tenure" | "majority_bands",
+    field: "houses" | "offices" | "regions" | "genders" | "age_bands" | "tenure" | "majority_bands" | "seat_types",
     value: string,
   ) => {
     const current = f[field] ?? [];
@@ -191,6 +196,15 @@ function PlanEditor({ draft, meta, onChange }: { draft: Plan; meta: Meta | null;
           <label key={b}>
             <input type="checkbox" checked={(f.majority_bands ?? []).includes(b)} onChange={() => toggle("majority_bands", b)} />
             {MAJORITY_LABEL[b]}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset>
+        <legend>MPs' seats</legend>
+        {SEAT_TYPES.map((t) => (
+          <label key={t}>
+            <input type="checkbox" checked={(f.seat_types ?? []).includes(t)} onChange={() => toggle("seat_types", t)} />
+            {SEAT_TYPE_LABEL[t]}
           </label>
         ))}
       </fieldset>

@@ -61,6 +61,13 @@ def _iso(d: date | None) -> str | None:
     return None if d is None or d == OPEN_END else d.isoformat()
 
 
+# Contributions too slight to list as something a member "said": a request to intervene, a point of order on its own,
+# a formal motion. Short only: an intervention that goes on to ask a real question is kept.
+TRIVIAL_PATTERN = (r"give way|giving way|point of order|i beg to (move|present)|hear,? hear|indicated (assent|dissent)|"
+                   r"rose\s*[-—]|^order[.!]|^(yes|no|thank you)[.!]?$|^i (will|shall) give way")
+TRIVIAL_SQL = "length(trim(text)) < 40 OR (length(trim(text)) < 110 AND regexp_matches(lower(trim(text)), ?))"
+
+
 class People:
     def __init__(self, settings: Settings, resolver: ProfileResolver, today: date | None = None):
         self.settings = settings
@@ -193,7 +200,8 @@ class People:
                 f"""SELECT DISTINCT ON (record_id) record_id, date, chamber, record_type, major_heading, minor_heading,
                            left(text, 320) AS excerpt, twfy_url, official_url, source, bill
                     FROM records WHERE year BETWEEN {int(since)} AND {int(end_year)} AND list_contains(?, xml_person_id)
-                    ORDER BY record_id, date DESC""", [xml]).fetchall()
+                      AND NOT ({TRIVIAL_SQL})
+                    ORDER BY record_id, date DESC""", [xml, TRIVIAL_PATTERN]).fetchall()
             if len(rows) >= limit or since == start_year:
                 break
         rows.sort(key=lambda r: (r[1], r[0]), reverse=True)
@@ -270,19 +278,24 @@ class People:
 
     # ---- finding people ----------------------------------------------------------------------------------------
     def search(self, text: str = "", current_only: bool = True, limit: int = 2000) -> list[dict[str, Any]]:
-        """Members for the people index: current MPs and peers (or anyone since the archive starts), optionally by name."""
+        """Members for the people index: current MPs and peers (or anyone since the archive starts), optionally by
+        name or seat. Every word typed must appear in a name they have used or a seat they have held ("ed balls"
+        finds Edward Balls)."""
         where = ['m."end" >= ?' if not current_only else 'm."end" = DATE \'9999-12-31\'']
         params: list[Any] = [] if current_only else [self.settings.archive_start]
-        if text:
-            where.append("lower(n.name) LIKE ?")
-            params.append(f"%{text.lower()}%")
+        for word in text.lower().split()[:6]:
+            where.append("(lower(n.name) LIKE ? OR lower(coalesce(m.constituency, '')) LIKE ?)")
+            params += [f"%{word}%", f"%{word}%"]
         rows = self.con.execute(f"""
             SELECT m.person_id, arg_max(m.house, m.start), arg_max(m.constituency, m.start), arg_max(m.party_name, m.start),
-                   (SELECT arg_max(n2.name, n2.start) FROM ref_names n2 WHERE n2.person_id = m.person_id) AS name
+                   (SELECT arg_max(n2.name, n2.start) FROM ref_names n2 WHERE n2.person_id = m.person_id) AS name,
+                   (SELECT max(m2."end") FROM ref_memberships m2 WHERE m2.person_id = m.person_id) AS last_end
             FROM ref_memberships m JOIN ref_names n ON n.person_id = m.person_id
             WHERE {' AND '.join(where)} GROUP BY m.person_id ORDER BY name LIMIT {int(limit)}""", params).fetchall()
         return [{"number": person_number(pid), "name": name, "slug": slug(name), "house": house,
-                 "constituency": cons, "party": party} for pid, house, cons, party, name in rows if person_number(pid)]
+                 "constituency": cons, "party": party, "current": last_end == OPEN_END,
+                 "until": None if last_end == OPEN_END else last_end.isoformat()}
+                for pid, house, cons, party, name, last_end in rows if person_number(pid)]
 
     def by_postcode(self, postcode: str, client: httpx.Client | None = None) -> dict[str, Any] | None:
         """The current MP for a postcode, via the UK Parliament Members API."""

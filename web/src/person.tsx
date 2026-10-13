@@ -21,6 +21,18 @@ interface Result {
   band: string | null;
   party: string | null;
 }
+interface Contribution {
+  record_id: string;
+  date: string;
+  chamber: string;
+  record_type: string;
+  heading: string;
+  excerpt: string;
+  twfy_url: string;
+  official_url: string | null;
+  debate_path: string | null;
+}
+
 interface PersonData {
   number: number;
   name: string;
@@ -35,18 +47,9 @@ interface PersonData {
   memberships: { house: string; constituency: string | null; party: string | null; start: string; end: string | null }[];
   offices: { kind: string; title: string; start: string; end: string | null }[];
   seats: { constituency: string; start: string; end: string | null; results: Result[] }[];
-  contributions: {
-    record_id: string;
-    date: string;
-    chamber: string;
-    record_type: string;
-    heading: string;
-    excerpt: string;
-    twfy_url: string;
-    official_url: string | null;
-    debate_path: string | null;
-  }[];
-  voting: {
+  contributions?: Contribution[];
+  contributions_more?: boolean;
+  voting?: {
     votes: number;
     rebellions: number;
     free_vote_differences?: number;
@@ -88,26 +91,43 @@ const span = (start: string, end: string | null) => `${fmtDate(start)} – ${end
 
 function Person({ number }: { number: string }) {
   const [shown, setShown] = useState("");
-  const [p, setP] = useState<PersonData | null>(null);
+  const [core, setCore] = useState<PersonData | null>(null);
+  // the slower parts arrive separately, so who they are shows at once
+  const [activity, setActivity] = useState<Partial<PersonData> | "error" | null>(null);
+  const [extras, setExtras] = useState<Partial<PersonData> | "error" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [topic, setTopic] = useState("");
   useEffect(() => {
-    fetch(`/api/people/${number}`)
-      .then(async (r) => {
+    const part = (name: string) =>
+      fetch(`/api/people/${number}?part=${name}`).then(async (r) => {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? "This member could not be loaded.");
         return r.json() as Promise<PersonData>;
-      })
+      });
+    part("core")
       .then((d) => {
-        setP(d);
+        setCore(d);
         document.title = `${d.name} — Where They Stand`;
         const want = `/people/${d.number}/${d.slug}`;
         if (window.location.pathname !== want) window.history.replaceState(null, "", want);
       })
       .catch((e: Error) => setError(e.message));
+    part("activity").then(setActivity, () => setActivity("error"));
+    part("interests").then(setExtras, () => setExtras("error"));
   }, [number]);
 
   if (error) return <p role="alert">{error}</p>;
-  if (!p) return <p className="muted">Loading…</p>;
+  if (!core) return <p className="muted">Loading…</p>;
+  const p: PersonData = {
+    ...core,
+    ...(activity && activity !== "error" ? activity : {}),
+    ...(extras && extras !== "error" ? extras : {}),
+  };
+  const pending = (part: Partial<PersonData> | "error" | null, what: string) =>
+    part === null ? (
+      <p className="muted small">Loading {what}…</p>
+    ) : part === "error" ? (
+      <p className="muted small">The {what} could not be loaded. Please try again later.</p>
+    ) : null;
   const ask = (q: string) => `/?q=${encodeURIComponent(q)}`;
   return (
     <article>
@@ -147,6 +167,20 @@ function Person({ number }: { number: string }) {
           <Timeline query={`person=${number}&q=${encodeURIComponent(shown)}`} showSpeaker={false} />
         </>
       )}
+
+      <section aria-labelledby="h-history">
+        <h2 id="h-history">Membership</h2>
+        <ul>
+          {[...p.memberships].reverse().map((m) => (
+            <li key={m.house + m.start}>
+              {m.house === "commons" ? `MP for ${m.constituency ?? "—"}` : "House of Lords"}
+              {m.party ? `, ${m.party}` : ""} <span className="muted small">({span(m.start, m.end)})</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+      {p.groups && <GroupsSection groups={p.groups} name={p.name} />}
+      {pending(extras, "all-party groups, interests and donations")}
 
       {p.seats.length > 0 && (
         <section aria-labelledby="h-seats">
@@ -192,29 +226,9 @@ function Person({ number }: { number: string }) {
 
       <section aria-labelledby="h-recent">
         <h2 id="h-recent">Recent contributions</h2>
-        {p.contributions.length === 0 ? (
-          <p className="muted">No contributions in the record since 1997.</p>
-        ) : (
-          <ol className="contributions">
-            {p.contributions.map((c) => (
-              <li key={c.record_id}>
-                <p className="muted small">
-                  {fmtDate(c.date)} · {c.chamber}
-                  {c.heading ? ` · ${c.heading}` : ""}
-                </p>
-                <p>{c.excerpt.length >= 320 ? `${c.excerpt.trimEnd()}…` : c.excerpt}</p>
-                <p className="small">
-                  <a href={c.debate_path ?? c.twfy_url}>Read in full</a>
-                  {c.official_url && (
-                    <>
-                      {" · "}
-                      <a href={c.official_url}>Official record</a>
-                    </>
-                  )}
-                </p>
-              </li>
-            ))}
-          </ol>
+        {pending(activity, "contributions and voting record")}
+        {p.contributions && (
+          <Contributions number={p.number} first={p.contributions} more={!!p.contributions_more} />
         )}
       </section>
 
@@ -318,7 +332,6 @@ function Person({ number }: { number: string }) {
       ))}
       {p.donations && <DonationsSection donations={p.donations} name={p.name} />}
       {p.directorships && <DirectorshipsSection d={p.directorships} name={p.name} />}
-      {p.groups && <GroupsSection groups={p.groups} name={p.name} />}
 
       {p.edms && p.edms.tabled + p.edms.signed > 0 && (
         <section aria-labelledby="h-edms">
@@ -333,17 +346,6 @@ function Person({ number }: { number: string }) {
         </section>
       )}
 
-      <section aria-labelledby="h-history">
-        <h2 id="h-history">Membership</h2>
-        <ul>
-          {[...p.memberships].reverse().map((m) => (
-            <li key={m.house + m.start}>
-              {m.house === "commons" ? `MP for ${m.constituency ?? "—"}` : "House of Lords"}
-              {m.party ? `, ${m.party}` : ""} <span className="muted small">({span(m.start, m.end)})</span>
-            </li>
-          ))}
-        </ul>
-      </section>
       <section aria-labelledby="h-elsewhere">
         <h2 id="h-elsewhere">Elsewhere</h2>
         <Elsewhere label={`More on ${p.name}`} links={elsewhereFor(p)} />
@@ -356,6 +358,65 @@ function Person({ number }: { number: string }) {
         <a href="/methodology">methodology</a>.
       </p>
     </article>
+  );
+}
+
+/** Five at first; "Show more" opens the rest already loaded, then fetches ten at a time. Slight interventions
+ * ("Will the hon. Member give way?") are left out by the server. */
+function Contributions({ number, first, more }: { number: number; first: Contribution[]; more: boolean }) {
+  const [items, setItems] = useState(first);
+  const [shown, setShown] = useState(5);
+  const [hasMore, setHasMore] = useState(more);
+  const [busy, setBusy] = useState(false);
+  if (items.length === 0) return <p className="muted">No contributions in the record since 1997.</p>;
+  async function showMore() {
+    if (shown < items.length) {
+      setShown(Math.min(items.length, shown + 10));
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/people/${number}/contributions?offset=${items.length}&limit=10`);
+      const body = (await r.json()) as { contributions: Contribution[]; more: boolean };
+      setItems([...items, ...body.contributions]);
+      setShown(items.length + body.contributions.length);
+      setHasMore(body.more);
+    } catch {
+      setHasMore(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <ol className="contributions">
+        {items.slice(0, shown).map((c) => (
+          <li key={c.record_id}>
+            <p className="muted small">
+              {fmtDate(c.date)} · {c.chamber}
+              {c.heading ? ` · ${c.heading}` : ""}
+            </p>
+            <p>{c.excerpt.length >= 320 ? `${c.excerpt.trimEnd()}…` : c.excerpt}</p>
+            <p className="small">
+              <a href={c.debate_path ?? c.twfy_url}>Read in full</a>
+              {c.official_url && (
+                <>
+                  {" · "}
+                  <a href={c.official_url}>Official record</a>
+                </>
+              )}
+            </p>
+          </li>
+        ))}
+      </ol>
+      {(shown < items.length || hasMore) && (
+        <p>
+          <button type="button" className="secondary" onClick={() => void showMore()} disabled={busy}>
+            {busy ? "Loading…" : "Show more contributions"}
+          </button>
+        </p>
+      )}
+    </>
   );
 }
 

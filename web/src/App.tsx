@@ -14,6 +14,7 @@ import { BRAND } from "./brand";
 import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
 import { SiteFooter } from "./components/SiteFooter";
+import { followUpsFor } from "./followups";
 import { COMPARE_HANDOVER, MORE, NAV } from "./nav";
 import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
@@ -23,31 +24,32 @@ const TOPIC = /^\/topics\/([a-z0-9-]+)\/?$/;
 /**
  * Example questions, one set a day. Each set spans parties, both Houses, the nations and kinds of seat, and
  * party-specific examples use topics that party itself campaigns on, not other parties' attack lines.
- * Every question was checked to have plenty of balanced evidence in the record.
+ * Every question was checked to have plenty of evidence in the record (October 2026), and is specific and recent:
+ * a named bill, measure or event rather than a broad subject.
  */
 export const EXAMPLE_SETS: string[][] = [
   [
-    "How have ministers justified delays to HS2?",
-    "What have peers said about assisted dying?",
-    "How have Welsh MPs discussed steel jobs at Port Talbot?",
-    "What have Liberal Democrat MPs said about sewage in rivers?",
+    "How have ministers justified ending winter fuel payments for most pensioners?",
+    "What have peers said about the Terminally Ill Adults (End of Life) Bill?",
+    "What have SNP MPs said about new North Sea oil and gas licences?",
+    "What have Conservative MPs said about inheritance tax on family farms?",
   ],
   [
-    "How have ministers explained NHS waiting lists?",
-    "Where do rural and city MPs differ on onshore wind farms?",
+    "How have ministers explained the plan to raise defence spending to 2.5% of GDP?",
+    "What have MPs for rural seats said about bus services since 2024?",
     "What have Northern Ireland MPs said about the Windsor Framework?",
-    "What have Conservative MPs said about defence spending?",
+    "What have Liberal Democrat MPs said about carer's allowance overpayments?",
   ],
   [
-    "What have MPs said about the Post Office Horizon IT system?",
-    "What have select committee chairs said about water companies?",
-    "What have SNP MPs said about the cost of living in Scotland?",
-    "What have Reform UK MPs said about net zero?",
+    "What have select committee chairs said about delays to Post Office Horizon compensation?",
+    "What have Welsh MPs said about steel jobs at Port Talbot?",
+    "What have Reform UK MPs said about small boat crossings?",
+    "What have Green Party MPs said about the cost of renting?",
   ],
   [
-    "What have Labour MPs said about workers' rights?",
-    "What have peers said about the Rwanda asylum plan?",
-    "What have Plaid Cymru MPs said about rural Wales?",
+    "What have Labour MPs said about banning exploitative zero-hours contracts?",
+    "What have peers said about protecting creative works from AI training in the Data (Use and Access) Bill?",
+    "What have Plaid Cymru MPs said about rail funding for Wales?",
     "What have MPs for town seats said about high street closures?",
   ],
 ];
@@ -56,18 +58,29 @@ export function examplesFor(day: Date): string[] {
   return EXAMPLE_SETS[Math.floor(day.getTime() / 86_400_000) % EXAMPLE_SETS.length];
 }
 
+// Settings saved before this version searched the devolved parliaments and committee evidence only on request;
+// they now search everywhere by default, so older saved settings are brought up to date once.
+const SETTINGS_VERSION = 2;
+
 function loadSettings(defaults?: Meta["defaults"]): Settings {
   try {
     const saved = localStorage.getItem("hgpt.settings");
-    if (saved) return JSON.parse(saved) as Settings;
+    if (saved) {
+      const s = JSON.parse(saved) as Settings;
+      if ((s.version ?? 1) < SETTINGS_VERSION) {
+        return { ...s, version: SETTINGS_VERSION, scope: { ...s.scope, devolved: true, evidence: true } };
+      }
+      return s;
+    }
   } catch {
     /* storage unavailable */
   }
   return {
+    version: SETTINGS_VERSION,
     mode: "summary",
     recency: defaults?.recency ?? 0.5,
     roleWeight: defaults?.role_weight ?? 1.5,
-    scope: { written: true, pbc: true, votes: true, edms: true, devolved: false, evidence: false },
+    scope: { written: true, pbc: true, votes: true, edms: true, devolved: true, evidence: true },
   };
 }
 
@@ -112,6 +125,7 @@ export default function App() {
   const [showControls, setShowControls] = useState(false);
   const [supportCount, setSupportCount] = useState(0); // > 0: show the note on what the site costs
   const abortRef = useRef<AbortController | null>(null);
+  const briefingUrl = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -212,6 +226,7 @@ export default function App() {
             preparedAt: b.created_at,
             recordsUpTo: b.records_up_to,
             shared: true,
+            follows: b.settings?.follows ?? undefined,
           },
         ]),
       )
@@ -234,6 +249,39 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, []);
 
+  // An open source counts as a step in the browser's history, so a phone's Back button closes it (returning to the
+  // citation) instead of leaving the briefing.
+  const drawerOpen = drawer !== null;
+  useEffect(() => {
+    if (!drawerOpen) return;
+    if (!(window.history.state as { sourceDrawer?: boolean } | null)?.sourceDrawer) {
+      window.history.pushState({ sourceDrawer: true }, "", window.location.href);
+    }
+    const onPop = () => {
+      setDrawer(null);
+      // a briefing finished while its source was open: its address applies to the step we are back on too
+      if (briefingUrl.current && window.location.pathname !== briefingUrl.current) {
+        window.history.replaceState(window.history.state, "", briefingUrl.current);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [drawerOpen]);
+  const closeDrawer = useCallback(() => {
+    if ((window.history.state as { sourceDrawer?: boolean } | null)?.sourceDrawer) window.history.back();
+    else setDrawer(null);
+  }, []);
+
+  // "Change what is searched" under a briefing links to #settings: open the panel there
+  useEffect(() => {
+    const open = () => {
+      if (window.location.hash === "#settings") setShowControls(true);
+    };
+    open();
+    window.addEventListener("hashchange", open);
+    return () => window.removeEventListener("hashchange", open);
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem("hgpt.settings", JSON.stringify(settings));
@@ -249,12 +297,18 @@ export default function App() {
 
   async function run(q: string, plan?: Plan, replaceId?: string, sourcesOnly = false) {
     const id = replaceId ?? crypto.randomUUID();
-    const turn: Turn = { id, question: q, settings, sources: [], streamText: "", status: "planning", plan };
+    const previous = turns.filter((t) => t.id !== id && t.status === "done").at(-1)?.question;
+    const turn: Turn = { id, question: q, settings, sources: [], streamText: "", status: "planning", plan, follows: previous };
     setTurns((ts) => (replaceId ? ts.map((t) => (t.id === id ? turn : t)) : [...ts, turn]));
-    const history = turns
-      .filter((t) => t.id !== id && t.status === "done")
-      .slice(-3)
-      .map((t) => ({ question: t.question, answer: t.answer?.markdown?.slice(0, 600) ?? "" }));
+    const earlier = turns.filter((t) => t.id !== id && t.status === "done");
+    // what each earlier question searched for, so a follow-up ("what about the Lords?") keeps the topic and filters
+    const history = earlier.slice(-3).map((t) => ({
+      question: t.question,
+      answer: t.answer?.markdown?.slice(0, 600) ?? "",
+      topic: t.plan?.search_text ?? "",
+      scope: t.plan?.interpretation ?? "",
+    }));
+    const follows = earlier.at(-1)?.question;
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -264,7 +318,7 @@ export default function App() {
         setCompare([]); // the comparison applies to the question it came with
         update(id, { comparing: compareLabels.length === sides.length ? compareLabels : [] });
       }
-      for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly, sides), ctrl.signal)) {
+      for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly, sides, follows), ctrl.signal)) {
         if (ev.type === "plan") update(id, { plan: ev.plan as Plan, status: "searching" });
         else if (ev.type === "sources")
           update(id, {
@@ -290,8 +344,9 @@ export default function App() {
         else if (ev.type === "error") update(id, { status: "error", error: ev.message as string });
         if (ev.type === "final" && typeof ev.support_reminder === "number") setSupportCount(ev.support_reminder);
         if (ev.type === "final" && typeof ev.briefing_id === "string") {
-          // the address bar becomes this briefing's permanent link
-          window.history.replaceState(null, "", `/b/${ev.briefing_id}`);
+          // the address bar becomes this briefing's permanent link (keeping an open source's history step)
+          briefingUrl.current = `/b/${ev.briefing_id}`;
+          window.history.replaceState(window.history.state, "", briefingUrl.current);
         }
       }
     } catch (e) {
@@ -331,41 +386,71 @@ export default function App() {
   const drawerTurn = drawer ? turns.find((t) => t.id === drawer.turn) : undefined;
   const drawerSource = drawerTurn?.sources.find((s) => s.n === drawer?.h.source) ?? null;
 
-  const composer = (className: string) => (
-    <form className={className} onSubmit={submit} role="search" aria-label="Ask a question">
-      <label htmlFor="q" className="visually-hidden">
-        Your question
-      </label>
-      <textarea
-        id="q"
-        value={question}
-        placeholder="Ask a question about the proceedings of Parliament…"
-        rows={2}
-        ref={questionRef}
-        onChange={(e) => setQuestion(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-      />
-      <div className="composer-buttons">
-        <button type="submit" className="primary" disabled={busy || question.trim().length < 3}>
-          Ask
-        </button>
-        <button
-          type="button"
-          className="link small"
-          disabled={busy || question.trim().length < 3}
-          onClick={() => submit(undefined, true)}
-          title="Find and show the sources without writing a briefing"
-        >
-          Sources only
-        </button>
-      </div>
-    </form>
+  const settingsPanel = showControls && (
+    <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />
   );
+  // On the home page the settings open under the question box; under a briefing the box is pinned to the foot of
+  // the screen, so they open just above it, inside the pinned area.
+  const composer = (className: string) => {
+    const form = (
+      <form className={className} onSubmit={submit} role="search" aria-label="Ask a question">
+        <label htmlFor="q" className="visually-hidden">
+          Your question
+        </label>
+        <textarea
+          id="q"
+          value={question}
+          placeholder={
+            turns.length ? "Ask a follow-up, or a new question…" : "Ask a question about the proceedings of Parliament…"
+          }
+          rows={2}
+          ref={questionRef}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <div className="composer-buttons">
+          <button type="submit" className="primary" disabled={busy || question.trim().length < 3}>
+            Ask
+          </button>
+          <button
+            type="button"
+            className="link small"
+            disabled={busy || question.trim().length < 3}
+            onClick={() => submit(undefined, true)}
+            title="Find and show the sources without writing a briefing"
+          >
+            Sources only
+          </button>
+          <button
+            type="button"
+            id="settings"
+            className="link small"
+            onClick={() => setShowControls(!showControls)}
+            aria-expanded={showControls}
+            aria-controls="search-settings"
+          >
+            Settings
+          </button>
+        </div>
+      </form>
+    );
+    return className.includes("composer-inline") ? (
+      <>
+        {form}
+        {settingsPanel}
+      </>
+    ) : (
+      <div className="composer-dock">
+        {settingsPanel}
+        {form}
+      </div>
+    );
+  };
 
   return (
     <div className={drawerSource ? "app with-drawer" : "app"}>
@@ -402,9 +487,6 @@ export default function App() {
                 </div>
               </details>
             </nav>
-            <button type="button" className="secondary" onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
-              Settings
-            </button>
             {user && (
               <button type="button" className="link" onClick={() => void api.logout().then(() => setAuth("out"))}>
                 Sign out
@@ -418,7 +500,7 @@ export default function App() {
           <p className="tagline">{BRAND.tagline}</p>
           <p className="imprint">
             <span>Independent research service</span>
-            <span>Every statement cited</span>
+            <span>Sourced to Hansard</span>
             {meta?.last_sync?.finished_at && <span>Updated {fmtDate(meta.last_sync.finished_at.slice(0, 10))}</span>}
           </p>
         </div>
@@ -435,9 +517,6 @@ export default function App() {
             Cancel the comparison
           </button>
         </aside>
-      )}
-      {showControls && (
-        <Controls settings={settings} onChange={setSettings} answersEnabled={meta?.answers_enabled ?? true} />
       )}
       {meta && !meta.answers_enabled && (
         <aside className="banner" aria-label="Service notice">
@@ -456,7 +535,7 @@ export default function App() {
               type: it works out what you are asking about and finds the MPs and peers who spoke on it, even when they
               put it differently. Then AI (Claude) pulls the speeches, answers, statements and votes since 1997 into
               one short briefing, so you do not have to read through results date by date: who said what, and where
-              they stand, with every statement cited to the exact words in Hansard.
+              they stand, with each point linked to the exact words in Hansard.
             </p>
             {composer("composer composer-inline")}
             <p className="ai-caution">
@@ -494,9 +573,9 @@ export default function App() {
                 own.
               </li>
               <li>
-                <strong>Checkable.</strong> Every statement links to the record it comes from, with the speaker's
-                party, seat and role on the day. Anything not tied to a cited source is highlighted, so you can see
-                what to check.
+                <strong>Checkable.</strong> Each point links to the record it comes from, with the speaker's party,
+                seat and role on the day. The few statements not tied to a source are counted under the briefing,
+                and you can show them, so you know what to check.
               </li>
             </ul>
           </section>
@@ -510,6 +589,9 @@ export default function App() {
                 <a href="/compare">Compare something else</a>
               </p>
             )}
+            {t.follows && t.follows !== t.question && (
+              <p className="eyebrow follows">Follow-up to &ldquo;{t.follows}&rdquo;</p>
+            )}
             <h2 className="question">{t.question}</h2>
             {t.shared && t.preparedAt && (
               <p className="shared-note">
@@ -522,6 +604,7 @@ export default function App() {
             {t.plan && <PlanChips key={JSON.stringify(t.plan)} plan={t.plan} meta={meta} busy={busy} onRerun={(p) => void run(t.question, p, t.id)} />}
             <EvidenceBar
               evidence={t.evidence}
+              scope={t.status === "done" && !t.shared && !t.topic ? t.settings.scope : undefined}
               demographics={
                 !!t.plan &&
                 (["gender", "age"].includes(t.plan.group_by ?? "role") ||
@@ -559,6 +642,17 @@ export default function App() {
               />
             )}
             {t.note && <p className="muted small">{t.note}</p>}
+            {t.status === "done" && t.id === turns.at(-1)?.id && !busy && followUpsFor(t).length > 0 && (
+              <nav className="follow-ups" aria-label="Follow-up questions">
+                <span className="muted small">Ask a follow-up:</span>
+                {followUpsFor(t).map((f) => (
+                  <button key={f} type="button" className="follow-up" onClick={() => void run(f)}>
+                    {f}
+                  </button>
+                ))}
+                <span className="muted small">or type your own below.</span>
+              </nav>
+            )}
             {t.status === "error" && (
               <p className="error" role="alert">
                 {t.error}
@@ -587,7 +681,7 @@ export default function App() {
 
       {turns.length > 0 && composer("composer")}
 
-      <SourceDrawer source={drawerSource} quotes={drawer?.h.quotes ?? []} onClose={() => setDrawer(null)} />
+      <SourceDrawer source={drawerSource} quotes={drawer?.h.quotes ?? []} onClose={closeDrawer} />
 
       <SiteFooter donateUrl={meta?.donate_url} attribution={meta?.attribution ?? ATTRIBUTION}>
         <p className="print-only">

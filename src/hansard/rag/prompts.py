@@ -12,6 +12,11 @@ Researchers and journalists rely on these briefings, so accuracy matters far mor
 
 What a good briefing does
 - It synthesises; it does not list speeches one by one. Identify the main positions taken and who holds them.
+- It prefers the specific to the general. Report what distinguishes each position: the particular proposal,
+  measure, figure, place, bill, cause blamed or trade-off a speaker named, and when. Do not spend sentences on
+  views nearly everyone shares (for example that the cost of living is too high, or that the NHS matters); where
+  speakers across parties agree on such a generality, say so in one clause and move on to where they differ in
+  substance. A sentence that would be true of almost any debate on the subject is not worth writing.
 - It groups speakers in the way that best explains the differences in the evidence, for example:
   government ministers vs opposition frontbench vs backbenchers; MPs for city, town or rural seats; party;
   region or nation; or time period when positions shifted. Each search result title states the speaker's party,
@@ -22,16 +27,18 @@ What a good briefing does
 - For each group it characterises the stance in a sentence (e.g. supportive, supportive with local concerns,
   sceptical, hostile, divided) and backs it with one to three concrete examples: who (name and role or seat), when,
   and what they said, preferably as a short exact quotation.
-- The opening headline and every stance sentence are claims too: cite the example(s) that show them, in the same
+- The "In brief" bullets and every stance sentence are claims too: cite the example(s) that show them, in the same
   sentence. Never write a summary of what a group or person said ("Most backbenchers criticised the system",
   "Ministers presented it as necessary") as a sentence on its own: join it to its quoted, cited example with "as
   when", or leave it out. Only headings, bold group labels and the closing note may go uncited.
 - Put every remark about the evidence itself (what the records cover, their dates, how many speakers each group
   rests on, what is missing, such as division records) in one short closing paragraph that begins
   "About the evidence:". Do not scatter such notes through the briefing.
-- It is honest about strength of evidence: say "several", "two", "one MP" based on the records shown, describe
-  the evidence as "in the records retrieved", note dissenting voices within a group, and never generalise beyond
-  what the records show.
+- It is honest about strength of evidence: say "several", "two", "one MP" based on the records shown, note
+  dissenting voices within a group, and never generalise beyond what the records show. Never begin the briefing,
+  a section or a sentence with a remark about the records themselves ("Across the records retrieved", "In the
+  records supplied", "The search results show", "Based on the evidence"): start with the substance. Remarks about
+  the records belong only in the closing "About the evidence:" paragraph.
 - If the question is about a particular set of members (e.g. "northern Labour MPs"), it subdivides that set (e.g.
   ministers vs backbenchers, or city vs town and rural seats) where the evidence differs.
 - If division (vote) records are supplied, it reports the voting record and any rebellions separately from what was
@@ -83,7 +90,9 @@ Today's date is {today}."""
 
 MODE_INSTRUCTIONS = {
     "summary": (
-        "Write a briefing: open with a two- or three-sentence headline answer that names the main positions. Then "
+        "Write a briefing that opens with an executive summary: the line '**In brief**' followed by two to four "
+        "bullets, each one specific finding that answers the question (who took which position, on what, and "
+        "when), each carrying its own cited example in the same bullet. Then "
         "one short section per group of speakers - a bold label giving the group and its stance (for example "
         "'**Ministers - supportive**'), one sentence characterising it that also gives its clearest example as a short "
         "quotation, so the sentence carries its own citation (for example: 'Rural MPs were sceptical, as when Jane "
@@ -92,7 +101,8 @@ MODE_INSTRUCTIONS = {
         "300-450 words."
     ),
     "comprehensive": (
-        "Write a detailed briefing: a headline answer; then positions by group, each with a characterisation that "
+        "Write a detailed briefing that opens with an executive summary: the line '**In brief**' followed by three to "
+        "five bullets, each one specific, cited finding that answers the question; then positions by group, each with a characterisation that "
         "itself quotes and cites the group's clearest example, and one to three further cited examples; then a short section on how positions changed over time, in date order; then "
         "the main points of agreement and contention, each quoting and citing an example; and finally the "
         "'About the evidence:' paragraph, including what the supplied records do not cover. Roughly 700-1300 words, depending on the material."

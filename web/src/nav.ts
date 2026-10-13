@@ -8,10 +8,10 @@ export interface NavLink {
 
 export const NAV: NavLink[] = [
   { href: "/", label: "Ask a question" },
+  { href: "/this-week", label: "This week" },
   { href: "/people", label: "MPs and peers" },
   { href: "/topics", label: "Topics" },
   { href: "/compare", label: "Compare" },
-  { href: "/this-week", label: "This week" },
   { href: "/bills", label: "Bills" },
 ];
 

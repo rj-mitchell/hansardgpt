@@ -16,7 +16,7 @@ export function Controls({ settings, onChange, answersEnabled }: Props) {
   const set = (patch: Partial<Settings>) => onChange({ ...settings, ...patch });
   const scope = (patch: Partial<Settings["scope"]>) => set({ scope: { ...settings.scope, ...patch } });
   return (
-    <section className="controls" aria-label="Search settings">
+    <section className="controls" id="search-settings" aria-label="Search settings">
       <fieldset className="mode">
         <legend>Answer</legend>
         <label>

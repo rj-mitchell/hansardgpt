@@ -126,9 +126,9 @@ def test_briefings_can_include_the_devolved_parliaments(indexed_settings):
                       client=fake_twfy({"meeting-of-the-parliament/2026-09-17_20233.xml": long_sp}))
         p = Pipeline(indexed_settings, Engine(indexed_settings, embedder=HashingEmbedder(64)))
         plan = parse_offline("What has been said about ferry services?", indexed_settings.regions)
-        _, _, off = p.find(plan, AskRequest(question=plan.question))
-        assert not [s for s in off if s.kind == "devolved"], "off unless the reader asks"
-        _, _, on = p.find(plan, AskRequest(question=plan.question, scope=Scope(devolved=True)))
+        _, _, off = p.find(plan, AskRequest(question=plan.question, scope=Scope(devolved=False)))
+        assert not [s for s in off if s.kind == "devolved"], "left out when the reader unticks it"
+        _, _, on = p.find(plan, AskRequest(question=plan.question))  # searched by default
         dev = [s for s in on if s.kind == "devolved"]
         assert len(dev) == 1 and dev[0].meta["group"] == "Scottish Parliament"
         assert "not of the UK Parliament" in dev[0].blocks[0]

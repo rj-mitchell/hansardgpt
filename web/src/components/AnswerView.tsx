@@ -30,6 +30,7 @@ export function AnswerView({
   onCite,
 }: Props) {
   const link = briefingId ? `${window.location.origin}/b/${briefingId}` : undefined;
+  const [showUncited, setShowUncited] = useState(false);
   const html = useMemo(
     () => (answer ? renderAnswer(segmentsToMarkdown(answer.segments)) : renderPlain(streamText)),
     [answer, streamText],
@@ -46,8 +47,12 @@ export function AnswerView({
   return (
     <div className="answer">
       {/* eslint-disable-next-line react/no-danger -- sanitised with DOMPurify in render.ts */}
-      <div className={answer ? "answer-body" : "answer-body streaming"} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
-      {answer && <Grounding answer={answer} />}
+      <div
+        className={answer ? (showUncited ? "answer-body show-uncited" : "answer-body") : "answer-body streaming"}
+        onClick={onClick}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {answer && <Grounding answer={answer} showUncited={showUncited} onToggle={() => setShowUncited(!showUncited)} />}
       {answer && !answer.no_records && (
         <>
           <p className="ai-note">
@@ -166,7 +171,15 @@ function Feedback({ question, briefingKey }: { question: string; briefingKey?: s
   );
 }
 
-export function Grounding({ answer }: { answer: Answer }) {
+export function Grounding({
+  answer,
+  showUncited = false,
+  onToggle,
+}: {
+  answer: Answer;
+  showUncited?: boolean;
+  onToggle?: () => void;
+}) {
   if (answer.no_records) {
     return <p className="grounding neutral">No matching records in the archive for this question and these filters.</p>;
   }
@@ -175,9 +188,19 @@ export function Grounding({ answer }: { answer: Answer }) {
   const misquoted = answer.quotes_unverified ?? 0;
   return (
     <p className={flagged || loaded || misquoted ? "grounding warn" : "grounding ok"}>
-      {flagged
-        ? `${flagged} passage${flagged === 1 ? "" : "s"} not directly supported by a cited source (highlighted). Treat with caution.`
-        : `Every substantive statement is cited (${answer.citations_total} citation${answer.citations_total === 1 ? "" : "s"}, each checked against the source text).`}
+      {flagged ? (
+        <>
+          {flagged === 1 ? "One statement in this briefing is" : `${flagged} statements in this briefing are`} not tied
+          to a cited source: be wary of anything you cannot see cited.{" "}
+          {onToggle && (
+            <button type="button" className="link" onClick={onToggle} aria-pressed={showUncited}>
+              {showUncited ? "Hide" : flagged === 1 ? "Show it" : "Show them"}
+            </button>
+          )}
+        </>
+      ) : (
+        `${answer.citations_total} citation${answer.citations_total === 1 ? "" : "s"}, each checked against the source text.`
+      )}
       {loaded > 0 &&
         ` ${loaded} judgemental word${loaded === 1 ? "" : "s"} in the briefing's own voice (underlined); the record itself should be checked.`}
       {answer.citations_invalid > 0 && ` ${answer.citations_invalid} citation(s) could not be verified and were removed.`}

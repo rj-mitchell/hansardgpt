@@ -38,6 +38,8 @@ AgeBand = Literal["under-40", "40-54", "55-69", "70-plus"]
 GroupBy = Literal["role", "gender", "age", "tenure", "majority"]
 Tenure = Literal["first-term", "returning"]
 MajorityBand = Literal["marginal", "middle", "safe"]
+SeatType = Literal["city", "town", "rural"]
+SEAT_TYPES = ("city", "town", "rural")
 
 
 class ParsedQuery(BaseModel):
@@ -55,6 +57,7 @@ class ParsedQuery(BaseModel):
     age_bands: list[AgeBand]
     tenure: list[Tenure]
     majority_bands: list[MajorityBand]
+    seat_types: list[SeatType] = Field(default_factory=list)
     group_by: GroupBy
     portfolios: list[str]
     wants_votes: bool
@@ -103,6 +106,7 @@ class QueryPlan:
             age_bands=[b for b in f.get("age_bands") or [] if b in AGE_BAND_KEYS],
             tenure=[t for t in f.get("tenure") or [] if t in ("first-term", "returning")],
             majority_bands=[b for b in f.get("majority_bands") or [] if b in ("marginal", "middle", "safe")],
+            seat_types=[t for t in f.get("seat_types") or [] if t in SEAT_TYPES],
         )
         return cls(question=d.get("question", ""), search_text=d.get("search_text") or d.get("question", ""),
                    filters=filters, portfolios=list(d.get("portfolios") or []),
@@ -203,12 +207,26 @@ def seat_rules(ql: str) -> tuple[list[str], list[str], str | None]:
     return tenure, majority, group
 
 
+def seat_type_rules(ql: str) -> list[str]:
+    """City, town or rural seats, when the question restricts to them (not when it compares them)."""
+    kinds = {k for k, pat in (("city", r"\b(city|cities|urban)\b"), ("town", r"\btowns?\b"),
+                              ("rural", r"\b(rural|countryside|village)\b"))
+             if re.search(rf"{pat}\W+(?:\w+\W+)?(?:seats?|constituenc\w*|mps)\b|\bmps for {pat}", ql)}
+    mentioned = sum(1 for pat in (r"\b(city|cities|urban)\b", r"\btowns?\b", r"\b(rural|countryside|village)\b")
+                    if re.search(pat, ql))
+    if mentioned > 1 and re.search(r"\b(differ\w*|compar\w*|versus|vs|between)\b", ql):
+        return []  # a comparison between kinds of seat: search them all
+    if "urban" in ql and "city" in kinds:
+        kinds.add("town")
+    return [k for k in SEAT_TYPES if k in kinds]
+
+
 _DEMOGRAPHIC_PHRASES = re.compile(
     rf"\b(?:(?:women|female|men|male|younger|young|older|oldest|new|newly[- ]elected|first[- ]term)"
     rf"(?: and (?:women|female|men|male|older|younger|long[- ]serving|experienced|returning))? "
     rf"{_WHO}|under (?:the age of )?40|(?:over|aged) 70|by (?:gender|sex|age)|"
     rf"(?:gender|age) (?:split|divide|gap|groups?|differences?)|(?:marginal|safe)(?: and (?:marginal|safe))? "
-    rf"(?:seats?|constituencies)|20\d\d intake|by majority)\b", re.I)
+    rf"(?:seats?|constituencies)|20\d\d intake|by majority|(?:mps for )?(?:city|town|rural|urban|countryside) (?:seats?|constituencies|mps))\b", re.I)
 
 
 def topic_words(question: str) -> str:
@@ -248,7 +266,8 @@ def parse_offline(question: str, region_groups: dict[str, list[str]], today: dat
     genders, age_bands, group_by = demographic_rules(ql)
     tenure, majority_bands, seat_group = seat_rules(ql)
     group_by = seat_group or group_by
-    if tenure or majority_bands or seat_group:
+    seat_types = seat_type_rules(ql)
+    if tenure or majority_bands or seat_group or seat_types:
         houses.append("commons")
     parties = [pid for pid, pattern in _PARTY_WORDS if re.search(pattern, ql)]
     return QueryPlan(
@@ -256,7 +275,7 @@ def parse_offline(question: str, region_groups: dict[str, list[str]], today: dat
         search_text=topic_words(_DEMOGRAPHIC_PHRASES.sub(" ", question)) or question,
         filters=Filters(date_from=date_from, date_to=date_to, houses=sorted(set(houses)) if len(set(houses)) == 1 else [],
                         regions=regions, offices=offices, parties=parties, genders=genders, age_bands=age_bands,
-                        tenure=tenure, majority_bands=majority_bands),
+                        tenure=tenure, majority_bands=majority_bands, seat_types=seat_types),
         portfolios=list(portfolios_for_query(_DEMOGRAPHIC_PHRASES.sub(" ", question))),
         wants_votes=wants_votes,
         interpretation="Interpreted with offline rules (no language model).",
@@ -303,6 +322,11 @@ Rules:
 - majority_bands: the MP's majority at the time they spoke, as a share of votes cast: "marginal" (under 10%),
   "middle" (10% to 20%), "safe" (over 20%). Only when the question restricts to marginal or safe seats; it also
   implies houses ["commons"].
+- seat_types: the kind of place an MP's seat is, by the size of its main urban area (not official city status):
+  "city" (an urban area of about 200,000 people or more), "town" (a smaller one), "rural" (mostly outside towns of
+  10,000+). Only when the question restricts speakers to one or two kinds ("MPs for town seats" -> ["town"],
+  "rural MPs" -> ["rural"], "urban MPs" -> ["city", "town"]); it also implies houses ["commons"]. When the question
+  compares kinds of seat ("where do rural and city MPs differ"), leave it empty so every kind is searched.
 - group_by: "gender" if the question asks how women and men differ, "age" if it asks how views differ by age,
   "tenure" if it compares new and long-serving MPs, "majority" if it compares MPs in marginal and safe seats;
   otherwise "role" (the default: ministers, opposition, backbenchers by seat type). When grouping by one of these,
@@ -310,6 +334,11 @@ Rules:
 - portfolios: the policy areas the question is about (used to boost relevant ministers, not to filter):
 {ports}
 - wants_votes: true if the question is about how members voted, rebellions, dissent or divisions.
+- Follow-up questions: when earlier questions are given and the new one builds on the last of them ("what about
+  the Lords?", "and since 2024?", "how did they vote?", "which Labour MPs?"), keep the earlier topic and filters
+  and change only what the follow-up changes: search_text keeps the earlier topic, and a new filter replaces the
+  one it contradicts ("what about the Lords?" after a question about MPs sets houses to ["lords"] and drops
+  MP-only filters such as regions). A question on a new subject starts afresh.
 - interpretation: one plain sentence describing the filters you chose, in British English (British spelling,
   dates written as 9 October 2026)."""
 
@@ -341,8 +370,11 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
     today = today or date.today()
     convo = ""
     if history:
-        convo = "Earlier questions in this conversation (for resolving references like 'what about the Lords?'):\n"
-        convo += "\n".join(f"- {h['question']}" for h in history[-4:]) + "\n\n"
+        convo = ("Earlier questions in this conversation, oldest first, with what each searched for (for resolving "
+                 "follow-ups like 'what about the Lords?'):\n")
+        convo += "\n".join(f"- {h['question']}" + (f" [searched for: {h['topic']}" + (f"; {h['scope']}" if h.get("scope") else "")
+                                                   + "]" if h.get("topic") else "")
+                           for h in history[-4:]) + "\n\n"
     resp = client.messages.parse(
         model=parse_model(settings),
         max_tokens=2000,
@@ -368,6 +400,7 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
             tenure=sorted(set(p.tenure)) if p.group_by != "tenure" else [],
             majority_bands=[b for b in ("marginal", "middle", "safe") if b in p.majority_bands]
             if p.group_by != "majority" else [],
+            seat_types=[t for t in SEAT_TYPES if t in p.seat_types],
         ),
         portfolios=[x for x in p.portfolios if x in known_ports],
         wants_votes=p.wants_votes,

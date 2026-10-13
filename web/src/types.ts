@@ -137,6 +137,7 @@ export interface Filters {
   age_bands?: string[];
   tenure?: string[];
   majority_bands?: string[];
+  seat_types?: string[];
 }
 
 export interface Plan {
@@ -193,6 +194,7 @@ export interface Scope {
 }
 
 export interface Settings {
+  version?: number;
   mode: "summary" | "comprehensive";
   recency: number;
   roleWeight: number;
@@ -244,6 +246,8 @@ export interface Turn {
   shared?: boolean;
   /** shown as a topic briefing (/topics/<slug>) */
   topic?: TopicInfo;
+  /** a follow-up: the question it followed */
+  follows?: string;
 }
 
 export interface TopicInfo {
@@ -275,6 +279,7 @@ export interface SavedBriefing {
   semantic?: boolean;
   evidence?: Evidence;
   answer: Answer | null;
+  settings?: { follows?: string | null } | null;
 }
 
 export interface Meta {

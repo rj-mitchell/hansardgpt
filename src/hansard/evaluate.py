@@ -42,7 +42,7 @@ from hansard.rank.evidence import demographic_group, speaker_group
 log = logging.getLogger(__name__)
 
 PLAN_FIELDS = ["date_from", "date_to", "houses", "regions", "parties", "offices", "genders", "age_bands", "tenure",
-               "majority_bands", "speakers", "group_by", "wants_votes"]
+               "majority_bands", "seat_types", "speakers", "group_by", "wants_votes"]
 DEFAULTS: dict[str, Any] = {"date_from": "", "date_to": "", "group_by": "role", "wants_votes": False}
 DATE_SLACK_DAYS = 45
 SAME_PARTY = {"labourco-operative": "labour"}  # same whip; either reading is right
@@ -97,6 +97,7 @@ def plan_values(plan: QueryPlan) -> dict[str, Any]:
         "parties": sorted({SAME_PARTY.get(p, p) for p in f.parties}),
         "offices": sorted(f.offices), "genders": sorted(f.genders), "age_bands": sorted(f.age_bands),
         "tenure": sorted(f.tenure), "majority_bands": sorted(f.majority_bands),
+        "seat_types": sorted(f.seat_types),
         "speakers": sorted({n.lower() for n in names}),
         "group_by": plan.group_by, "wants_votes": bool(plan.wants_votes),
         "portfolios": sorted(plan.portfolios),

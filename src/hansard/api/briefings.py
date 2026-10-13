@@ -140,6 +140,7 @@ def public_view(b: dict[str, Any]) -> dict[str, Any]:
 
 
 _MD = [(re.compile(r"\s*\[Source \d+\]"), ""),
+       (re.compile(r"\*\*\s*In brief\s*:?\s*\*\*\s*:?", re.I), ""),                 # the executive summary's label
        (re.compile(r"^#+ .*$", re.M), ""),                                  # the briefing's own title line
        (re.compile(r"\*\*\s*(Headline|Summary|Briefing)\s*:?\s*\*\*\s*:?", re.I), ""),  # "**Headline:**" labels
        (re.compile(r"^\s*(Headline|Summary)\s*:?\s*$", re.M | re.I), ""),      # a label on its own line

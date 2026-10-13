@@ -357,6 +357,11 @@ export function SourceDrawer({
         )}
         <p className="muted small licence">Contains Parliamentary information licensed under the Open Parliament Licence v3.0.</p>
       </div>
+      <footer className="drawer-foot">
+        <button type="button" className="secondary" onClick={onClose}>
+          <span aria-hidden="true">← </span>Back to the briefing
+        </button>
+      </footer>
     </aside>
   );
 }

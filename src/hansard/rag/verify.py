@@ -145,6 +145,25 @@ def _classify_uncited(text: str, next_is_cited: bool) -> list[Segment]:
     return out or [Segment(text, status="connective")]
 
 
+# "Across the records retrieved, ..." and the like: an opener about the records rather than the substance
+_PREAMBLE = re.compile(
+    r"(^|\n|[.!?] )([-*•]\s+)?(?:across|in|from|based on|on the basis of|according to|within)\s+"
+    r"(?:all\s+)?(?:the\s+|these\s+)?(?:retrieved\s+|supplied\s+)?(?:records?|evidence|search results|results|"
+    r"sources|contributions)(?:\s+(?:retrieved|supplied|provided|shown|available|here|above))?\s*[,:]\s*"
+    r"([a-z]?)", re.I)
+
+
+def drop_preambles(segments: list[Segment]) -> int:
+    """Remove openers that talk about the records instead of the substance ("Across the records retrieved, most
+    ..." becomes "Most ..."); returns how many were removed."""
+    removed = 0
+    for seg in segments:
+        new, n = _PREAMBLE.subn(lambda m: m.group(1) + (m.group(2) or "") + m.group(3).upper(), seg.text)
+        if n:
+            seg.text, removed = new, removed + n
+    return removed
+
+
 def verify(blocks: list[dict[str, Any]], sources: list[Source]) -> Verification:
     """``blocks``: text blocks as returned by the API (``text`` and optional ``citations``)."""
     by_index = {s.n - 1: s for s in sources}
