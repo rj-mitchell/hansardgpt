@@ -114,7 +114,7 @@ class FakeStream:
         content = [NS(type="text", text=b["text"], citations=[NS(type="search_result_location", **c)
                                                               for c in b.get("citations", [])])
                    for b in self.blocks]
-        return NS(content=content, stop_reason=self.stop_reason, model="claude-opus-5-5",
+        return NS(content=content, stop_reason=self.stop_reason, model="claude-sonnet-5-5",
                   usage=NS(input_tokens=1000, output_tokens=200, cache_read_input_tokens=0,
                            cache_creation_input_tokens=0))
 
@@ -163,7 +163,7 @@ def test_pipeline_end_to_end_is_grounded(indexed_settings):
     system = call["system"][0]
     assert "ONLY" in system["text"] and NO_RECORDS in system["text"]
     assert system["cache_control"] == {"type": "ephemeral"}  # the shared instructions are cached
-    assert call["fallbacks"] == "default" and call["model"] == "claude-opus-5-5"
+    assert call["fallbacks"] == "default" and call["model"] == "claude-sonnet-5-5"
 
 
 def test_pipeline_returns_no_records_without_calling_the_model(indexed_settings):
