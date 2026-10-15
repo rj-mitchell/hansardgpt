@@ -60,7 +60,7 @@ rerank_weight = 0.6         # share of the final relevance it decides
 rerank_query = "both"       # what passages are compared with: question | keywords | both
 
 [answer]
-model = "claude-opus-5-5"
+model = "claude-sonnet-5-5"
 summary_sources = 24
 comprehensive_sources = 40
 summary_effort = "medium"
