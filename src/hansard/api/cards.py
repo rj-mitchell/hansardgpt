@@ -110,6 +110,33 @@ def render_card(question: str, prepared: str, records_up_to: str, evidence: dict
     return img
 
 
+def render_brand(icon: Path) -> Image.Image:
+    """The site's own preview image (web/public/og-image.png), used when any page or briefing is shared:
+    `python -c "from hansard.api.cards import write_brand; write_brand()"` rebuilds it."""
+    img = Image.new("RGB", (W, H), PAPER)
+    d = ImageDraw.Draw(img)
+    mark = Image.open(icon).convert("RGBA").resize((200, 200), Image.LANCZOS)
+    img.paste(mark, (80, 215), mark)
+    left = 336
+    _spaced(d, (left, 192), "WHERE THEY STAND", _font("SourceSerif4-Semibold.ttf", 64), INK, 8.0)
+    d.text((left, 286), "Sourced briefings on the record of Parliament", font=_font("SourceSerif4-It.ttf", 33),
+           fill=INK_SOFT)
+    d.rectangle((left, 355, RIGHT, 358), fill=(46, 42, 36))  # thick-and-thin rule, as on the printed report
+    d.rectangle((left, 366, RIGHT, 367), fill=(46, 42, 36))
+    _spaced(d, (left, 392), "INDEPENDENT · SOURCED TO HANSARD", _font("SourceSans3-Regular.ttf", 23), INK_FAINT, 2.6)
+    url_font = _font("SourceSans3-Semibold.ttf", 23)
+    d.text((RIGHT - d.textlength("wheretheystand.uk", font=url_font), 570), "wheretheystand.uk", font=url_font,
+           fill=COMMONS)
+    return img
+
+
+def write_brand(out: Path | None = None) -> Path:
+    root = Path(__file__).resolve().parents[3]
+    out = out or root / "web" / "public" / "og-image.png"
+    render_brand(root / "web" / "public" / "icon-512.png").save(out, "PNG", optimize=True)
+    return out
+
+
 def card_png(cache_dir: Path, bid: str, question: str, prepared: str, records_up_to: str,
              evidence: dict[str, Any] | None) -> Path:
     """Render once, then serve the saved file."""

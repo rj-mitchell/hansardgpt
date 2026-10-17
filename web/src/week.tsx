@@ -121,6 +121,18 @@ function Week({ start }: { start: string | null }) {
         vote{w.divisions === 1 ? "" : "s"} and {w.written_questions.toLocaleString("en-GB")} written answers, from the
         official record. Every debate can be read in full.
       </p>
+      <p className="muted small">
+        This page is usually a day or two behind, because it is built from the published record. For today's
+        business, Parliament's own sites will be quicker:{" "}
+        <a href="https://hansard.parliament.uk/" rel="noreferrer">
+          Hansard
+        </a>{" "}
+        publishes each debate within hours, and{" "}
+        <a href="https://whatson.parliament.uk/" rel="noreferrer">
+          What's on
+        </a>{" "}
+        lists what is coming up.
+      </p>
       <nav className="week-nav" aria-label="Other weeks">
         {w.previous ? <a href={`/weeks/${w.previous}`}>← Week of {fmtDate(w.previous)}</a> : <span />}
         {w.next && <a href={`/weeks/${w.next}`}>Week of {fmtDate(w.next)} →</a>}

@@ -78,7 +78,8 @@ def test_build_and_read(tmp_path):
     assert next(p for p in inq["publications"] if p["type"] == "Report")["hc"] == "HC 123", "the paper number as given"
     assert [len(s["witnesses"]) for s in inq["sessions"]] == [2, 1]
     found = c.witnesses("passenger watch")
-    assert found["organisations"][0]["sessions"] == 2 and len(found["sessions"]) == 2
+    # both sessions count, but the recent list shows the body once for the inquiry, so one body does not fill it
+    assert found["organisations"][0]["sessions"] == 2 and len(found["sessions"]) == 1
     assert c.for_member(4514)[0]["id"] == 77, "members who gave evidence are found by their UK Parliament ID"
     assert c.committee(999) is None and c.inquiry(999) is None
 
@@ -177,3 +178,16 @@ def test_a_committee_the_service_fails_on_does_not_stop_the_build(tmp_path):
     build(path, fake_api(), no_wait)
     assert sorted(calls) == [10, 11], "tried again next time"
     assert [x["name"] for x in Committees(path).inquiry(901)["committees"]] == ["Old Committee"]
+
+
+def test_one_organisation_however_its_name_is_written():
+    from hansard.sources.committees import group_organisations, org_key
+
+    same = ["University of Oxford", "the University of Oxford", "Oxford University", "Nuffield College, University of Oxford"]
+    assert {org_key(n) for n in same} == {"university of oxford"}
+    assert org_key("Oxford Brookes University") != org_key("University of Oxford")
+    assert org_key("Foreign, Commonwealth & Development Office (FCDO)") == org_key("Foreign, Commonwealth and Development Office")
+    assert org_key("Professor A, University of Oxford, Dr B, Leeds University, and C, RUSI, and D, KCL") == ""  # a panel
+    rows = [{"organisation": n, "session_id": i, "date": f"2025-0{i + 1}-01"} for i, n in enumerate(same)]
+    [only] = group_organisations(rows, 10)
+    assert only["organisation"] in same and only["sessions"] == 4 and len(only["also_written"]) == 3

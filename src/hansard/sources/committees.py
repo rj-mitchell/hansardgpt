@@ -15,6 +15,7 @@ import re
 import sqlite3
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -311,6 +312,58 @@ def refresh(path: Path, client: httpx.Client | None = None, sleep: Callable[[flo
     return {"updated": True, **build(path, client, sleep)}
 
 
+
+# ---- organisations: one name however it is written ---------------------------------------------------------------
+_PARTS = re.compile(r"\s*(?:,|;|\bat\b|\band the\b| / )\s*", re.I)
+
+
+def _canon(text: str) -> str:
+    s = re.sub(r"\([^)]*\)", " ", text.lower()).replace("&", " and ")
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = re.sub(r"\b(?:the|ltd|limited|plc|llp|inc)\b", " ", s)
+    s = " ".join(s.split())
+    m = re.fullmatch(r"((?:\w+ ){0,2}\w+) university", s)  # "Oxford University" -> "university of oxford"
+    if m and " of " not in f" {m.group(1)} ":
+        s = f"university of {m.group(1)}"
+    return s
+
+
+def org_key(name: str | None) -> str:
+    """The same body however it is written: case, "the", "&" or "and", punctuation and an abbreviation in brackets
+    are ignored, "Oxford University" is "University of Oxford", and a department or college given with its
+    university ("Nuffield College, University of Oxford") counts as the university."""
+    if not name or len(name) > 140 or name.count(",") >= 4:
+        return ""  # a whole panel of witnesses written as one "organisation" (older records): not one body
+    for part in _PARTS.split(name):
+        c = _canon(part)
+        if c.startswith("university of ") and len(c.split()) <= 5:
+            return c
+    return _canon(name)
+
+
+def group_organisations(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """Rows of (organisation, session_id, date) grouped by organisation, shown under its most common spelling."""
+    groups: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        key = org_key(r["organisation"])
+        if not key:
+            continue
+        g = groups.setdefault(key, {"names": Counter(), "sessions": set(), "first": None, "last": None})
+        g["names"][r["organisation"]] += 1
+        g["sessions"].add(r["session_id"])
+        if r["date"]:
+            g["first"] = min(g["first"] or r["date"], r["date"])
+            g["last"] = max(g["last"] or r["date"], r["date"])
+    out = []
+    for key, g in groups.items():
+        # the most used spelling; for a university, its own name rather than one of its departments
+        names = [n for n in g["names"] if _canon(n) == key] or list(g["names"])
+        best = max(names, key=lambda n: (g["names"][n], not n.lower().startswith("the ")))
+        out.append({"organisation": best, "key": key, "sessions": len(g["sessions"]), "first": g["first"],
+                    "last": g["last"], "also_written": sorted(n for n in g["names"] if n != best)[:8]})
+    out.sort(key=lambda o: (-o["sessions"], o["organisation"].lower()))
+    return out[:limit]
+
 # ---- reading, for the pages ---------------------------------------------------------------------------------
 def links(kind: str, ident: int, extra: int | None = None) -> str:
     """Parliament's own page for a committee, inquiry, evidence session or publication."""
@@ -352,10 +405,17 @@ class Committees:
                        (SELECT count(*) FROM inquiry_committees ic WHERE ic.committee_id = c.id) AS inquiries,
                        (SELECT count(*) FROM publications p WHERE p.committee_id = c.id AND p.type = 'Report') AS reports,
                        (SELECT max(s.date) FROM session_committees sc JOIN sessions s ON s.id = sc.session_id
-                         WHERE sc.committee_id = c.id) AS last_session
-                FROM committees c WHERE c.end IS NULL AND c.parent_id IS NULL
-                ORDER BY c.house, c.name""").fetchall()
-        return [dict(r) | {"url": links("committee", r["id"])} for r in rows]
+                         WHERE sc.committee_id = c.id) AS last_session,
+                       (SELECT max(p.date) FROM publications p WHERE p.committee_id = c.id) AS last_publication
+                FROM committees c WHERE c.end IS NULL AND c.parent_id IS NULL""").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r) | {"url": links("committee", r["id"])}
+            d["last_active"] = max(filter(None, [r["last_session"], r["last_publication"]]), default=None)
+            out.append(d)
+        # most recently active first: the last evidence session or publication
+        out.sort(key=lambda d: (d["last_active"] or "", d["name"]), reverse=True)
+        return out
 
     def committee(self, cid: int) -> dict[str, Any] | None:
         with self.connect() as con:
@@ -370,13 +430,14 @@ class Committees:
                 FROM inquiries i JOIN inquiry_committees ic ON ic.inquiry_id = i.id
                 WHERE ic.committee_id = ? ORDER BY coalesce(i.open, '') DESC, i.id DESC LIMIT 200""", (cid,)).fetchall()
             subs = con.execute("SELECT id, name FROM committees WHERE parent_id = ? ORDER BY name", (cid,)).fetchall()
-            orgs = con.execute("""
-                SELECT w.organisation, count(DISTINCT w.session_id) AS n FROM witnesses w
-                JOIN session_committees sc ON sc.session_id = w.session_id
-                WHERE sc.committee_id = ? AND w.organisation IS NOT NULL
-                GROUP BY w.organisation COLLATE NOCASE ORDER BY n DESC, w.organisation LIMIT 15""", (cid,)).fetchall()
+            rows = con.execute("""
+                SELECT w.organisation, w.session_id, s.date FROM witnesses w
+                JOIN session_committees sc ON sc.session_id = w.session_id JOIN sessions s ON s.id = w.session_id
+                WHERE sc.committee_id = ? AND w.organisation IS NOT NULL""", (cid,)).fetchall()
+        orgs = [{"organisation": o["organisation"], "n": o["sessions"]}
+                for o in group_organisations([dict(r) for r in rows], 15)]
         return {**dict(c), "url": links("committee", cid), "inquiries": [dict(i) for i in inquiries],
-                "subcommittees": [dict(s) for s in subs], "top_organisations": [dict(o) for o in orgs]}
+                "subcommittees": [dict(s) for s in subs], "top_organisations": orgs}
 
     def inquiry(self, iid: int) -> dict[str, Any] | None:
         with self.connect() as con:
@@ -409,25 +470,24 @@ class Committees:
                               "witnesses": by_session.get(s["id"], [])} for s in sessions]}
 
     def witnesses(self, q: str, limit: int = 50) -> dict[str, Any]:
-        """Organisations (and people) matching the words, with how often and by whom they were heard."""
+        """Organisations (and people) matching the words, with how often and by whom they were heard. Each body
+        appears once however its name was written, and the recent sessions show each body once per inquiry."""
         words = re.findall(r"[\w'’&-]+", q)[:8]
         if not words:
             return self.top_organisations()
         match = " ".join(f'"{w}"' for w in words)
         with self.connect() as con:
-            rows = con.execute("""
-                SELECT w.organisation, count(DISTINCT w.session_id) AS sessions, min(s.date) AS first, max(s.date) AS last
+            hits = [dict(r) for r in con.execute("""
+                SELECT coalesce(w.organisation, w.name) AS organisation, w.session_id, s.date
                 FROM witnesses w JOIN sessions s ON s.id = w.session_id
-                WHERE w.rowid IN (SELECT rowid FROM witness_text WHERE witness_text MATCH ?)
-                GROUP BY coalesce(w.organisation, w.name) COLLATE NOCASE
-                ORDER BY sessions DESC LIMIT ?""", (match, limit)).fetchall()
-            committees = {}
-            for r in rows:  # which committees heard each organisation (names can contain commas)
-                committees[r["organisation"]] = [c[0] for c in con.execute("""
+                WHERE w.rowid IN (SELECT rowid FROM witness_text WHERE witness_text MATCH ?)""", (match,))]
+            orgs = group_organisations(hits, limit)
+            for o in orgs:  # which committees heard each organisation, under any of its spellings
+                names = [o["organisation"], *o["also_written"]]
+                o["committees"] = [c[0] for c in con.execute(f"""
                     SELECT DISTINCT c.name FROM witnesses w JOIN session_committees sc ON sc.session_id = w.session_id
                     JOIN committees c ON c.id = sc.committee_id
-                    WHERE w.organisation = ? COLLATE NOCASE ORDER BY c.name""", (r["organisation"],))] \
-                    if r["organisation"] else []
+                    WHERE w.organisation COLLATE NOCASE IN ({','.join('?' for _ in names)}) ORDER BY c.name""", names)]
             recent = con.execute("""
                 SELECT s.id, s.date, w.name, w.organisation, w.role,
                        (SELECT group_concat(c.name, '; ') FROM session_committees sc JOIN committees c ON c.id = sc.committee_id
@@ -438,20 +498,26 @@ class Committees:
                          WHERE si.session_id = s.id LIMIT 1) AS inquiry
                 FROM witnesses w JOIN sessions s ON s.id = w.session_id
                 WHERE w.rowid IN (SELECT rowid FROM witness_text WHERE witness_text MATCH ?)
-                ORDER BY s.date DESC LIMIT 40""", (match,)).fetchall()
-        return {"query": q, "organisations": [dict(r) | {"committees": committees.get(r["organisation"], [])}
-                                              for r in rows],
-                "sessions": [dict(r) | {"url": links("session", r["id"])} for r in recent]}
+                ORDER BY s.date DESC LIMIT 400""", (match,)).fetchall()
+        sessions, seen, per_body = [], set(), Counter()
+        for r in recent:  # one row per body and inquiry, and at most three per body, so one does not fill the list
+            body = org_key(r["organisation"]) or (r["name"] or "").lower()
+            if (body, r["inquiry_id"] or r["id"]) in seen or per_body[body] >= 3:
+                continue
+            seen.add((body, r["inquiry_id"] or r["id"]))
+            per_body[body] += 1
+            sessions.append(dict(r) | {"url": links("session", r["id"])})
+            if len(sessions) >= 40:
+                break
+        return {"query": q, "organisations": orgs, "sessions": sessions}
 
     def top_organisations(self, since: str | None = None, limit: int = 30) -> dict[str, Any]:
         since = since or (datetime.now(UTC) - timedelta(days=365 * 2)).date().isoformat()
         with self.connect() as con:
-            rows = con.execute("""
-                SELECT w.organisation, count(DISTINCT w.session_id) AS sessions, min(s.date) AS first, max(s.date) AS last
-                FROM witnesses w JOIN sessions s ON s.id = w.session_id
-                WHERE w.organisation IS NOT NULL AND s.date >= ?
-                GROUP BY w.organisation COLLATE NOCASE ORDER BY sessions DESC LIMIT ?""", (since, limit)).fetchall()
-        return {"query": "", "since": since, "organisations": [dict(r) for r in rows], "sessions": []}
+            rows = [dict(r) for r in con.execute("""
+                SELECT w.organisation, w.session_id, s.date FROM witnesses w JOIN sessions s ON s.id = w.session_id
+                WHERE w.organisation IS NOT NULL AND s.date >= ?""", (since,))]
+        return {"query": "", "since": since, "organisations": group_organisations(rows, limit), "sessions": []}
 
     def for_member(self, mnis: int, limit: int = 10) -> list[dict[str, Any]]:
         """Evidence sessions where a member of either House appeared as a witness (ministers, mostly)."""

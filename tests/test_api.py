@@ -317,8 +317,9 @@ def test_every_briefing_gets_a_permanent_shareable_address(indexed_settings, tmp
     page = client.get(f"/b/{bid}")
     assert page.status_code == 200 and "<body>app</body>" in page.text
     assert '<meta property="og:title" content="What has been said about trial by jury? — Where They Stand" />' in page.text
-    assert f'/b/{bid}/card.png" />' in page.text and 'content="noindex"' in page.text
-    assert "og-image.png" not in page.text and page.text.count("<title>") == 1  # site-wide tags replaced
+    # shared links show the site's own image; the briefing's card is still there for embedding
+    assert 'og-image.png" />' in page.text and 'content="noindex"' in page.text
+    assert page.text.count("<title>") == 1 and page.text.count('property="og:image"') == 1  # site-wide tags replaced
 
     card = client.get(f"/b/{bid}/card.png")
     assert card.status_code == 200 and card.headers["content-type"] == "image/png"
@@ -487,3 +488,18 @@ def test_support_reminder_every_n_new_briefings(indexed_settings, tmp_path, monk
     assert client.post("/api/support-clicked").status_code == 200
     final("rail fares")
     assert "support_reminder" not in final("prison places")  # went to donate: no more reminders today
+
+
+def test_pages_carry_readable_text_for_readers_without_scripts():
+    from hansard.api.plaintext import briefing_text, markdown_text, with_text
+
+    page = '<body><div id="person-root"><p class="muted">Loading…</p></div></body>'
+    assert with_text(page, "<h1>Hilary Benn</h1>") == '<body><div id="person-root"><h1>Hilary Benn</h1></div></body>'
+    assert 'class="thread prose"><p>x</p>' in with_text('<div id="root"></div>', "<p>x</p>")
+    assert with_text(page, None) == page
+    md = markdown_text("**In brief**\n- Ministers said <b>so</b> [Source 1]\n\nAbout the evidence: two records.")
+    assert "<strong>In brief</strong>" in md and "<li>Ministers said &lt;b&gt;so&lt;/b&gt;" in md
+    text = briefing_text({"question": "Q?", "created_at": "2026-10-01T10:00:00", "records_up_to": "2026-09-30",
+                          "answer": {"markdown": "Body."},
+                          "sources": [{"n": 1, "title": "A <speech>", "official_url": "https://x.example/1"}]})
+    assert "<h1>Q?</h1>" in text and "A &lt;speech&gt;" in text and 'href="https://x.example/1"' in text

@@ -8,7 +8,7 @@ import { fmtDate } from "./render";
 interface Result {
   query: string;
   since?: string;
-  organisations: { organisation: string | null; sessions: number; first: string | null; last: string | null; committees?: string[] }[];
+  organisations: { organisation: string | null; sessions: number; first: string | null; last: string | null; committees?: string[]; also_written?: string[] }[];
   sessions: { id: number; date: string | null; name: string | null; organisation: string | null; role: string | null; committees: string | null; inquiry_id: number | null; inquiry: string | null; url: string }[];
 }
 
@@ -141,6 +141,13 @@ function Witnesses() {
                         <button type="button" className="secondary small-button" onClick={() => setQ(o.organisation ?? "")}>
                           {o.organisation}
                         </button>
+                      )}
+                      {o.also_written && o.also_written.length > 0 && (
+                        <span className="muted small">
+                          {" "}
+                          (counted together with {o.also_written.slice(0, 3).join("; ")}
+                          {o.also_written.length > 3 ? " and others" : ""})
+                        </span>
                       )}
                       {o.committees && o.committees.length > 0 && (
                         <span className="muted small"> · {o.committees.slice(0, 4).join("; ")}{o.committees.length > 4 ? "…" : ""}</span>

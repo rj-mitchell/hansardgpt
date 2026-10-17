@@ -198,7 +198,7 @@ class Pipeline:
         else:
             result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
                                         req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by,
-                                        rerank_query=rq)
+                                        rerank_query=rq, local_question=self.local_question(plan))
         divisions = []
         if req.scope.votes and (plan.wants_votes or not result.records):
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
@@ -207,6 +207,17 @@ class Pipeline:
         evidence = self.find_evidence(plan, req) if getattr(req.scope, "evidence", False) else []
         return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by, edms,
                                                 devolved, evidence)
+
+    def local_question(self, plan: QueryPlan) -> bool:
+        """A question about a place, a region, a kind of seat or particular members: their local matters belong."""
+        from hansard.rank.places import places_for
+
+        f = plan.filters
+        if f.regions or f.person_ids or plan.speakers or f.seat_types:
+            return True
+        if re.search(r"\b(local|constituenc\w*|my area|town|village|county|council)\b", plan.question, re.I):
+            return True
+        return bool(places_for(self.settings.reference_dir).mentioned(f"{plan.question} {plan.search_text}"))
 
     def find_evidence(self, plan: QueryPlan, req: AskRequest) -> list[dict[str, Any]]:
         """A few witnesses' answers to committees on the subject (when the reader asks for them): one per session
@@ -232,9 +243,12 @@ class Pipeline:
             return []
         lo = plan.filters.date_from and plan.filters.date_from.isoformat()
         hi = plan.filters.date_to and plan.filters.date_to.isoformat()
+        from hansard.sources.committees import org_key
+
         out: list[dict[str, Any]] = []
         used_sessions: set[int] = set()
         used_bodies: set[str] = set()
+        used_inquiries: set[int] = set()
         for t in turns:
             s = sessions.get(t["session_id"])
             if not s or not s.get("date") or t["session_id"] in used_sessions:
@@ -242,11 +256,13 @@ class Pipeline:
             if (lo and s["date"] < lo) or (hi and s["date"] > hi):
                 continue
             w = witness_for(t["speaker"], s["witnesses"])
-            body = (w or {}).get("organisation") or (w or {}).get("name")
-            if not w or (body or "").lower() in used_bodies:
-                continue
+            body = org_key((w or {}).get("organisation")) or ((w or {}).get("name") or "").lower()
+            if not w or body in used_bodies or (s.get("inquiry_id") and s["inquiry_id"] in used_inquiries):
+                continue  # one answer per body (however its name is written), per session and per inquiry
             used_sessions.add(t["session_id"])
-            used_bodies.add((body or "").lower())
+            used_bodies.add(body)
+            if s.get("inquiry_id"):
+                used_inquiries.add(s["inquiry_id"])
             text, kept = "", []
             for para in t["text"].split("\n\n"):  # whole paragraphs, to about 2,500 characters
                 if kept and len(text) + len(para) > 2500:

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { FOOTER, MORE, NAV } from "../nav";
+import { FOOTER, HEADER_LINKS, NAV } from "../nav";
 
 /** The links inside a partial's <nav> element. */
 const links = (file: string) => {
@@ -12,13 +12,14 @@ const links = (file: string) => {
 
 describe("site navigation", () => {
   it("the static pages' header matches the home page's, with Ask a question first", () => {
-    expect(links("header.html")).toEqual([...NAV, ...MORE]);
+    expect(links("header.html")).toEqual(HEADER_LINKS);
+    expect(NAV.map((l) => l.label)).toEqual(["Ask a question", "This week"]);
     expect(NAV[0]).toEqual({ href: "/", label: "Ask a question" });
   });
 
   it("the footer is the same everywhere and holds only pages about the site", () => {
     expect(links("footer.html")).toEqual(FOOTER);
-    const header = new Set([...NAV, ...MORE].map((l) => l.href));
+    const header = new Set(HEADER_LINKS.map((l) => l.href));
     expect(FOOTER.filter((l) => header.has(l.href))).toEqual([]);
   });
 });

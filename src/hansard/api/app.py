@@ -50,6 +50,15 @@ from hansard.api.briefings import (
 )
 from hansard.api.cards import card_png
 from hansard.api.feeds import FEED_TYPE, changelog_items, rss
+from hansard.api.plaintext import (
+    bill_text,
+    briefing_text,
+    debate_text,
+    edm_text,
+    person_text,
+    week_text,
+    with_text,
+)
 from hansard.api.reports import (
     CLOSED,
     DAILY_LIMIT,
@@ -218,6 +227,19 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
             while len(remembered_answers) > 2000:
                 remembered_answers.popitem(last=False)
         return value
+
+    def readable(build: Callable[[], str]) -> str | None:
+        """The page's readable text, or none if it cannot be built (the page itself still works)."""
+        try:
+            return build()
+        except Exception:  # noqa: BLE001 - the readable copy is a courtesy; never fail the page for it
+            log.exception("readable page text not built")
+            return None
+
+    def remembered_if_ready(key: str, ttl: float = 600.0) -> Any:
+        with remembered_lock:
+            hit = remembered_answers.get(key)
+        return hit[1] if hit is not None and time.time() - hit[0] < ttl else None
 
     def get_pipeline() -> Pipeline:
         with lock:
@@ -492,14 +514,12 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 url=f"{base}/b/{bid}", image=None)
             return Response(html_page, status_code=410 if gone else 404, media_type="text/html")
         view = public_view(b)
-        prepared = fmt_date(b["created_at"])
         description = summary_text(view["answer"]) or "A sourced briefing on the record of Parliament."
         html_page = page_with_meta(
             page, title=f"{b['question']} — Where They Stand", description=description, url=f"{base}/b/{bid}",
-            image=f"{base}/b/{bid}/card.png",
-            image_alt=f"Where They Stand briefing: {b['question']} Prepared {prepared}.",
+            image=f"{base}/og-image.png", image_alt="Where They Stand: sourced briefings on the record of Parliament",
             noindex=not is_featured(state, bid))  # featured briefings are for search engines to find
-        return Response(html_page, media_type="text/html")
+        return Response(with_text(html_page, readable(lambda: briefing_text(view))), media_type="text/html")
 
     @app.post("/api/admin/briefings/{bid}/withdraw")
     def withdraw(bid: str, body: WithdrawBody, user=Depends(admin_user)):
@@ -553,9 +573,10 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         description = (summary_text(public_view(b)["answer"]) if b else "") or t.description or t.question
         html_page = page_with_meta(
             page, title=f"{t.title}: where MPs and peers stand — Where They Stand", description=description,
-            url=f"{base}/topics/{slug}", image=f"{base}/b/{b['id']}/card.png" if b else None,
-            image_alt=f"Where They Stand topic briefing: {t.title}", noindex=False)
-        return Response(html_page, media_type="text/html")
+            url=f"{base}/topics/{slug}", image=f"{base}/og-image.png",
+            image_alt="Where They Stand: sourced briefings on the record of Parliament", noindex=False)
+        text = readable(lambda: briefing_text(public_view(b), heading=t.title)) if b else None
+        return Response(with_text(html_page, text), media_type="text/html")
 
     @app.get("/sitemap-briefings.xml", include_in_schema=False)
     def sitemap_briefings(request: Request):
@@ -632,8 +653,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         houses = " and ".join("the Lords" if h == "lords" else "the Commons" for h in b["houses"])
         description = (f"The {b['name']} in Parliament: every debate and vote in {houses}, "
                        f"{fmt_date(b['first'])} to {fmt_date(b['last'])}, from the official record.")
-        return Response(page_with_meta(page, title=f"{b['name']} — Where They Stand", description=description,
-                                       url=f"{base}/bills/{slug}", image=None, noindex=False), media_type="text/html")
+        return Response(with_text(page_with_meta(page, title=f"{b['name']} — Where They Stand", description=description,
+                                                 url=f"{base}/bills/{slug}", image=None, noindex=False),
+                                  readable(lambda: bill_text(b))), media_type="text/html")
 
     @app.get("/sitemap-bills.xml", include_in_schema=False)
     def sitemap_bills(request: Request):
@@ -685,9 +707,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         else:
             description = (f"{d['title']}: the debate in the {d['chamber_name']} on {fmt_date(d['date'])}, as "
                            f"recorded in Hansard, with {d['contributions']} contributions from {d['speakers']} members.")
-        return Response(page_with_meta(page, title=f"{d['title']}, {fmt_date(d['date'])} — Where They Stand",
-                                       description=description, url=url, image=None, noindex=False),
-                        media_type="text/html")
+        return Response(with_text(page_with_meta(page, title=f"{d['title']}, {fmt_date(d['date'])} — Where They Stand",
+                                                 description=description, url=url, image=None, noindex=False),
+                                  readable(lambda: debate_text(d))), media_type="text/html")
 
     # ---- the week in Parliament ---------------------------------------------------------------
     def get_weeks():
@@ -736,10 +758,10 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                             status_code=404, media_type="text/html")
         url = f"{base}/this-week" if start is None else f"{base}/weeks/{w['start']}"
         span = f"{fmt_date(w['start'])} to {fmt_date(w['end'])}"
-        return Response(page_with_meta(page, title=f"In Parliament, week of {fmt_date(w['start'])} — Where They Stand",
-                                       description=f"The debates, votes, bills and statements in Parliament, {span}, "
-                                                   "from the official record.", url=url, image=None, noindex=False),
-                        media_type="text/html")
+        return Response(with_text(page_with_meta(
+            page, title=f"In Parliament, week of {fmt_date(w['start'])} — Where They Stand",
+            description=f"The debates, votes, bills and statements in Parliament, {span}, from the official record.",
+            url=url, image=None, noindex=False), readable(lambda: week_text(w))), media_type="text/html")
 
     @app.get("/this-week", include_in_schema=False)
     def this_week_page(request: Request):
@@ -1046,6 +1068,40 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                 holder["groups"] = Groups(appgs_path(settings))
         return holder["groups"]
 
+    lighter_lock = threading.Lock()
+
+    @app.get("/api/lighter-side")
+    def lighter_side():
+        """What made the House laugh, the same week in earlier years, unparliamentary language and early day
+        motions you might not expect: from the record by plain rules, no AI. Rebuilt every few hours."""
+        def build() -> dict[str, Any]:
+            import duckdb
+
+            from hansard.lighter import Lighter, lighter_edms
+            from hansard.reference.profiles import attach_reference
+            from hansard.store.parquet import attach_store
+            from hansard.sync import edms_path
+
+            with lighter_lock:
+                con = duckdb.connect()
+                try:
+                    stores = set(attach_store(con, settings.parquet_dir))
+                    attach_reference(con, settings.reference_dir)
+                    lighter = Lighter(con)
+                    found = ({"laughter": lighter.laughter(), "on_this_day": lighter.on_this_day(),
+                              "unparliamentary": lighter.unparliamentary()} if "records" in stores
+                             else {"laughter": [], "on_this_day": [], "unparliamentary": []})
+                finally:
+                    con.close()
+            people = get_people()
+            for section in found.values():  # each speaker's page and party on the day
+                for m in section:
+                    who = people.brief(m.pop("person_id"), m["date"]) if m.get("person_id") else None
+                    m["member"] = who
+            return {**found, "edms": lighter_edms(edms_path(settings)), "built": date.today().isoformat()}
+
+        return remembered("lighter-side", build, ttl=6 * 3600)
+
     @app.get("/api/groups")
     def groups_index(q: str = "", parliament: str = "uk"):
         """All-party parliamentary groups (or a devolved parliament's cross-party groups), and their biggest
@@ -1194,10 +1250,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                                            description="There is no early day motion with that number.", url=url,
                                            image=None), status_code=404, media_type="text/html")
         when = fmt_date(e["date_tabled"]) if e["date_tabled"] else "an unknown date"
-        return Response(page_with_meta(page, title=f"{e['title']} (early day motion) — Where They Stand",
-                                       description=f"Early day motion tabled on {when} by {e['primary_name']}, with "
-                                                   f"{e['sponsors_count'] or 0} signatures: the text and who signed.",
-                                       url=url, image=None, noindex=False), media_type="text/html")
+        return Response(with_text(page_with_meta(
+            page, title=f"{e['title']} (early day motion) — Where They Stand",
+            description=f"Early day motion tabled on {when} by {e['primary_name']}, with "
+                        f"{e['sponsors_count'] or 0} signatures: the text and who signed.",
+            url=url, image=None, noindex=False), readable(lambda: edm_text(edm_detail(edm_id)))), media_type="text/html")
 
     # ---- charts --------------------------------------------------------------------------------
     chart_slots = threading.Semaphore(2)  # each chart scans the record for a few seconds; keep the server responsive
@@ -1402,10 +1459,13 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                                            url=f"{base}/people/{number}", image=None), status_code=404,
                             media_type="text/html")
         desc = f"{info['status']}. What {info['name']} has said in Parliament, with roles, majorities and votes."
-        return Response(page_with_meta(html_doc, title=f"{info['name']} — Where They Stand", description=desc,
-                                       url=f"{base}/people/{info['number']}/{info['slug']}",
-                                       image=f"{base}/og-image.png", image_alt="Where They Stand", noindex=False),
-                        media_type="text/html")
+        # contributions only when already at hand, so the page is never held up by them
+        text = readable(lambda: person_text(remembered(f"person:{number}:core", lambda: person_core(number)),
+                                            remembered_if_ready(f"person:{number}:activity")))
+        return Response(with_text(page_with_meta(html_doc, title=f"{info['name']} — Where They Stand", description=desc,
+                                                 url=f"{base}/people/{info['number']}/{info['slug']}",
+                                                 image=f"{base}/og-image.png", image_alt="Where They Stand",
+                                                 noindex=False), text), media_type="text/html")
 
     @app.get("/sitemap-people.xml", include_in_schema=False)
     def sitemap_people(request: Request):

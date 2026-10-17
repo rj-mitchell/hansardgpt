@@ -1,4 +1,4 @@
-/** Current committees of both Houses, grouped by House. Free: no AI. */
+/** Current committees of both Houses, grouped by House, the most recently active first. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./pages";
@@ -14,6 +14,7 @@ interface Row {
   inquiries: number;
   reports: number;
   last_session: string | null;
+  last_active?: string | null;
 }
 
 function Index() {
@@ -50,7 +51,7 @@ function Index() {
                   <span className="muted small">
                     {" "}
                     {r.inquiries} inquir{r.inquiries === 1 ? "y" : "ies"}, {r.reports} report{r.reports === 1 ? "" : "s"}
-                    {r.last_session ? ` · last evidence session ${fmtDate(r.last_session)}` : ""}
+                    {r.last_active ? ` · last active ${fmtDate(r.last_active)}` : ""}
                   </span>
                 </li>
               ))}

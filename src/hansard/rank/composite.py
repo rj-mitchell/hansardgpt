@@ -17,7 +17,9 @@ authority  = 1 + (W - 1) * m        W = role slider in [1.0, 2.0]
              government minister or select committee chair whose portfolio
              matches the question 1.0, in another portfolio 0.5; shadow
              minister matching 0.6, other 0.3; backbencher 0.
-score      = relevance * recency * authority
+locality   = local_factor (default 0.7) for a contribution about one place (a town's bus route, a
+             constituency's station: see rank.places), unless the question is itself local; otherwise 1
+score      = relevance * recency * authority * locality
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ class RankParams:
     m_chair_other: float = 0.5
     semantic_floor: float = 0.5
     semantic_ceiling: float = 0.85
+    local_factor: float = 0.7
     today: date = field(default_factory=date.today)
 
     @classmethod
@@ -72,6 +75,7 @@ class Candidate:
     shadow_portfolios: list[str] = field(default_factory=list)
     chair_portfolios: list[str] = field(default_factory=list)
     best_passage_id: str | None = None
+    local: bool = False  # mainly about one place, for a question that is not (set by the engine)
     data: dict[str, Any] = field(default_factory=dict)
 
 
@@ -97,6 +101,8 @@ class Scored:
             "authority": round(self.authority, 4),
             "authority_reason": self.authority_reason,
         }
+        if self.candidate.local:
+            out["local"] = True
         if self.rerank is not None:
             out["reranker"] = round(self.rerank, 4)
         return out
@@ -143,6 +149,7 @@ def rank(candidates: list[Candidate], query_portfolios: set[str] | list[str], p:
         rec = recency_factor(c.date, p)
         m, why = authority_m(c, qp, p)
         auth = 1 + (p.role_weight - 1) * m
-        out.append(Scored(c, rel, rec, auth, m, why, rel * rec * auth))
+        local = p.local_factor if c.local else 1.0
+        out.append(Scored(c, rel, rec, auth, m, why, rel * rec * auth * local))
     out.sort(key=lambda s: (-s.score, -s.relevance, s.candidate.record_id))
     return out
