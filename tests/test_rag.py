@@ -114,7 +114,7 @@ class FakeStream:
         content = [NS(type="text", text=b["text"], citations=[NS(type="search_result_location", **c)
                                                               for c in b.get("citations", [])])
                    for b in self.blocks]
-        return NS(content=content, stop_reason=self.stop_reason, model="claude-opus-5-5",
+        return NS(content=content, stop_reason=self.stop_reason, model="claude-sonnet-5-5",
                   usage=NS(input_tokens=1000, output_tokens=200, cache_read_input_tokens=0,
                            cache_creation_input_tokens=0))
 
