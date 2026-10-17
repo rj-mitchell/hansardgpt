@@ -101,7 +101,9 @@ def test_ask_streams_plan_sources_text_and_verified_answer(api):
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
     evs = events(r)
     types = [e["type"] for e in evs]
-    assert types[0] == "plan" and types[1] == "sources" and "text" in types and types[-1] == "final"
+    assert evs[0]["type"] == "progress" and evs[0]["step"] == "reading"  # sent before the question is read
+    assert types[1] == "plan" and types[2] == "sources" and "text" in types and types[-1] == "final"
+    assert types[-2] == "progress"  # checking the citations, after the writing
     final = evs[-1]["answer"]
     assert "[Source 1]" in final["markdown"] and final["citations_invalid"] == 0
     with state.connect() as con:

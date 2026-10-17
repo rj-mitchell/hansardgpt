@@ -110,7 +110,7 @@ What is free, cheap and more expensive to run is listed in `docs/COSTS.md`.
 |---|---|---|
 | ✓ **Download as PDF or Word** button (print already works) | S | Done: Word files are built in the browser, with numbered citations and the full source list |
 | ✓ **Embeddable briefing card** for journalists and bloggers | S–M | Done: "Copy embed code" gives the briefing's preview card linked back to it (an image and link, so the site's protection against being framed stays in place) |
-| ✓ **RSS feeds** for topic briefings, the changelog and corrections | S | Done, plus a feed for each member and for bills |
+| ✓ **RSS feeds** for topic briefings and corrections | S | Done, plus a feed for each member and for bills |
 | ✓ **Featured briefings**: a few good briefings chosen by you, indexable by search engines | S | Done: "Feature" on the admin page; listed on /topics |
 
 **Quality and trust**

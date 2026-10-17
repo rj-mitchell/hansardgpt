@@ -2053,7 +2053,7 @@ html:has(.login) body {
   max-inline-size: 40rem;
 }
 
-/* ---- static pages: methodology, changelog, status ---------------------------------------------- */
+/* ---- static pages: methodology, status and the like --------------------------------------------- */
 
 .page-nav {
   display: flex;
@@ -3100,11 +3100,25 @@ main:focus {
   }
 }
 
-/* on a phone the menu sits towards the left: open it rightwards so it stays on screen */
+/* on a phone the header's links fit on one line, and an open menu spans the width of the line, under it, so it
+   stays on screen wherever its name sits */
 @media (max-width: 40rem) {
-  .nav-more-list {
-    inset-inline-end: auto;
-    inset-inline-start: 0;
+  .masthead-actions.page-nav {
+    position: relative;
+    flex-wrap: nowrap;
+    gap: var(--space-xs) 0.7rem;
+    white-space: nowrap;
+  }
+
+  .masthead-actions .nav-more {
+    position: static;
+  }
+
+  .masthead-actions .nav-more-list {
+    inset-inline: 0;
+    min-inline-size: 0;
+    max-inline-size: none;
+    white-space: normal;
   }
 }
 

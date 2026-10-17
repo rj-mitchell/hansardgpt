@@ -53,11 +53,9 @@ def test_a_debate_from_one_of_its_contributions(indexed_settings, tmp_path):
 def test_feeds(indexed_settings, tmp_path):
     import xml.etree.ElementTree as ET
 
-    from hansard.api.feeds import changelog_items
-
     app, _, _ = make_app(indexed_settings, tmp_path, auth=False)
     client = TestClient(app)
-    for path in ("/feeds/bills.xml", "/feeds/topics.xml", "/feeds/corrections.xml", "/feeds/changelog.xml"):
+    for path in ("/feeds/bills.xml", "/feeds/topics.xml", "/feeds/corrections.xml"):
         r = client.get(path)
         assert r.status_code == 200 and r.headers["content-type"].startswith("application/rss+xml")
         channel = ET.fromstring(r.content).find("channel")
@@ -74,10 +72,8 @@ def test_feeds(indexed_settings, tmp_path):
     feed = ET.fromstring(client.get(f"/feeds/people/{number}.xml").content)
     assert feed.find("channel/item") is not None, "a member's feed lists their contributions"
     assert client.get("/feeds/people/999999999.xml").status_code == 404
-    page = ('<h2><time datetime="2026-10-11">11 October 2026</time></h2>\n<ul>\n<li>New <a href="/x">pages</a>. '
-            'And more.</li>\n<li>Fixed a bug &amp; another.</li></ul>')
-    items = changelog_items(page, "https://example.org")
-    assert [i["title"] for i in items] == ["New pages.", "Fixed a bug & another."]
+    r = client.get("/changelog", follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == "/about"
 
 
 def test_the_week_in_parliament(indexed_settings, tmp_path):

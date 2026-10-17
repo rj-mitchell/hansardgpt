@@ -112,6 +112,7 @@ class Pipeline:
         self._edms = None
         self._devolved = None
         self._evidence = None
+        self._size: tuple[float, int] | None = None
 
     @property
     def client(self):
@@ -376,7 +377,21 @@ class Pipeline:
                        no_records=all(res.no_records for res in results),
                        candidates=sum(res.candidates for res in results), evidence=evidence_summary(records))
 
+    def archive_size(self) -> int:
+        """Passages in the search index (counted at most every ten minutes: it changes twice a day)."""
+        import time
+
+        now = time.time()
+        if self._size is None or now - self._size[0] > 600:
+            try:
+                self._size = (now, int(self.engine.index.stats()["passages"]))
+            except Exception:  # an empty or missing index: the count is only for the progress message
+                self._size = (now, 0)
+        return self._size[1]
+
     def run(self, req: AskRequest) -> Iterator[dict[str, Any]]:
+        # straight away, before the question is read: the reader sees work begin, and how much will be searched
+        yield {"type": "progress", "step": "reading", "passages": self.archive_size()}
         plan, parse_usage = self.make_plan(req)
         ev: dict[str, Any] = {"type": "plan", "plan": plan.to_dict(), "usage": parse_usage}
         if plan.parse_error:
@@ -418,6 +433,7 @@ class Pipeline:
         if final is None or final["stop_reason"] == "refusal":
             yield {"type": "error", "message": "The model declined to answer this question."}
             return
+        yield {"type": "progress", "step": "checking"}
         report = verify(final["blocks"], sources)
         drop_preambles(report.segments)       # "Across the records retrieved, ..." openers
         britishise_segments(report.segments)  # the model's own words only; quotations stay verbatim

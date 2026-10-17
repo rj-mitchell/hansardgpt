@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-import re
 from datetime import UTC, date, datetime, time
 from email.utils import format_datetime
 from typing import Any
@@ -39,21 +38,3 @@ def rss(*, title: str, link: str, description: str, self_url: str, items: list[d
                 "</item>"]
     out += ["</channel>", "</rss>"]
     return "\n".join(out)
-
-
-_ENTRY = re.compile(r'<h2><time datetime="(\d{4}-\d{2}-\d{2})">[^<]*</time></h2>\s*<ul>(.*?)</ul>', re.S)
-_ITEM = re.compile(r"<li>(.*?)</li>", re.S)
-_TAG = re.compile(r"<[^>]+>")
-
-
-def changelog_items(page: str, base: str, limit: int = 30) -> list[dict[str, Any]]:
-    """The changelog's entries, one item per change, read from the published changelog page."""
-    items = []
-    for day, body in _ENTRY.findall(page):
-        for k, li in enumerate(_ITEM.findall(body)):
-            text = html.unescape(" ".join(_TAG.sub("", li).split()))
-            first = re.split(r"(?<=\.)\s", text, maxsplit=1)[0]
-            items.append({"title": first if len(first) <= 120 else first[:117].rsplit(" ", 1)[0] + "…",
-                          "link": f"{base}/changelog", "description": text, "date": day,
-                          "guid": f"{base}/changelog#{day}-{k}"})
-    return items[:limit]

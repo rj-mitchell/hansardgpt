@@ -1,4 +1,4 @@
-/** The site's links, in one place. The header holds Ask a question and This week on their own, then three menus by
+/** The site's links, in one place. The header holds Ask and This week on their own, then three menus by
  * theme; the footer holds pages about the site. partials/header.html and partials/footer.html carry the same lists
  * for the static pages; a test keeps them in step. */
 export interface NavLink {
@@ -12,7 +12,7 @@ export interface NavMenu {
 }
 
 export const NAV: NavLink[] = [
-  { href: "/", label: "Ask a question" },
+  { href: "/", label: "Ask" },
   { href: "/this-week", label: "This week" },
 ];
 
@@ -60,10 +60,8 @@ export const FOOTER: NavLink[] = [
   { href: "/resources", label: "Other resources" },
   { href: "/developers", label: "Data and API" },
   { href: "/press", label: "Press and contact" },
-  { href: "/changelog", label: "Changelog" },
   { href: "/status", label: "Status" },
-  { href: "/corrections", label: "Corrections" },
-  { href: "/corrections#report", label: "Report a problem" },
+  { href: "/corrections", label: "Corrections and problems" },
   { href: "/accessibility", label: "Accessibility" },
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },

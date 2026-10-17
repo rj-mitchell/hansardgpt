@@ -19,9 +19,10 @@ fi
 
 cd "$DIR/deploy"
 echo "==> Refreshing the update and backup timers"
-cp hansard-sync.service hansard-sync.timer hansard-backup.service hansard-backup.timer /etc/systemd/system/
+cp hansard-sync.service hansard-sync.timer hansard-backup.service hansard-backup.timer \
+   hansard-watchdog.service hansard-watchdog.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now hansard-sync.timer hansard-backup.timer >/dev/null
+systemctl enable --now hansard-sync.timer hansard-backup.timer hansard-watchdog.timer >/dev/null
 
 echo "==> Making sure the server has swap space (spare memory on disk for large updates)"
 bash "$DIR/deploy/swap.sh" || echo "WARNING: could not add swap; carrying on."
