@@ -22,6 +22,7 @@ import duckdb
 
 from hansard.config import Settings
 from hansard.store.parquet import attach_store
+from hansard.store.shared import shared
 
 log = logging.getLogger(__name__)
 RULES = 1  # raise when classify() changes, so the cached labels are rebuilt
@@ -201,7 +202,7 @@ class VoteTypes:
     def _data_version(self) -> str:
         """Changes whenever divisions are added or replaced (a sync), so the cache follows the data."""
         if self._con is None:
-            self._con = duckdb.connect()
+            self._con = shared()
             self._stores = set(attach_store(self._con, self.settings.parquet_dir))
         if not {"records", "divisions"} <= self._stores:
             return "none"

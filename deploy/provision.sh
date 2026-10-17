@@ -89,9 +89,10 @@ nohup docker compose run --rm -T app hansard bootstrap --embed-minutes 120 > /va
 
 echo "==> Installing the sync and backup timers"
 mkdir -p backups
-cp hansard-sync.service hansard-sync.timer hansard-backup.service hansard-backup.timer /etc/systemd/system/
+cp hansard-sync.service hansard-sync.timer hansard-backup.service hansard-backup.timer \
+   hansard-watchdog.service hansard-watchdog.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now hansard-sync.timer hansard-backup.timer
+systemctl enable --now hansard-sync.timer hansard-backup.timer hansard-watchdog.timer
 
 cat <<MSG
 

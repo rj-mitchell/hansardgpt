@@ -11,10 +11,10 @@ const links = (file: string) => {
 };
 
 describe("site navigation", () => {
-  it("the static pages' header matches the home page's, with Ask a question first", () => {
+  it("the static pages' header matches the home page's, with Ask first", () => {
     expect(links("header.html")).toEqual(HEADER_LINKS);
-    expect(NAV.map((l) => l.label)).toEqual(["Ask a question", "This week"]);
-    expect(NAV[0]).toEqual({ href: "/", label: "Ask a question" });
+    expect(NAV.map((l) => l.label)).toEqual(["Ask", "This week"]);
+    expect(NAV[0]).toEqual({ href: "/", label: "Ask" });
   });
 
   it("the footer is the same everywhere and holds only pages about the site", () => {

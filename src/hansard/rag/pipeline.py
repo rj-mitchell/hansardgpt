@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -111,6 +112,7 @@ class Pipeline:
         self._edms = None
         self._devolved = None
         self._evidence = None
+        self._size: tuple[float, int] | None = None
 
     @property
     def client(self):
@@ -193,18 +195,26 @@ class Pipeline:
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))
         rq = rerank_query(plan, self.settings.ranking.get("rerank_query"))
-        if plan.compare:
-            result = self._compare_search(plan, req, limit, rq)
-        else:
-            result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
-                                        req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by,
-                                        rerank_query=rq, local_question=self.local_question(plan))
-        divisions = []
-        if req.scope.votes and (plan.wants_votes or not result.records):
+        # votes, motions, the devolved parliaments and committee evidence are looked up alongside the main search
+        side = {"votes": req.scope.votes and plan.wants_votes, "edms": getattr(req.scope, "edms", True),
+                "devolved": getattr(req.scope, "devolved", False), "evidence": getattr(req.scope, "evidence", False)}
+        lookups = {"votes": lambda: self.votes.find(plan.search_text, plan.filters, limit=4),
+                   "edms": lambda: self.find_edms(plan, req), "devolved": lambda: self.find_devolved(plan, req),
+                   "evidence": lambda: self.find_evidence(plan, req)}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            pending = {k: pool.submit(lookups[k]) for k, wanted in side.items() if wanted}
+            if plan.compare:
+                result = self._compare_search(plan, req, limit, rq)
+            else:
+                result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
+                                            req.recency, req.role_weight, limit, diversify=True,
+                                            group_by=plan.group_by, rerank_query=rq,
+                                            local_question=self.local_question(plan))
+            found = {k: f.result() for k, f in pending.items()}
+        divisions = found.get("votes", [])
+        if req.scope.votes and not plan.wants_votes and not result.records:
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
-        edms = self.find_edms(plan, req) if getattr(req.scope, "edms", True) else []
-        devolved = self.find_devolved(plan, req) if getattr(req.scope, "devolved", False) else []
-        evidence = self.find_evidence(plan, req) if getattr(req.scope, "evidence", False) else []
+        edms, devolved, evidence = found.get("edms", []), found.get("devolved", []), found.get("evidence", [])
         return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by, edms,
                                                 devolved, evidence)
 
@@ -367,7 +377,21 @@ class Pipeline:
                        no_records=all(res.no_records for res in results),
                        candidates=sum(res.candidates for res in results), evidence=evidence_summary(records))
 
+    def archive_size(self) -> int:
+        """Passages in the search index (counted at most every ten minutes: it changes twice a day)."""
+        import time
+
+        now = time.time()
+        if self._size is None or now - self._size[0] > 600:
+            try:
+                self._size = (now, int(self.engine.index.stats()["passages"]))
+            except Exception:  # an empty or missing index: the count is only for the progress message
+                self._size = (now, 0)
+        return self._size[1]
+
     def run(self, req: AskRequest) -> Iterator[dict[str, Any]]:
+        # straight away, before the question is read: the reader sees work begin, and how much will be searched
+        yield {"type": "progress", "step": "reading", "passages": self.archive_size()}
         plan, parse_usage = self.make_plan(req)
         ev: dict[str, Any] = {"type": "plan", "plan": plan.to_dict(), "usage": parse_usage}
         if plan.parse_error:
@@ -409,6 +433,7 @@ class Pipeline:
         if final is None or final["stop_reason"] == "refusal":
             yield {"type": "error", "message": "The model declined to answer this question."}
             return
+        yield {"type": "progress", "step": "checking"}
         report = verify(final["blocks"], sources)
         drop_preambles(report.segments)       # "Across the records retrieved, ..." openers
         britishise_segments(report.segments)  # the model's own words only; quotations stay verbatim

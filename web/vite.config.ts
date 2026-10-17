@@ -37,7 +37,6 @@ export default defineConfig({
       input: {
         main: here("./index.html"),
         methodology: here("./methodology.html"),
-        changelog: here("./changelog.html"),
         status: here("./status.html"),
         corrections: here("./corrections.html"),
         accessibility: here("./accessibility.html"),

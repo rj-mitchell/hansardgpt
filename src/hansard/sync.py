@@ -22,6 +22,8 @@ import tempfile
 import time
 import traceback
 from collections import defaultdict
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -216,7 +218,8 @@ class SyncRunning(RuntimeError):
     """Another update holds the lock."""
 
 
-def run_sync(settings: Settings, **kwargs: Any) -> dict[str, Any]:
+@contextmanager
+def update_lock(settings: Settings) -> Iterator[None]:
     """One update at a time: a second one started meanwhile (by hand, or a timer firing during a long run) stops
     straight away rather than writing the same files at once. The lock is released when the process ends, even if
     it is killed."""
@@ -228,6 +231,11 @@ def run_sync(settings: Settings, **kwargs: Any) -> dict[str, Any]:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise SyncRunning("another update is already running") from None
+        yield
+
+
+def run_sync(settings: Settings, **kwargs: Any) -> dict[str, Any]:
+    with update_lock(settings):
         return _run_sync(settings, **kwargs)
 
 

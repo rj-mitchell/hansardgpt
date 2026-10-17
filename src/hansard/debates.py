@@ -13,11 +13,10 @@ from collections import OrderedDict
 from datetime import date
 from typing import Any
 
-import duckdb
-
 from hansard.config import Settings
 from hansard.reference.profiles import ProfileResolver
 from hansard.store.parquet import attach_store, partition_dir
+from hansard.store.shared import shared
 from hansard.vote_types import vote_types
 
 # the chamber as it appears in a debate's address, and the record source behind it
@@ -85,7 +84,7 @@ def _paragraphs(text: str) -> list[str]:
 class Debates:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.con = duckdb.connect()
+        self.con = shared()
         self.stores = set(attach_store(self.con, settings.parquet_dir))
         self.resolver = ProfileResolver(settings.reference_dir)
         self._lock = threading.Lock()

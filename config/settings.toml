@@ -29,6 +29,13 @@ devolved_nations = ["Scotland", "Wales", "Northern Ireland"]
 [ranking]
 candidates_bm25 = 300
 candidates_vector = 300
+# Meaning search. The index compares compressed vectors and on its own finds only about two thirds of the truly
+# nearest passages; re-checking 5x the candidates against the full vectors finds over 90% (measured on 14 sample
+# searches) for a few milliseconds more. vector_nprobes is how many index partitions each search reads (LanceDB's
+# default is 20). `hansard reindex-vectors` rebuilds the index for the current number of vectors, measures both
+# settings against an exact search and saves the fastest that finds as much as the best.
+vector_refine_factor = 5
+# vector_nprobes = 20
 # Weight of normalised BM25 vs cosine similarity in the relevance score.
 bm25_weight = 0.5
 # Recency factor = floor + (1 - floor) * 0.5 ** (age_years / half_life).

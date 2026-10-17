@@ -23,9 +23,18 @@ from hansard.reference.build import office_display
 from hansard.reference.portfolios import KIND_CHAIR, KIND_GOV, KIND_SHADOW
 from hansard.sources.demographics import age_band, age_on, assumed_birth
 from hansard.sources.elections import election_label, first_term, general_elections, majority_band
+from hansard.store.shared import shared
 
 REFERENCE_TABLES = ("persons", "person_ids", "names", "memberships", "offices", "constituencies", "parties",
                     "representations", "election_results")
+
+
+def _drop(con, name: str, kind: str) -> None:
+    """Drop ``name`` if it exists as a ``kind`` (TABLE or VIEW), so it can be recreated as the other kind."""
+    found = con.execute("SELECT 1 FROM duckdb_tables() WHERE table_name = ?" if kind == "TABLE"
+                        else "SELECT 1 FROM duckdb_views() WHERE view_name = ?", [name]).fetchone()
+    if found:
+        con.execute(f"DROP {kind} {name}")
 
 
 def attach_reference(con: duckdb.DuckDBPyConnection, reference_dir: Path) -> None:
@@ -35,9 +44,14 @@ def attach_reference(con: duckdb.DuckDBPyConnection, reference_dir: Path) -> Non
     for name in REFERENCE_TABLES:
         path = Path(reference_dir) / f"{name}.parquet"
         if path.exists():
+            _drop(con, f"ref_{name}", "TABLE")
             con.execute(f"CREATE OR REPLACE VIEW ref_{name} AS SELECT * FROM read_parquet('{path.as_posix()}')")
         else:  # a table added after this reference set was built: empty until the next rebuild
-            con.register(f"ref_{name}", _SCHEMAS[name].empty_table())
+            # a table, not a registered Arrow table, so every thread's cursor on a shared connection sees it
+            con.register("_empty_ref", _SCHEMAS[name].empty_table())
+            _drop(con, f"ref_{name}", "VIEW")
+            con.execute(f"CREATE OR REPLACE TABLE ref_{name} AS SELECT * FROM _empty_ref")
+            con.unregister("_empty_ref")
     # reference sets built before gender and date of birth were added: treat them as not known
     cols = {r[0] for r in con.execute("DESCRIBE ref_persons").fetchall()}
     missing = [f"NULL::{t} AS {c}" for c, t in (("gender", "VARCHAR"), ("birth_date", "DATE"),
@@ -183,7 +197,7 @@ class ProfileResolver:
     """Look up speaker profiles (for citation cards and tests)."""
 
     def __init__(self, reference_dir: Path, con: duckdb.DuckDBPyConnection | None = None):
-        self.con = con or duckdb.connect()
+        self.con = shared(con)
         attach_reference(self.con, reference_dir)
 
     def canonical_person(self, xml_id: str | None) -> str | None:

@@ -1,4 +1,4 @@
-/** Script for the static pages (methodology, changelog, status): styles, a cookie-free page count, live status. */
+/** Script for the static pages (methodology, status and the like): styles, a cookie-free page count, live status. */
 import "@fontsource-variable/source-serif-4/opsz.css";
 import "@fontsource-variable/source-serif-4/opsz-italic.css";
 import "./styles.css";

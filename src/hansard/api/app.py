@@ -21,7 +21,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -49,7 +49,7 @@ from hansard.api.briefings import (
     withdraw_briefing,
 )
 from hansard.api.cards import card_png
-from hansard.api.feeds import FEED_TYPE, changelog_items, rss
+from hansard.api.feeds import FEED_TYPE, rss
 from hansard.api.plaintext import (
     bill_text,
     briefing_text,
@@ -1603,13 +1603,9 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
         return feed(request, "/feeds/edms.xml", "Early day motions", "/edms",
                     "Early day motions as they are tabled.", items)
 
-    @app.get("/feeds/changelog.xml", include_in_schema=False)
-    def feed_changelog(request: Request):
-        page = dist / "changelog.html"
-        base = str(request.base_url).rstrip("/")
-        items = changelog_items(page.read_text(), base) if page.is_file() else []
-        return feed(request, "/feeds/changelog.xml", "Changelog", "/changelog",
-                    "New features and changes to the site.", items)
+    @app.get("/changelog", include_in_schema=False)
+    def changelog_gone():  # the changelog page was retired: old links go to the About page
+        return RedirectResponse("/about", status_code=301)
 
     # ---- feedback, visit counts and public status ---------------------------------------
     @app.post("/api/feedback")

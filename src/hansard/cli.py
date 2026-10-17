@@ -184,6 +184,40 @@ def embed_pending_cmd(settings: Settings, max_files=None, max_minutes=None) -> d
     return {"passages_embedded": n, "seconds": round(time.time() - t, 1), **idx.stats()}
 
 
+@app.command("reindex-vectors")
+def reindex_vectors(rows_per_partition: int = typer.Option(8192, help="vectors per index partition"),
+                    tolerance: float = typer.Option(0.02, help="keep the new index if some setting finds the "
+                                                              "nearest passages within this share of the old one"),
+                    force: bool = typer.Option(False, help="keep the new index whatever the comparison shows")):
+    """Rebuild the meaning-search index for the vectors there are now (faster searches), checking the results.
+
+    Takes a while on the full record (tens of minutes, most of it comparing every vector to measure how many of the
+    nearest passages each index finds); the site keeps working on the old index meanwhile, and the twice-daily
+    update waits for it to finish."""
+    from hansard.embed.base import get_embedder
+    from hansard.index.lance import SearchIndex
+    from hansard.index.retune import rebuild
+    from hansard.sync import update_lock
+
+    _setup_logging()
+    settings = _settings()
+    idx = SearchIndex(settings.index_dir, int(settings.embedding.get("dim", 384)))
+    with update_lock(settings):
+        current = {"nprobes": settings.ranking.get("vector_nprobes"),
+                   "refine_factor": settings.ranking.get("vector_refine_factor")}
+        out = rebuild(idx, get_embedder(settings), rows_per_partition, current=current, tolerance=tolerance,
+                      force=force)
+    if out.get("recommended"):
+        from hansard.config import save_local_settings
+
+        rec = out["recommended"]
+        out["settings_file"] = str(save_local_settings(settings.data_dir, {"ranking": {
+            "vector_nprobes": rec["nprobes"], "vector_refine_factor": rec["refine_factor"] or 0}}))
+    typer.echo(json.dumps(out, indent=2))
+    if out.get("kept"):
+        typer.echo("\nRestart the app to search with the new index settings (bash deploy/update.sh does this).")
+
+
 @app.command()
 def status():
     """Show data, index and sync status."""

@@ -15,8 +15,6 @@ from dataclasses import asdict, dataclass, field
 from datetime import date
 from typing import Any
 
-import duckdb
-
 from hansard.config import Settings
 from hansard.embed.base import Embedder, get_embedder
 from hansard.index.lance import SearchIndex, date_lit, sql_str
@@ -27,6 +25,7 @@ from hansard.rank.rerank import Reranker, get_reranker, rerank
 from hansard.reference.profiles import ProfileResolver
 from hansard.sources.demographics import AGE_BANDS, age_band, age_on, assumed_birth, band_dates
 from hansard.store.parquet import read_records
+from hansard.store.shared import shared
 
 log = logging.getLogger(__name__)
 
@@ -133,7 +132,7 @@ class Engine:
         self.resolver = ProfileResolver(settings.reference_dir)
         self._embedder = embedder
         self.today = today
-        self.con = duckdb.connect()
+        self.con = shared()
         self.con.execute("SET enable_object_cache = true")  # cache Parquet footers between queries
         self._has_vectors = False
 
@@ -301,15 +300,25 @@ class Engine:
 
         # checks made after the search discard some candidates, so fetch more to start with
         widen = 2 if post_filters else 1
-        bm = self.index.bm25(query, where, int(r.get("candidates_bm25", 300)) * widen)
-        lap("keyword")
-        vec_hits: list[dict[str, Any]] = []
-        semantic = self.has_vectors() and self.embedder is not None
-        if semantic:
-            vec = self.embedder.embed_query(query)
-            lap("embed")
-            vec_hits = self.index.vector(vec, where, int(r.get("candidates_vector", 300)) * widen)
-            lap("meaning")
+
+        def keyword() -> tuple[list[dict[str, Any]], float]:
+            start = time.perf_counter()
+            return self.index.bm25(query, where, int(r.get("candidates_bm25", 300)) * widen), time.perf_counter() - start
+
+        # the keyword search runs on its own thread while the question is embedded and searched by meaning
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            by_keyword = pool.submit(keyword)
+            vec_hits: list[dict[str, Any]] = []
+            semantic = self.has_vectors() and self.embedder is not None
+            if semantic:
+                vec = self.embedder.embed_query(query)
+                lap("embed")
+                vec_hits = self.index.vector(vec, where, int(r.get("candidates_vector", 300)) * widen,
+                                             nprobes=r.get("vector_nprobes"),
+                                             refine_factor=r.get("vector_refine_factor"))
+                lap("meaning")
+            bm, timings["keyword"] = by_keyword.result()
+            lap("keyword_wait")
 
         cands: dict[str, Candidate] = {}
 
