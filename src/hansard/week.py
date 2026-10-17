@@ -10,11 +10,10 @@ from collections import OrderedDict, defaultdict
 from datetime import date, timedelta
 from typing import Any
 
-import duckdb
-
 from hansard.config import Settings
 from hansard.debates import SOURCES, anchor, debate_path, slug, title_of
 from hansard.store.parquet import attach_store
+from hansard.store.shared import shared
 from hansard.vote_types import vote_types
 
 CHAMBERS = [("debates", "House of Commons"), ("lordspages", "House of Lords"), ("westminhall", "Westminster Hall"),
@@ -39,7 +38,7 @@ def monday(d: date) -> date:
 class Weeks:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.con = duckdb.connect()
+        self.con = shared()
         self.stores = set(attach_store(self.con, settings.parquet_dir))
         self._lock = threading.Lock()
         self._cache: OrderedDict[tuple, dict[str, Any] | None] = OrderedDict()

@@ -13,7 +13,6 @@ import threading
 from datetime import date
 from typing import Any
 
-import duckdb
 import httpx
 
 from hansard.config import Settings
@@ -23,6 +22,7 @@ from hansard.reference.profiles import ProfileResolver, attach_reference
 from hansard.sources.demographics import USER_AGENT, age_on, assumed_birth
 from hansard.sources.elections import election_label, majority_band
 from hansard.store.parquet import attach_store
+from hansard.store.shared import shared
 from hansard.vote_types import vote_types
 
 log = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ class People:
         self.settings = settings
         self.resolver = resolver
         self.today = today
-        self.con = duckdb.connect()
+        self.con = shared()
         attach_reference(self.con, settings.reference_dir)
         self.stores = set(attach_store(self.con, settings.parquet_dir))
         self._lock = threading.Lock()

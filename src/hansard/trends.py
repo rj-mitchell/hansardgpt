@@ -16,11 +16,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import duckdb
-
 from hansard.config import Settings
 from hansard.reference.profiles import attach_reference
 from hansard.store.parquet import attach_store
+from hansard.store.shared import shared
 
 PHRASE = re.compile(r"^[\w][\w '’\-]{1,58}[\w]$")
 BY = ("all", "house", "party", "nation")
@@ -72,7 +71,7 @@ class Trends:
     def __init__(self, settings: Settings, today: date | None = None):
         self.settings = settings
         self.today = today
-        self.con = duckdb.connect()
+        self.con = shared()
         attach_reference(self.con, settings.reference_dir)
         self.stores = set(attach_store(self.con, settings.parquet_dir))
         self._lock = threading.Lock()

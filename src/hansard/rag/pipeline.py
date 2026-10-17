@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -193,18 +194,26 @@ class Pipeline:
         limit = int(self.settings.answer.get(
             "comprehensive_sources" if req.mode == "comprehensive" else "summary_sources", 12))
         rq = rerank_query(plan, self.settings.ranking.get("rerank_query"))
-        if plan.compare:
-            result = self._compare_search(plan, req, limit, rq)
-        else:
-            result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
-                                        req.recency, req.role_weight, limit, diversify=True, group_by=plan.group_by,
-                                        rerank_query=rq, local_question=self.local_question(plan))
-        divisions = []
-        if req.scope.votes and (plan.wants_votes or not result.records):
+        # votes, motions, the devolved parliaments and committee evidence are looked up alongside the main search
+        side = {"votes": req.scope.votes and plan.wants_votes, "edms": getattr(req.scope, "edms", True),
+                "devolved": getattr(req.scope, "devolved", False), "evidence": getattr(req.scope, "evidence", False)}
+        lookups = {"votes": lambda: self.votes.find(plan.search_text, plan.filters, limit=4),
+                   "edms": lambda: self.find_edms(plan, req), "devolved": lambda: self.find_devolved(plan, req),
+                   "evidence": lambda: self.find_evidence(plan, req)}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            pending = {k: pool.submit(lookups[k]) for k, wanted in side.items() if wanted}
+            if plan.compare:
+                result = self._compare_search(plan, req, limit, rq)
+            else:
+                result = self.engine.search(plan.search_text, plan.filters, req.scope, plan.portfolios,
+                                            req.recency, req.role_weight, limit, diversify=True,
+                                            group_by=plan.group_by, rerank_query=rq,
+                                            local_question=self.local_question(plan))
+            found = {k: f.result() for k, f in pending.items()}
+        divisions = found.get("votes", [])
+        if req.scope.votes and not plan.wants_votes and not result.records:
             divisions = self.votes.find(plan.search_text, plan.filters, limit=4)
-        edms = self.find_edms(plan, req) if getattr(req.scope, "edms", True) else []
-        devolved = self.find_devolved(plan, req) if getattr(req.scope, "devolved", False) else []
-        evidence = self.find_evidence(plan, req) if getattr(req.scope, "evidence", False) else []
+        edms, devolved, evidence = found.get("edms", []), found.get("devolved", []), found.get("evidence", [])
         return result, divisions, build_sources(result.records, divisions, plan_facets(plan), plan.group_by, edms,
                                                 devolved, evidence)
 

@@ -248,6 +248,7 @@ to 4 hours.
 | `hansard search "…" --from 2018-01-01 --region "North East"` | Ranked sources from the terminal (no model call) |
 | `hansard user add/list/disable` | Accounts, only if you switch on invite-only mode (argon2 password hashes) |
 | `hansard embed --max-minutes 60` | Continue building semantic vectors |
+| `hansard reindex-vectors` | Rebuild the meaning-search index for the current number of vectors, measure each setting against an exact search, keep it only if it finds as much as before, and save the fastest setting |
 | `hansard reference` | Rebuild member and role tables from parlparse; the next sync refreshes the changed people in the index |
 
 **Open access and cost control.** The site is public. Searching costs nothing, but each new briefing is

@@ -217,13 +217,39 @@ class SearchIndex:
             search = search.where(where, prefilter=True)
         return search.limit(limit).to_list()
 
-    def vector(self, vec: np.ndarray, where: str | None, limit: int) -> list[dict[str, Any]]:
+    def vector(self, vec: np.ndarray, where: str | None, limit: int, nprobes: int | None = None,
+               refine_factor: int | None = None, columns: list[str] | None = None,
+               exact: bool = False) -> list[dict[str, Any]]:
+        """Nearest passages by meaning. The index compares compressed vectors, which misses about a third of the
+        truly nearest 300; ``refine_factor`` re-checks that many times ``limit`` candidates against the full vectors,
+        finding nearly all of them for a few milliseconds more."""
         if VECTORS not in self._names() or self.vectors().count_rows() == 0:
             return []
         search = self.vectors().search(vec.astype(np.float32), vector_column_name="vector").distance_type("cosine")
+        if exact:  # every vector compared in full: slow, for checking the index
+            search = search.bypass_vector_index()
+        else:
+            if nprobes:
+                search = search.nprobes(int(nprobes))
+            if refine_factor:
+                search = search.refine_factor(int(refine_factor))
         if where:
             search = search.where(where, prefilter=True)
+        # every column but the vector itself: 300 vectors as Python floats cost more than the search
+        search = search.select([*(columns or [name for name, _ in FILTER_FIELDS]), "_distance"])
         return search.limit(limit).to_list()
+
+    def rebuild_vector_index(self, rows_per_partition: int = 8192) -> None:
+        """Rebuild the meaning-search index with partitions sized for the vectors there are now.
+
+        The index is first built when there are few vectors, and later additions join its existing partitions; with
+        millions of vectors in a few dozen partitions, each search reads a third of them. Searches carry on with the
+        old index while the new one is built."""
+        from lancedb.index import IvfPq
+
+        vt = self.vectors()
+        vt.create_index("vector", config=IvfPq(distance_type="cosine", num_sub_vectors=max(1, self.dim // 8),
+                                               target_partition_size=int(rows_per_partition)), replace=True)
 
     def passages_for(self, passage_ids: list[str]) -> dict[str, dict[str, Any]]:
         if not passage_ids:
