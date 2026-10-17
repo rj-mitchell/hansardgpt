@@ -24,7 +24,13 @@ from hansard.engine import Engine, Filters, Scope
 from hansard.rag.british import britishise_segments, to_british
 from hansard.rag.neutral import flag_loaded
 from hansard.rag.prompts import NO_RECORDS
-from hansard.rag.query_parse import QueryPlan, parse_offline, parse_with_model, resolve_speakers
+from hansard.rag.query_parse import (
+    QueryPlan,
+    parse_model,
+    parse_offline,
+    parse_with_model,
+    resolve_speakers,
+)
 from hansard.rag.sources import build_sources
 from hansard.rag.verify import check_quotes, drop_preambles, verify
 from hansard.sources.demographics import AGE_BAND_LABEL, GENDER_LABEL
@@ -113,6 +119,7 @@ class Pipeline:
         self._devolved = None
         self._evidence = None
         self._size: tuple[float, int] | None = None
+        self._registers = None
 
     @property
     def client(self):
@@ -377,6 +384,26 @@ class Pipeline:
                        no_records=all(res.no_records for res in results),
                        candidates=sum(res.candidates for res in results), evidence=evidence_summary(records))
 
+    def checks_interests(self) -> bool:
+        return bool(self.settings.answer.get("interests_check", True)) and self.has_model()
+
+    def find_interests(self, question: str, sources: list[Any]) -> tuple[list[dict[str, Any]], Any]:
+        """Registered interests that may relate to what the quoted members said (never stops a briefing)."""
+        from hansard.rag.interests import check
+        from hansard.sources.registers import Registers
+        from hansard.sources.regmem import Register
+        from hansard.sync import regmem_path
+
+        try:
+            if self._registers is None:
+                self._registers = (Register(regmem_path(self.settings)), Registers(self.settings.data_dir))
+            commons, lords = self._registers
+            return check(self.client, parse_model(self.settings), question, sources, commons, lords,
+                         effort=self.settings.answer.get("query_parse_effort", "low"))
+        except Exception:
+            log.exception("interests check failed")
+            return [], None
+
     def archive_size(self) -> int:
         """Passages in the search index (counted at most every ten minutes: it changes twice a day)."""
         import time
@@ -422,25 +449,43 @@ class Pipeline:
 
         from hansard.rag.answer import Answerer
 
+        # members' registered interests that may relate to what they said: checked while the briefing is written
+        pool = ThreadPoolExecutor(max_workers=1)
+        interests = pool.submit(self.find_interests, req.question, sources) if self.checks_interests() else None
+        flags: tuple[list[dict[str, Any]], Any] | None = None
         final = None
-        for ev in Answerer(self.settings, self.client).stream(
-                req.question, sources, req.mode, plan_note(plan, req.scope), req.history, self.today,
-                group_by=plan.group_by, compare=plan.compare):
-            if ev["type"] == "final":
-                final = ev
-            else:
-                yield ev
-        if final is None or final["stop_reason"] == "refusal":
-            yield {"type": "error", "message": "The model declined to answer this question."}
-            return
-        yield {"type": "progress", "step": "checking"}
+        try:
+            for ev in Answerer(self.settings, self.client).stream(
+                    req.question, sources, req.mode, plan_note(plan, req.scope), req.history, self.today,
+                    group_by=plan.group_by, compare=plan.compare):
+                if ev["type"] == "final":
+                    final = ev
+                else:
+                    yield ev
+                if interests is not None and flags is None and interests.done():
+                    flags = interests.result()
+                    if flags[0]:
+                        yield {"type": "interests", "interests": flags[0]}
+            if final is None or final["stop_reason"] == "refusal":
+                yield {"type": "error", "message": "The model declined to answer this question."}
+                return
+            yield {"type": "progress", "step": "checking"}
+            if interests is not None and flags is None:
+                flags = interests.result()
+                if flags[0]:
+                    yield {"type": "interests", "interests": flags[0]}
+        finally:
+            pool.shutdown(wait=False)
         report = verify(final["blocks"], sources)
         drop_preambles(report.segments)       # "Across the records retrieved, ..." openers
         britishise_segments(report.segments)  # the model's own words only; quotations stay verbatim
         flag_loaded(report.segments)          # judgemental words in its own voice are highlighted, not hidden
         check_quotes(report, sources)         # quotations not found word for word in their sources are marked
+        from hansard.rag.answer import usage_dict
+
         yield {"type": "final", "answer": report.to_dict(), "usage": final["usage"], "model": final["model"],
-               "stop_reason": final["stop_reason"]}
+               "stop_reason": final["stop_reason"], "interests": (flags or ([], None))[0],
+               "interests_usage": usage_dict(flags[1]) if flags and flags[1] is not None else None}
 
 
 def answer_once(pipeline: Pipeline, req: AskRequest) -> dict[str, Any]:

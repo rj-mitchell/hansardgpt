@@ -741,6 +741,98 @@ legend,
   }
 }
 
+/* a quoted member's registered interests that may relate to what they said */
+.interest-flag {
+  display: inline-block;
+  inline-size: fit-content;
+  padding: 0 0.4em;
+  border-inline-start: 3px solid var(--warn);
+  background: var(--warn-subtle);
+  color: var(--ink);
+  font-size: 0.85em;
+}
+
+.interests-note {
+  font-size: var(--step--1, 0.9rem);
+  color: var(--ink-soft);
+}
+
+.interest-detail ul {
+  margin: 0 0 var(--space-2xs);
+  padding-inline-start: 1.1em;
+}
+
+.interest-detail li + li {
+  margin-block-start: var(--space-2xs);
+}
+
+/* the steps of preparing a briefing, ticked off as they finish */
+.progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2xs);
+  color: var(--ink-soft);
+  font-size: var(--step--1, 0.9rem);
+}
+
+.progress li {
+  display: grid;
+  grid-template-columns: 1.1em 1fr auto;
+  column-gap: 0.5em;
+  align-items: baseline;
+}
+
+.progress li::before {
+  content: "○" / "";
+  color: var(--ink-faint);
+  grid-row: 1;
+}
+
+.progress li.done::before {
+  content: "✓" / "";
+  color: var(--ok, var(--accent));
+}
+
+.progress li.active::before {
+  content: "" / "";
+  inline-size: 0.45em;
+  block-size: 0.45em;
+  align-self: center;
+  justify-self: center;
+  background: var(--gilt);
+}
+
+.progress li.active .progress-label {
+  color: var(--ink);
+}
+
+.progress li.pending {
+  color: var(--ink-faint);
+}
+
+.progress-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.progress-detail {
+  grid-column: 2 / -1;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+
+.progress.compact {
+  margin-block-end: var(--space-xs);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .progress li.active::before {
+    animation: pulse 1.2s var(--ease-in-out) infinite alternate;
+  }
+}
+
 .error {
   color: var(--danger);
   font-family: var(--sans);
@@ -763,7 +855,13 @@ legend,
   gap: var(--space-s);
 }
 
+.plan-head > span {
+  flex: 1 1 auto;
+  min-inline-size: 0; /* the interpretation wraps, so "Edit filters" stays on screen on a phone */
+}
+
 .plan-head > button {
+  flex: none;
   margin-inline-start: auto;
   white-space: nowrap;
 }

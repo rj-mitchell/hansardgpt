@@ -136,6 +136,7 @@ def public_view(b: dict[str, Any]) -> dict[str, Any]:
         "semantic": sources.get("semantic"),
         "evidence": sources.get("evidence"),
         "answer": final.get("answer"),
+        "interests": final.get("interests") or [],
     }
 
 

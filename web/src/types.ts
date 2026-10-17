@@ -102,6 +102,7 @@ export interface SourceCard {
   legislature?: string;
   member?: { name: string | null; party: string | null; seat: string | null; number?: number | null; slug?: string | null };
   declared?: string | null; // the speaker's own declaration of an interest, as said
+  interest?: InterestFlag; // registered interests that may relate to what they said (checked by a model)
   // oral evidence to committees
   committee?: string;
   inquiry?: string | null;
@@ -248,6 +249,10 @@ export interface Turn {
   topic?: TopicInfo;
   /** a follow-up: the question it followed */
   follows?: string;
+  /** passages in the archive, sent as soon as the question arrives (for the progress list) */
+  passages?: number;
+  /** when each stage began, by the reader's clock */
+  stages?: import("./components/Progress").Stages;
 }
 
 export interface TopicInfo {
@@ -268,6 +273,23 @@ export interface TopicDetail {
 }
 
 /** A kept briefing, as returned by /api/briefings/<id>. */
+/** A quoted member's register entries that may relate to what they said, as judged by a model. */
+export interface InterestFlag {
+  source: number;
+  person_id: string;
+  name: string;
+  register: string;
+  link: string | null;
+  items: { category: string; summary: string; registered: string; connection: string }[];
+}
+
+/** The sources with each one's interest flag attached. */
+export function withInterests(sources: SourceCard[], flags: InterestFlag[] | null | undefined): SourceCard[] {
+  if (!flags?.length) return sources;
+  const by = new Map(flags.map((f) => [f.source, f]));
+  return sources.map((s) => (by.has(s.n) ? { ...s, interest: by.get(s.n) } : s));
+}
+
 export interface SavedBriefing {
   id: string;
   question: string;
@@ -280,6 +302,7 @@ export interface SavedBriefing {
   evidence?: Evidence;
   answer: Answer | null;
   settings?: { follows?: string | null } | null;
+  interests?: InterestFlag[];
 }
 
 export interface Meta {

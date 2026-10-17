@@ -399,6 +399,11 @@ def create_app(settings: Settings | None = None, pipeline: Pipeline | None = Non
                     if ev["type"] == "plan" and ev.get("usage"):
                         record_usage(state, uid, "parse", parse_model(settings), ev["usage"], settings.usage,
                                      visitor)
+                    if ev["type"] == "final" and ev.get("interests_usage"):
+                        record_usage(state, uid, "interests", parse_model(settings), ev["interests_usage"],
+                                     settings.usage, visitor)
+                    if ev["type"] == "final":
+                        ev = {k: v for k, v in ev.items() if k != "interests_usage"}
                     if ev["type"] == "final" and ev.get("usage"):
                         record_usage(state, uid, "answer", ev.get("model"), ev["usage"], settings.usage, visitor)
                         if uid is None and donate_url(settings):

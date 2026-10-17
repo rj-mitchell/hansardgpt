@@ -4,6 +4,7 @@ import { AnswerView } from "./components/AnswerView";
 import { Controls } from "./components/Controls";
 import { Login } from "./components/Login";
 import { PlanChips } from "./components/PlanChips";
+import { Progress } from "./components/Progress";
 import { ElsewhereForSearch } from "./elsewhere";
 import { EvidenceBar } from "./components/Evidence";
 import { SourceDrawer, SourceList } from "./components/Sources";
@@ -16,7 +17,19 @@ import { fmtDate } from "./render";
 import { SiteFooter } from "./components/SiteFooter";
 import { followUpsFor } from "./followups";
 import { COMPARE_HANDOVER, MENUS, NAV } from "./nav";
-import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
+import type {
+  Answer,
+  CompareSide,
+  Evidence,
+  Highlight,
+  InterestFlag,
+  Meta,
+  Plan,
+  Settings,
+  SourceCard,
+  Turn,
+} from "./types";
+import { withInterests } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
 const TOPIC = /^\/topics\/([a-z0-9-]+)\/?$/;
@@ -161,7 +174,7 @@ export default function App() {
                 question: b.question,
                 settings,
                 plan: b.plan ?? undefined,
-                sources: b.sources,
+                sources: withInterests(b.sources, b.interests),
                 candidates: b.candidates,
                 semantic: b.semantic,
                 evidence: b.evidence,
@@ -215,7 +228,7 @@ export default function App() {
             question: b.question,
             settings,
             plan: b.plan ?? undefined,
-            sources: b.sources,
+            sources: withInterests(b.sources, b.interests),
             candidates: b.candidates,
             semantic: b.semantic,
             evidence: b.evidence,
@@ -298,7 +311,20 @@ export default function App() {
   async function run(q: string, plan?: Plan, replaceId?: string, sourcesOnly = false) {
     const id = replaceId ?? crypto.randomUUID();
     const previous = turns.filter((t) => t.id !== id && t.status === "done").at(-1)?.question;
-    const turn: Turn = { id, question: q, settings, sources: [], streamText: "", status: "planning", plan, follows: previous };
+    const turn: Turn = {
+      id,
+      question: q,
+      settings,
+      sources: [],
+      streamText: "",
+      status: "planning",
+      plan,
+      follows: previous,
+      stages: { start: Date.now() },
+    };
+    const stage = (key: "plan" | "sources" | "text" | "check") => (t: Turn) => ({
+      stages: { ...(t.stages ?? { start: Date.now() }), [key]: t.stages?.[key] ?? Date.now() },
+    });
     setTurns((ts) => (replaceId ? ts.map((t) => (t.id === id ? turn : t)) : [...ts, turn]));
     const earlier = turns.filter((t) => t.id !== id && t.status === "done");
     // what each earlier question searched for, so a follow-up ("what about the Lords?") keeps the topic and filters
@@ -319,18 +345,26 @@ export default function App() {
         update(id, { comparing: compareLabels.length === sides.length ? compareLabels : [] });
       }
       for await (const ev of askStream(askBody(q, settings, plan, history, sourcesOnly, sides, follows), ctrl.signal)) {
-        if (ev.type === "plan") update(id, { plan: ev.plan as Plan, status: "searching" });
+        if (ev.type === "interests")
+          update(id, (t) => ({ sources: withInterests(t.sources, ev.interests as InterestFlag[]) }));
+        else if (ev.type === "progress") {
+          if (typeof ev.passages === "number") update(id, { passages: ev.passages });
+          if (ev.step === "checking") update(id, stage("check"));
+        } else if (ev.type === "plan") update(id, (t) => ({ plan: ev.plan as Plan, status: "searching", ...stage("plan")(t) }));
         else if (ev.type === "sources")
-          update(id, {
+          update(id, (t) => ({
+            ...stage("sources")(t),
             sources: ev.sources as SourceCard[],
             candidates: ev.candidates as number,
             semantic: ev.semantic as boolean,
             evidence: ev.evidence as Evidence,
             status: "answering",
-          });
-        else if (ev.type === "text") update(id, (t) => ({ streamText: t.streamText + (ev.text as string) }));
+          }));
+        else if (ev.type === "text")
+          update(id, (t) => ({ ...stage("text")(t), streamText: t.streamText + (ev.text as string) }));
         else if (ev.type === "final")
-          update(id, {
+          update(id, (t) => ({
+            sources: withInterests(t.sources, ev.interests as InterestFlag[] | undefined),
             answer: (ev.answer as Answer | null) ?? null,
             briefingKey: (ev.briefing_key as string | undefined) ?? undefined,
             briefingId: (ev.briefing_id as string | undefined) ?? undefined,
@@ -340,7 +374,7 @@ export default function App() {
               ? "This briefing was written earlier for the same question and settings, from the same data."
               : (ev.note as string | undefined),
             status: "done",
-          });
+          }));
         else if (ev.type === "error") update(id, { status: "error", error: ev.message as string });
         if (ev.type === "final" && typeof ev.support_reminder === "number") setSupportCount(ev.support_reminder);
         if (ev.type === "final" && typeof ev.briefing_id === "string") {
@@ -603,6 +637,7 @@ export default function App() {
                 </button>
               </p>
             )}
+            <Progress turn={t} />
             {t.plan && <PlanChips key={JSON.stringify(t.plan)} plan={t.plan} meta={meta} busy={busy} onRerun={(p) => void run(t.question, p, t.id)} />}
             <EvidenceBar
               evidence={t.evidence}
@@ -620,15 +655,10 @@ export default function App() {
                   !!t.plan.filters.majority_bands?.length)
               }
             />
-            {t.status === "planning" && <p className="status" role="status">Interpreting the question…</p>}
             {t.status === "done" && (
               <p className="visually-hidden" role="status">
                 {t.answer ? "Briefing ready." : "Sources ready."}
               </p>
-            )}
-            {t.status === "searching" && <p className="status" role="status">Searching the Official Report…</p>}
-            {t.status === "answering" && !t.streamText && t.sources.length > 0 && (
-              <p className="status" role="status">Preparing a sourced briefing from {t.sources.length} contributions…</p>
             )}
             {(t.streamText || t.answer) && (
               <AnswerView
@@ -644,6 +674,7 @@ export default function App() {
               />
             )}
             {t.note && <p className="muted small">{t.note}</p>}
+            <InterestsNote sources={t.sources} />
             {t.status === "done" && t.id === turns.at(-1)?.id && !busy && followUpsFor(t).length > 0 && (
               <nav className="follow-ups" aria-label="Follow-up questions">
                 <span className="muted small">Ask a follow-up:</span>
@@ -692,5 +723,22 @@ export default function App() {
         </p>
       </SiteFooter>
     </div>
+  );
+}
+
+/** Under a briefing: which quoted members had registered interests that may relate to what they said. */
+function InterestsNote({ sources }: { sources: SourceCard[] }) {
+  const flagged = sources.filter((s) => s.interest);
+  if (!flagged.length) return null;
+  const names = [...new Map(flagged.map((s) => [s.interest!.person_id, s.interest!.name])).values()];
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
+  return (
+    <p className="interests-note">
+      <span className="interest-flag">Registered interests</span> {list}{" "}
+      {names.length === 1 ? "had an entry" : "had entries"} in the register of interests, made before they spoke, that
+      may relate to what they said ({flagged.length === 1 ? "source" : "sources"} {flagged.map((s) => s.n).join(", ")}). Open a
+      source for the details.
+      Matched by AI; a link to check, not a finding of wrongdoing.
+    </p>
   );
 }
