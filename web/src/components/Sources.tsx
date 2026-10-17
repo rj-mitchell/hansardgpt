@@ -101,6 +101,7 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
         {roles.length > 0 && <span className="role">{roles.join("; ")}</span>}
         {seat && <span className="seat">{seat}</span>}
         {s.declared && <span className="seat">Declared an interest when speaking</span>}
+        {s.interest && <span className="interest-flag">Registered interest that may relate to this</span>}
         <span className="where">
           <time dateTime={s.date}>{fmtDate(s.date)}</time> · {s.chamber}
           {s.heading ? ` · ${s.heading}` : ""}
@@ -228,6 +229,35 @@ export function SourceDrawer({
                         <>
                           {" · "}
                           <a href={`/people/${sp.person_id.split("/").pop()}#h-interests`}>Their registered interests</a>
+                        </>
+                      )}
+                    </span>
+                  </dd>
+                </>
+              )}
+              {source.interest && (
+                <>
+                  <dt>Registered interests</dt>
+                  <dd className="interest-detail">
+                    <ul>
+                      {source.interest.items.map((i) => (
+                        <li key={`${i.summary}-${i.registered}`}>
+                          <b>{i.summary}</b>{" "}
+                          <span className="muted small">
+                            ({i.category}, registered {fmtDate(i.registered)})
+                          </span>
+                          <br />
+                          {i.connection}
+                        </li>
+                      ))}
+                    </ul>
+                    <span className="muted small">
+                      From the {source.interest.register}: entries registered before this date that an AI judged to
+                      concern the same subject. It is a link to check, not a finding of wrongdoing.
+                      {source.interest.link && (
+                        <>
+                          {" "}
+                          <a href={source.interest.link}>All their registered interests</a>
                         </>
                       )}
                     </span>
