@@ -280,7 +280,15 @@ export interface InterestFlag {
   name: string;
   register: string;
   link: string | null;
-  items: { category: string; summary: string; registered: string; connection: string }[];
+  items: {
+    category: string;
+    summary: string;
+    registered: string;
+    connection: string;
+    kind?: "register" | "donation";
+    register?: string;
+    url?: string | null;
+  }[];
 }
 
 /** The sources with each one's interest flag attached. */

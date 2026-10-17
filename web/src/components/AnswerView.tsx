@@ -31,9 +31,10 @@ export function AnswerView({
 }: Props) {
   const link = briefingId ? `${window.location.origin}/b/${briefingId}` : undefined;
   const [showUncited, setShowUncited] = useState(false);
+  const flagged = useMemo(() => new Set(sources.filter((s) => s.interest).map((s) => String(s.n))), [sources]);
   const html = useMemo(
-    () => (answer ? renderAnswer(segmentsToMarkdown(answer.segments)) : renderPlain(streamText)),
-    [answer, streamText],
+    () => markInterests(answer ? renderAnswer(segmentsToMarkdown(answer.segments)) : renderPlain(streamText), flagged),
+    [answer, streamText, flagged],
   );
 
   function onClick(e: React.MouseEvent<HTMLDivElement>) {
@@ -81,6 +82,19 @@ export function AnswerView({
         </>
       )}
     </div>
+  );
+}
+
+/** Citation bubbles for sources whose speaker had a registered interest that may relate: shown in another colour
+ * (after sanitising, so only these known attributes are added). */
+export function markInterests(html: string, flagged: Set<string>): string {
+  if (!flagged.size) return html;
+  return html.replace(
+    /class="cite" data-source="(\d+)" aria-label="Open source \1"/g,
+    (m, n: string) =>
+      flagged.has(n)
+        ? `class="cite interest" data-source="${n}" aria-label="Open source ${n}: the speaker had a registered interest that may relate" title="Registered interest that may relate"`
+        : m,
   );
 }
 

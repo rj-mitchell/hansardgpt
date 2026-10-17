@@ -68,10 +68,10 @@ def test_check_keeps_only_real_matches():
     commons = Register({"uk.org.publicwhip/person/1": [GIFT], "uk.org.publicwhip/person/2": [LAND]})
     sources = [source(1, 1, "commons", "Gambling advertising"), source(2, 2, "commons", "Farm tax"),
                source(3, 3, "lords", "Ofcom codes"), source(4, 9, "commons", "No register entries")]
-    client = Client([Match(contribution=1, interest="A1", connection="Gift from the gambling industry; gambling."),
-                     Match(contribution=2, interest="A1", connection="Another member's entry."),
-                     Match(contribution=2, interest="Q7", connection="A label that does not exist."),
-                     Match(contribution=3, interest="C1", connection="Ofcom role; Ofcom codes.")])
+    client = Client([Match(contribution=1, interest="A1", subjects="s", relevant=True, connection="Gift from the gambling industry; gambling."),
+                     Match(contribution=2, interest="A1", subjects="s", relevant=True, connection="Another member's entry."),
+                     Match(contribution=2, interest="Q7", subjects="s", relevant=True, connection="A label that does not exist."),
+                     Match(contribution=3, interest="C1", subjects="s", relevant=True, connection="Ofcom role; Ofcom codes.")])
     flags, usage = check(client, "m", "question", sources, commons, Lords())
     assert usage is not None and "Member 9" not in client.prompt
     assert [(f["source"], f["name"], [i["summary"] for i in f["items"]]) for f in flags] == [
@@ -84,3 +84,32 @@ def test_no_model_call_without_entries():
     client = Client([])
     assert check(client, "m", "q", [source(1, 9, "commons", "x")], Register({}), Lords()) == ([], None)
     assert client.prompt == ""
+
+
+class Donations:
+    def for_person(self, pid):
+        return {"personal": [
+            {"donor": "Bawtry Farms Ltd", "value": 7500.0, "accepted": "2026-07-08", "donor_status": "Company",
+             "url": "https://ec/1"},
+            {"donor": "Betfair Ltd", "value": 2000.0, "accepted": "2026-01-02", "donor_status": "Company", "url": "https://ec/2"},
+            {"donor": "Old Donor", "value": 100.0, "accepted": "2024-01-02", "url": "https://ec/3"}]}
+
+
+def test_donations_count_once_and_only_within_a_year():
+    from hansard.rag.interests import candidates
+
+    registered = {"type": "2", "name": "Donations", "items": [
+        {"summary": "Bawtry Farms Ltd - £7,500.00", "details": [], "registered": "10 July 2026", "children": []}]}
+    commons = Register({"uk.org.publicwhip/person/1": [registered]})
+    people = candidates([source(1, 1, "commons", "Farm tax", day="2026-07-20")], commons, Lords(), Donations())
+    held = people["uk.org.publicwhip/person/1"]["contributions"][0]["held"]
+    assert [(h["summary"], h["kind"], h["url"]) for h in held] == [
+        ("Bawtry Farms Ltd - £7,500.00", "register", "https://ec/1"),
+        ("Betfair Ltd - £2,000.00", "donation", "https://ec/2")]
+
+
+def test_doubtful_connections_are_dropped():
+    commons = Register({"uk.org.publicwhip/person/1": [GIFT]})
+    client = Client([Match(contribution=1, interest="A1", subjects="gifts; gambling", relevant=True,
+                           connection="The link is too weak, so this should not be listed.")])
+    assert check(client, "m", "q", [source(1, 1, "commons", "Gambling")], commons, Lords())[0] == []

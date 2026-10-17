@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 COMMONS_REGISTER = "Register of Members' Financial Interests"
 LORDS_REGISTER = "Register of Lords' Interests"
+DONATIONS_REGISTER = "Electoral Commission's register of donations"
 
 # one-off entries (dated by when they were registered): relevant for a year, as the House's own rule on declaring has it
 _ONE_OFF_COMMONS = re.compile(r"^(1\.1|2|3|4|5)\b")
@@ -88,14 +89,24 @@ def held_on(categories: list[dict[str, Any]], on: date, lords: bool) -> list[dic
             if re.match(r"^\s*no (registrable|registered|relevant)? ?interests?", item.get("summary") or "", re.I):
                 continue
             out.append({"category": c.get("name") or label, "summary": " ".join((item.get("summary") or "").split()),
-                        "text": _text(item), "registered": when.isoformat()})
+                        "text": _text(item), "registered": when.isoformat(), "kind": "register",
+                        "register": LORDS_REGISTER if lords else COMMONS_REGISTER, "url": None})
     return out
 
 
 class Match(BaseModel):
     contribution: int = Field(description="The contribution's number")
     interest: str = Field(description="The interest's label, e.g. 'A3'")
+    subjects: str = Field(description="A few words each: what the interest concerns; what the contribution concerns")
+    relevant: bool = Field(description="True only if both concern the same organisation, industry, profession, place "
+                                       "or specific subject, as the instructions define it")
     connection: str = Field(description="One neutral sentence naming what links the interest to the contribution")
+
+
+# a "connection" that says there is none: the model sometimes lists an entry only to explain why it does not count
+_DOUBT = re.compile(r"\b(not (?:clear|direct|relevant|related|listed|a match|connected)|no (?:clear |direct )?(?:link|"
+                    r"match|connection)|too weak|rather than|unrelated|should not|does not (?:relate|concern|count))\b",
+                    re.I)
 
 
 class Matches(BaseModel):
@@ -112,18 +123,62 @@ regulation; a paid role with an energy company and a speech on energy prices; ow
 inheritance tax on farms; a directorship of a football club and a speech on football regulation; a trusteeship of a
 charity and a speech on that charity's cause.
 
-Not relevant: interests that share only a broad area (a theatre ticket and a speech on BBC funding), donations or
-support for general political or constituency work, hospitality at unrelated events, family members employed in the
-member's office, property that is only the member's home or rented out with no link to the subject, and anything you
-are unsure about. When in doubt, leave it out: most contributions have no relevant interest.
+Not relevant: interests that share only a broad area (a theatre ticket and a speech on BBC funding); memberships,
+fellowships, honorary or unpaid roles in broad professional, learned or medical bodies (a royal college, a faculty,
+a professional institute, a university) unless the body exists for the specific subject of the contribution; the
+member's own profession on its own (a doctor speaking about the NHS, unless they are paid by the body concerned);
+donations or support for general political, campaign or constituency work; hospitality at unrelated events; family
+members employed in the member's office; property that is only the member's home or rented out with no link to the
+subject; and anything you are unsure about. When in doubt, leave it out: most contributions have no relevant
+interest.
 
-Write each connection as one plain, neutral sentence describing the link only, for example "The register lists a
+Donations to the member from the Electoral Commission's register are relevant only when the donor is an
+organisation in the industry or cause the contribution concerns (a donation from a betting company and a speech on
+gambling), or the register describes the donor that way. A donation from a private individual, a trade union on a
+subject that is not about its members' work, or a business unrelated to the subject is not relevant.
+
+List only the relevant ones, each with relevant set to true; do not list an interest in order to explain why it
+does not count. Write each connection as one plain, neutral sentence describing the link only, for example "The register lists a
 paid role as adviser to an energy supplier; the contribution concerned energy prices." Never suggest that the
 interest influenced the member, that they should have declared it, or any wrongdoing or motive."""
 
 
-def candidates(sources: list[Any], commons, lords) -> dict[str, Any]:
-    """Members quoted in the briefing, their contributions, and the register entries that applied on each day."""
+def donations_on(rows: list[dict[str, Any]], on: date) -> list[dict[str, Any]]:
+    """Donations to the member (Electoral Commission register) accepted in the twelve months before ``on``."""
+    out = []
+    for r in rows:
+        try:
+            when = date.fromisoformat(str(r.get("accepted") or r.get("reported") or "")[:10])
+        except ValueError:
+            continue
+        if not (on - timedelta(days=365) <= when <= on):
+            continue
+        value = f" - £{r['value']:,.2f}" if r.get("value") else ""
+        bits = [f"Donor: {r.get('donor') or 'unknown'}", r.get("donor_status") or "", r.get("donation_type") or "",
+                r.get("nature") or "", r.get("purpose") or ""]
+        out.append({"category": "Donation to the member (Electoral Commission)", "kind": "donation",
+                    "register": DONATIONS_REGISTER, "url": r.get("url"),
+                    "summary": f"{r.get('donor') or 'Unknown donor'}{value}",
+                    "text": " — ".join(b for b in bits if b)[:400], "registered": when.isoformat()})
+    return out
+
+
+def merge(register: list[dict[str, Any]], given: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Register entries and donations, a donation the member also registered counted once (the register's entry,
+    with a link to the Electoral Commission's record)."""
+    out = list(register)
+    for d in given:
+        same = next((h for h in register if d["summary"].lower() == h["summary"].lower()), None)
+        if same is None:
+            out.append(d)
+        elif not same.get("url"):
+            same["url"] = d["url"]
+    return out
+
+
+def candidates(sources: list[Any], commons, lords, donations=None) -> dict[str, Any]:
+    """Members quoted in the briefing, their contributions, and the register entries (and donations) that applied
+    on each day."""
     people: dict[str, dict[str, Any]] = {}
     for s in sources:
         sp = s.meta.get("speaker") or {}
@@ -138,9 +193,10 @@ def candidates(sources: list[Any], commons, lords) -> dict[str, Any]:
             else:
                 reg = next((r for r in (lords.for_person(pid) if lords else []) if r["register"] == "lords"), None)
                 cats = (reg or {}).get("categories") or []
+            given = (donations.for_person(pid) or {}).get("personal", []) if donations and house == "commons" else []
             people[pid] = {"name": sp.get("name") or s.meta.get("speaker_name_raw") or "", "house": house,
-                           "categories": cats, "contributions": []}
-        held = held_on(people[pid]["categories"], on, house == "lords")
+                           "categories": cats, "donations": given, "contributions": []}
+        held = merge(held_on(people[pid]["categories"], on, house == "lords"), donations_on(people[pid]["donations"], on))
         if held:
             people[pid]["contributions"].append({"source": s.n, "date": on.isoformat(), "held": held,
                                                  "heading": s.meta.get("heading") or "",
@@ -162,7 +218,8 @@ def prompt(question: str, people: dict[str, Any]) -> tuple[str, dict[str, dict[s
                     labels[entries[key]] = {**h, "person_id": pid, "name": p["name"], "house": p["house"]}
         lines = [f"\nMember {letter}: {p['name']} ({'House of Lords' if p['house'] == 'lords' else 'MP'})",
                  "Register entries:"]
-        lines += [f"  {label}: {text} (registered {when})" for (text, when), label in entries.items()]
+        lines += [f"  {label}: {text} ({'donation accepted' if labels[label]['kind'] == 'donation' else 'registered'} "
+                  f"{when})" for (text, when), label in entries.items()]
         for c in p["contributions"]:
             mine = sorted({entries[(h['text'], h['registered'])] for h in c["held"]})
             lines.append(f"Contribution {c['source']} ({c['date']}, entries that applied: {', '.join(mine)}): "
@@ -171,19 +228,21 @@ def prompt(question: str, people: dict[str, Any]) -> tuple[str, dict[str, dict[s
     return "\n".join(parts), labels
 
 
-def check(client, model: str, question: str, sources: list[Any], commons, lords,
+def check(client, model: str, question: str, sources: list[Any], commons, lords, donations=None,
           effort: str = "low") -> tuple[list[dict[str, Any]], Any]:
     """Relevant registered interests for the briefing's sources, one entry per source, and the model's usage."""
-    people = candidates(sources, commons, lords)
+    people = candidates(sources, commons, lords, donations)
     if not people:
         return [], None
     text, labels = prompt(question, people)
-    resp = client.messages.parse(model=model, max_tokens=2000, system=SYSTEM,
+    resp = client.messages.parse(model=model, max_tokens=6000, system=SYSTEM,
                                  messages=[{"role": "user", "content": text}],
                                  output_config={"effort": effort}, output_format=Matches)
     found = resp.parsed_output.matches if resp.parsed_output else []
     by_source: dict[int, dict[str, Any]] = {}
     for m in found:
+        if not m.relevant or _DOUBT.search(m.connection):
+            continue  # listed, but judged not to relate after all
         entry = labels.get(m.interest.strip())
         if entry is None or entry["person_id"] != pid_of(people, m.contribution):
             continue  # a label the model made up, or another member's entry
@@ -196,9 +255,13 @@ def check(client, model: str, question: str, sources: list[Any], commons, lords,
             "source": m.contribution, "person_id": entry["person_id"], "name": entry["name"],
             "register": LORDS_REGISTER if entry["house"] == "lords" else COMMONS_REGISTER,
             "link": f"/people/{number}#h-interests" if number else None, "items": []})
+        if entry["kind"] == "donation" and flag["register"] != DONATIONS_REGISTER and \
+                all(i["kind"] == "donation" for i in flag["items"]):
+            flag["register"] = DONATIONS_REGISTER
         if not any(i["summary"] == entry["summary"] and i["registered"] == entry["registered"] for i in flag["items"]):
             flag["items"].append({"category": entry["category"], "summary": entry["summary"],
-                                  "registered": entry["registered"], "connection": " ".join(m.connection.split())})
+                                  "registered": entry["registered"], "connection": " ".join(m.connection.split()),
+                                  "kind": entry["kind"], "register": entry["register"], "url": entry["url"]})
     return sorted(by_source.values(), key=lambda f: f["source"]), resp.usage
 
 

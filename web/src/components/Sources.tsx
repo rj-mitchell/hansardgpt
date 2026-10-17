@@ -3,7 +3,7 @@ import { aboutRecord } from "../procedure";
 import { VoteKind } from "./VoteKind";
 import { ageLabel, attribution, houseOf, majorityText, reference, roleTitles, seatTypeLabel } from "../people";
 import { fmtDate, highlightParts } from "../render";
-import type { Highlight, SourceCard, Speaker } from "../types";
+import type { Highlight, InterestFlag, SourceCard, Speaker } from "../types";
 
 export { roleTitles };
 
@@ -72,7 +72,12 @@ function SourceItem({ source: s, onOpen }: { source: SourceCard; onOpen: (h: Hig
   const seat = seatTypeLabel(s.speaker);
   const ref = s.kind === "edm" ? null : reference(s);
   return (
-    <button type="button" className="source-card" data-house={houseOf(s)} onClick={() => onOpen({ source: s.n, quotes: [] })}>
+    <button
+      type="button"
+      className={s.interest ? "source-card has-interest" : "source-card"}
+      data-house={houseOf(s)}
+      onClick={() => onOpen({ source: s.n, quotes: [] })}
+    >
       <span className="badge">{s.n}</span>
       <span className="source-meta">
         {s.kind === "division" ? (
@@ -143,6 +148,8 @@ export function SourceDrawer({
     return () => window.removeEventListener("keydown", onKey);
   }, [source, onClose]);
   useEffect(() => {
+    // a speaker's registered interests come first, so the panel opens on them; otherwise on the quoted words
+    if (source?.interest) return;
     const first = ref.current?.querySelector("mark");
     if (first && typeof first.scrollIntoView === "function") first.scrollIntoView({ block: "center" });
   }, [source, quotes]);
@@ -182,6 +189,7 @@ export function SourceDrawer({
       </header>
 
       <div className="drawer-body">
+        {source.interest && <InterestBox flag={source.interest} date={source.date} />}
         {source.kind === "edm" ? (
           <EdmDetail source={source} quotes={quotes} />
         ) : source.kind === "devolved" ? (
@@ -229,35 +237,6 @@ export function SourceDrawer({
                         <>
                           {" · "}
                           <a href={`/people/${sp.person_id.split("/").pop()}#h-interests`}>Their registered interests</a>
-                        </>
-                      )}
-                    </span>
-                  </dd>
-                </>
-              )}
-              {source.interest && (
-                <>
-                  <dt>Registered interests</dt>
-                  <dd className="interest-detail">
-                    <ul>
-                      {source.interest.items.map((i) => (
-                        <li key={`${i.summary}-${i.registered}`}>
-                          <b>{i.summary}</b>{" "}
-                          <span className="muted small">
-                            ({i.category}, registered {fmtDate(i.registered)})
-                          </span>
-                          <br />
-                          {i.connection}
-                        </li>
-                      ))}
-                    </ul>
-                    <span className="muted small">
-                      From the {source.interest.register}: entries registered before this date that an AI judged to
-                      concern the same subject. It is a link to check, not a finding of wrongdoing.
-                      {source.interest.link && (
-                        <>
-                          {" "}
-                          <a href={source.interest.link}>All their registered interests</a>
                         </>
                       )}
                     </span>
@@ -643,5 +622,44 @@ function AboutRecord({ source }: { source: SourceCard }) {
       <summary>About this record: {note.title}</summary>
       <p>{note.text}</p>
     </details>
+  );
+}
+
+/** At the top of the source panel: the speaker's register entries (and donations) that may relate to what they said. */
+function InterestBox({ flag, date }: { flag: InterestFlag; date: string }) {
+  return (
+    <section className="interest-box" aria-labelledby="interest-box-title">
+      <h3 id="interest-box-title">Registered interests that may relate to this</h3>
+      <ul>
+        {flag.items.map((i) => (
+          <li key={`${i.summary}-${i.registered}`}>
+            <b>{i.summary}</b>{" "}
+            <span className="muted small">
+              ({i.category}, {i.kind === "donation" ? "accepted" : "registered"} {fmtDate(i.registered)}
+              {i.url && (
+                <>
+                  {" · "}
+                  <a href={i.url}>the record</a>
+                </>
+              )}
+              )
+            </span>
+            <br />
+            {i.connection}
+          </li>
+        ))}
+      </ul>
+      <p className="muted small">
+        From the {[...new Set(flag.items.map((i) => i.register ?? flag.register))].join(" and the ")}: entries made before
+        this contribution on {fmtDate(date)} that an AI judged to concern the same subject. A link to check, not a
+        finding of wrongdoing.
+        {flag.link && (
+          <>
+            {" "}
+            <a href={flag.link}>All their registered interests and donations</a>
+          </>
+        )}
+      </p>
+    </section>
   );
 }

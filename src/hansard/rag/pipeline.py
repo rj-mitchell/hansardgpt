@@ -390,15 +390,17 @@ class Pipeline:
     def find_interests(self, question: str, sources: list[Any]) -> tuple[list[dict[str, Any]], Any]:
         """Registered interests that may relate to what the quoted members said (never stops a briefing)."""
         from hansard.rag.interests import check
+        from hansard.sources.donations import Donations
         from hansard.sources.registers import Registers
         from hansard.sources.regmem import Register
-        from hansard.sync import regmem_path
+        from hansard.sync import donations_path, regmem_path
 
         try:
             if self._registers is None:
-                self._registers = (Register(regmem_path(self.settings)), Registers(self.settings.data_dir))
-            commons, lords = self._registers
-            return check(self.client, parse_model(self.settings), question, sources, commons, lords,
+                self._registers = (Register(regmem_path(self.settings)), Registers(self.settings.data_dir),
+                                   Donations(donations_path(self.settings)))
+            commons, lords, donations = self._registers
+            return check(self.client, parse_model(self.settings), question, sources, commons, lords, donations,
                          effort=self.settings.answer.get("query_parse_effort", "low"))
         except Exception:
             log.exception("interests check failed")

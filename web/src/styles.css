@@ -754,16 +754,52 @@ legend,
 
 .interests-note {
   font-size: var(--step--1, 0.9rem);
-  color: var(--ink-soft);
+  color: var(--ink);
+  padding: var(--space-xs) var(--space-s);
+  border-inline-start: 4px solid var(--warn);
+  background: var(--warn-subtle);
 }
 
-.interest-detail ul {
-  margin: 0 0 var(--space-2xs);
+/* a citation bubble or source card whose speaker had a registered interest that may relate: amber, not green */
+.cite.interest {
+  border-color: var(--warn);
+  background: var(--warn);
+  color: var(--paper);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cite.interest:hover {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--paper);
+  }
+}
+
+.source-card.has-interest {
+  border-inline-start: 4px solid var(--warn);
+  background: var(--warn-subtle);
+}
+
+.interest-box {
+  margin-block-end: var(--space-m);
+  padding: var(--space-s);
+  border: 1px solid var(--warn);
+  border-inline-start-width: 4px;
+  background: var(--warn-subtle);
+}
+
+.interest-box h3 {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--step-0, 1rem);
+}
+
+.interest-box ul {
+  margin: 0 0 var(--space-xs);
   padding-inline-start: 1.1em;
 }
 
-.interest-detail li + li {
-  margin-block-start: var(--space-2xs);
+.interest-box li + li {
+  margin-block-start: var(--space-xs);
 }
 
 /* the steps of preparing a briefing, ticked off as they finish */
