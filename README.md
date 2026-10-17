@@ -73,7 +73,7 @@ Besides briefings, the site has free pages built from the record (no AI):
                                                            │
  question ─► filter plan (Claude, shown as editable chips) ─► deterministic retrieval & ranking
                                                            │
-                                       Claude (Opus 5.5) answers ONLY from the sources,
+                                       Claude (Sonnet 5.5) answers ONLY from the sources,
                                        with native search-result citations ─► verification ─► UI
 ```
 
@@ -329,7 +329,7 @@ The authority multiplier `m` depends on the speaker's role on the date of the re
    touches quotations, which stay exactly as Hansard records them, nor capitalised names such as the World
    Health Organization.
 5. **Deterministic retrieval.** The same plan and sliders always give the same sources.
-6. **Sources only.** Claude (Opus 5.5) receives only those sources, as search-result blocks with citations
+6. **Sources only.** Claude (Sonnet 5.5) receives only those sources, as search-result blocks with citations
    enabled, under rules that forbid outside knowledge. When the sources don't answer the question, it must say
    "No records found."
 7. **Verification.** Every citation is re-checked against our copy of the source text. Any uncited

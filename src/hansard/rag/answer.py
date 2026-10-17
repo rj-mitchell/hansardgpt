@@ -104,7 +104,7 @@ class Answerer:
                                                                     compare)})
         effort = cfg.get("comprehensive_effort" if mode == "comprehensive" else "summary_effort", "medium")
         kwargs: dict[str, Any] = {
-            "model": cfg.get("model", "claude-opus-5-5"),
+            "model": cfg.get("model", "claude-sonnet-5-5"),
             "max_tokens": int(cfg.get("max_tokens", 16000)),
             "system": cached_system(system_prompt(today or date.today())),
             "messages": [{"role": "user", "content": content}],

@@ -22,6 +22,7 @@ from hansard.embed.base import Embedder, get_embedder
 from hansard.index.lance import SearchIndex, date_lit, sql_str
 from hansard.rank.composite import Candidate, RankParams, Scored, rank
 from hansard.rank.evidence import evidence_summary, select_evidence
+from hansard.rank.places import places_for
 from hansard.rank.rerank import Reranker, get_reranker, rerank
 from hansard.reference.profiles import ProfileResolver
 from hansard.sources.demographics import AGE_BANDS, age_band, age_on, assumed_birth, band_dates
@@ -227,8 +228,14 @@ class Engine:
     def search(self, query: str, filters: Filters | None = None, scope: Scope | None = None,
                portfolios: list[str] | None = None, recency: float | None = None,
                role_weight: float | None = None, limit: int = 12, diversify: bool = False,
-               group_by: str = "role", rerank_query: str | None = None) -> SearchResult:
+               group_by: str = "role", rerank_query: str | None = None,
+               local_question: bool | None = None) -> SearchResult:
+        """``local_question``: whether the question is about a place, so local contributions are not
+        down-weighted (by default: when the search words name a place, or regions or members are filtered)."""
         filters, scope = filters or Filters(), scope or Scope()
+        places = places_for(self.settings.reference_dir)
+        if local_question is None:
+            local_question = bool(filters.regions or filters.person_ids or places.mentioned(query))
         r = self.settings.ranking
         if filters.parties:
             filters = Filters(**{**filters.__dict__, "parties": self.expand_parties(filters.parties)})
@@ -339,6 +346,11 @@ class Engine:
                 c.cosine = sim
                 if c.bm25 is None:
                     c.best_passage_id = h["passage_id"]
+
+        if not local_question:
+            for c in cands.values():
+                c.local = any(places.is_local(x.get("heading"), x.get("text")) for x in c.data["passages"].values())
+        lap("places")
 
         floor, ceiling = getattr(self.embedder, "similarity_range", (0.5, 0.85)) if semantic else (0.5, 0.85)
         params = RankParams.from_settings(

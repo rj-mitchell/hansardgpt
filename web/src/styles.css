@@ -153,7 +153,6 @@ button,
 
 html {
   background: var(--paper);
-  scroll-padding-block-end: var(--composer-h);
   overscroll-behavior-y: none;
 }
 
@@ -1548,9 +1547,11 @@ legend,
   pointer-events: auto;
 }
 
-/* keep anything scrolled to or focused by keyboard clear of the question box pinned to the bottom (WCAG 2.4.11) */
-html:has(.thread .turn) {
-  scroll-padding-block-end: 9rem;
+/* keep anything in the briefing that is scrolled to or focused by keyboard clear of the question box pinned to the
+   bottom (WCAG 2.4.11). On the briefing's own links and buttons only: a margin on the whole page would count the
+   question box itself as hidden, and the page would scroll a step each time it grows while someone types. */
+.thread :is(a, button, summary, input, select, [tabindex]) {
+  scroll-margin-block-end: 9rem;
 }
 
 /* Under a briefing the question box and, when open, the settings above it are pinned to the foot of the screen. */

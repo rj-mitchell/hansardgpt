@@ -1,8 +1,13 @@
-/** The header's "More" menu: closes on Escape or a click elsewhere, and is marked when the page is inside it. */
+/** The header's menus: each closes on Escape, a click elsewhere or another menu opening, and is marked when the
+ * page is inside it. */
 export function setUpNavMore(): void {
   const here = window.location.pathname.replace(/\.html$/, "");
-  for (const menu of document.querySelectorAll<HTMLDetailsElement>(".nav-more")) {
+  const menus = [...document.querySelectorAll<HTMLDetailsElement>(".nav-more")];
+  for (const menu of menus) {
     if ([...menu.querySelectorAll("a")].some((a) => a.pathname === here)) menu.classList.add("current");
+    menu.addEventListener("toggle", () => {
+      if (menu.open) for (const other of menus) if (other !== menu) other.open = false;
+    });
   }
   document.addEventListener("click", (e) => {
     for (const menu of document.querySelectorAll<HTMLDetailsElement>(".nav-more[open]")) {

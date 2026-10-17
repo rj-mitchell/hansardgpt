@@ -70,6 +70,7 @@ export default defineConfig({
         press: here("./press.html"),
         evidence: here("./evidence.html"),
         charts: here("./charts.html"),
+        lighter: here("./lighter-side.html"),
         compare: here("./compare.html"),
         notfound: here("./404.html"),
         admin: here("./admin.html"),

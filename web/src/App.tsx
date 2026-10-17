@@ -15,7 +15,7 @@ import { Mark } from "./components/Mark";
 import { fmtDate } from "./render";
 import { SiteFooter } from "./components/SiteFooter";
 import { followUpsFor } from "./followups";
-import { COMPARE_HANDOVER, MORE, NAV } from "./nav";
+import { COMPARE_HANDOVER, MENUS, NAV } from "./nav";
 import type { Answer, CompareSide, Evidence, Highlight, Meta, Plan, Settings, SourceCard, Turn } from "./types";
 
 const SHARED = /^\/b\/([a-km-z2-9]{10})\/?$/;
@@ -476,16 +476,18 @@ export default function App() {
                   {n.label}
                 </a>
               ))}
-              <details className="nav-more">
-                <summary>More</summary>
-                <div className="nav-more-list">
-                  {MORE.map((n) => (
-                    <a key={n.href} href={n.href}>
-                      {n.label}
-                    </a>
-                  ))}
-                </div>
-              </details>
+              {MENUS.map((m) => (
+                <details key={m.label} className="nav-more">
+                  <summary>{m.label}</summary>
+                  <div className="nav-more-list">
+                    {m.items.map((n) => (
+                      <a key={n.href} href={n.href}>
+                        {n.label}
+                      </a>
+                    ))}
+                  </div>
+                </details>
+              ))}
             </nav>
             {user && (
               <button type="button" className="link" onClick={() => void api.logout().then(() => setAuth("out"))}>

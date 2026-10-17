@@ -301,7 +301,8 @@ Rules:
   (e.g. "zoning" -> "planning, land use", "cops" -> "police") and add close UK synonyms. Leave out words that
   only express filters (dates, regions, party, "ministers").
 - date_from/date_to: ISO dates for explicit or clearly implied periods ("between 2018 and 2022" ->
-  2018-01-01 to 2022-12-31; "since the 2024 election" -> 2024-07-04).
+  2018-01-01 to 2022-12-31; "since the 2024 election" -> 2024-07-04). A bare year is the calendar year: "since
+  2024" and "from 2024" -> 2024-01-01; use an election date only when the question mentions the election.
 - houses: "commons" for MPs/House of Commons/constituencies, "lords" for peers/House of Lords.
 - regions: ITL1 regions, only for questions about where MPs' seats are, listed individually by name. A named group
   stands for all its regions, so list each of them:
@@ -360,7 +361,7 @@ def _open_end(d: date | None, today: date) -> date | None:
 
 
 def parse_model(settings) -> str:
-    return settings.answer.get("query_parse_model") or settings.answer.get("model", "claude-opus-5-5")
+    return settings.answer.get("query_parse_model") or settings.answer.get("model", "claude-sonnet-5-5")
 
 
 def parse_with_model(client, settings, question: str, history: list[dict[str, str]] | None,
@@ -409,7 +410,21 @@ def parse_with_model(client, settings, question: str, history: list[dict[str, st
         group_by=p.group_by,
     )
     plan.unresolved_speakers = list(p.speakers)
+    plan.filters.date_from = year_start(question, plan.filters.date_from)
     return plan, resp.usage
+
+
+def year_start(question: str, date_from: date | None) -> date | None:
+    """"Since 2024" means from 1 January 2024, not from the general election that year, unless the question
+    mentions an election."""
+    m = re.search(r"\b(?:since|from|after|starting in|beginning in)\s+(?:the\s+(?:start|beginning)\s+of\s+)?((?:19|20)\d\d)\b",
+                  question, re.I)
+    if not m or re.search(r"\belection\b", question, re.I):
+        return date_from
+    year = int(m.group(1))
+    if date_from is None or date_from.year == year:
+        return date(year, 1, 1)
+    return date_from
 
 
 def resolve_speakers(resolver_con, names: list[str], f: Filters) -> tuple[list[dict[str, str]], list[str]]:

@@ -1,31 +1,57 @@
-/** The site's links, in one place. The header holds what people use, the distinctive features first, then the
- * ways to browse the record behind "More"; the footer holds pages about the site. partials/header.html and
- * partials/footer.html carry the same lists for the static pages; a test keeps them in step. */
+/** The site's links, in one place. The header holds Ask a question and This week on their own, then three menus by
+ * theme; the footer holds pages about the site. partials/header.html and partials/footer.html carry the same lists
+ * for the static pages; a test keeps them in step. */
 export interface NavLink {
   href: string;
   label: string;
 }
 
+export interface NavMenu {
+  label: string;
+  items: NavLink[];
+}
+
 export const NAV: NavLink[] = [
   { href: "/", label: "Ask a question" },
   { href: "/this-week", label: "This week" },
-  { href: "/people", label: "MPs and peers" },
-  { href: "/topics", label: "Topics" },
-  { href: "/compare", label: "Compare" },
-  { href: "/bills", label: "Bills" },
 ];
 
-export const MORE: NavLink[] = [
-  { href: "/timeline", label: "Timelines" },
-  { href: "/charts", label: "Charts" },
-  { href: "/edms", label: "Early day motions" },
-  { href: "/committees", label: "Committees" },
-  { href: "/witnesses", label: "Committee witnesses" },
-  { href: "/devolved", label: "Devolved parliaments" },
-  { href: "/donations", label: "Donations" },
-  { href: "/directorships", label: "Company roles" },
-  { href: "/groups", label: "All-party groups" },
+export const MENUS: NavMenu[] = [
+  {
+    label: "MPs and peers",
+    items: [
+      { href: "/people", label: "Find an MP or peer" },
+      { href: "/donations", label: "Donations" },
+      { href: "/directorships", label: "Company roles" },
+      { href: "/groups", label: "All-party groups" },
+    ],
+  },
+  {
+    label: "Parliaments",
+    items: [
+      { href: "/devolved#h-scottish-parliament", label: "Scottish Parliament" },
+      { href: "/devolved#h-senedd", label: "Senedd" },
+      { href: "/devolved#h-ni-assembly", label: "Northern Ireland Assembly" },
+      { href: "/bills", label: "Bills" },
+      { href: "/committees", label: "Committees" },
+      { href: "/witnesses", label: "Committee witnesses" },
+      { href: "/edms", label: "Early day motions" },
+    ],
+  },
+  {
+    label: "Explore",
+    items: [
+      { href: "/topics", label: "Topics" },
+      { href: "/compare", label: "Compare" },
+      { href: "/timeline", label: "Timelines" },
+      { href: "/charts", label: "Charts" },
+      { href: "/lighter-side", label: "The lighter side" },
+    ],
+  },
 ];
+
+/** Every header link, in order (for the test that keeps the static pages' header in step). */
+export const HEADER_LINKS: NavLink[] = [...NAV, ...MENUS.flatMap((m) => m.items)];
 
 export const FOOTER: NavLink[] = [
   { href: "/about", label: "About" },

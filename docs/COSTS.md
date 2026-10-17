@@ -28,11 +28,11 @@ These run on the server you already pay for, so extra use costs nothing.
 
 ## Costs more
 
-- **A new briefing**: about 9p (12 cents) with Opus, the bulk of the running cost. Briefings in "comprehensive" mode
-  use more sources and more thinking, so roughly double. Sonnet would roughly halve the cost; the test set compares
-  the quality.
+- **A new briefing**: about 4p (5 cents) with Sonnet, the model used since October 2026, and the bulk of the
+  running cost (Opus, used before, was about 9p). Briefings in "comprehensive" mode use more sources and more
+  thinking, so roughly double. The test set compares the quality of the two.
 - **Comparisons** (two MPs, parties or nations side by side): the cost of one or two briefings.
-- **Topic briefings**: about 11p each time one is rewritten. The 16 topics cost about £2 to write the first time,
+- **Topic briefings**: about 5p each time one is rewritten (Sonnet). The 16 topics cost about £2 to write the first time,
   then roughly £2 to £6 a month: a topic is rewritten at most weekly, only when new records have arrived and the
   sources found have changed (checking that is nearly free). At most 4 are rewritten per update, and none once a
   daily or monthly budget is reached.

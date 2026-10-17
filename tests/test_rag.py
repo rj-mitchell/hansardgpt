@@ -163,7 +163,7 @@ def test_pipeline_end_to_end_is_grounded(indexed_settings):
     system = call["system"][0]
     assert "ONLY" in system["text"] and NO_RECORDS in system["text"]
     assert system["cache_control"] == {"type": "ephemeral"}  # the shared instructions are cached
-    assert call["fallbacks"] == "default" and call["model"] == "claude-opus-5-5"
+    assert call["fallbacks"] == "default" and call["model"] == "claude-sonnet-5-5"
 
 
 def test_pipeline_returns_no_records_without_calling_the_model(indexed_settings):
@@ -280,3 +280,26 @@ def test_openers_about_the_records_are_dropped():
     assert drop_preambles(segs) == 2
     assert [s.text for s in segs] == ["Ministers defended the policy.", "**In brief**\n- Labour MPs criticised it.",
                                       "In 2019 the minister said so."]
+
+
+def test_contributions_about_one_place_are_recognised():
+    from hansard.rank.places import Places
+
+    p = Places({"Cornwall", "Workington", "Cockermouth", "Manchester", "Leeds", "Liverpool"})
+    assert p.is_local("Bus Services: Cornwall", "")
+    assert p.is_local("Bus Services", "The new X5 in my constituency of Workington links Cockermouth.")
+    assert not p.is_local("Bus Services", "Franchising will be open to every local authority in England.")
+    assert not p.is_local("Transport", "In Manchester, Liverpool and Leeds franchising has improved services.")
+    assert not p.is_local("Free Bus Travel: Over-60s — [Leeds in the Chair]", "")  # the chair, not the subject
+
+
+def test_local_contributions_are_scored_down_not_dropped():
+    from datetime import date
+
+    from hansard.rank.composite import Candidate, RankParams, rank
+
+    params = RankParams(today=date(2026, 1, 1))
+    national, local = Candidate("a", date(2025, 1, 1), bm25=1.0), Candidate("b", date(2025, 1, 1), bm25=1.0, local=True)
+    scored = rank([local, national], set(), params)
+    assert [s.candidate.record_id for s in scored] == ["a", "b"]
+    assert scored[1].score == scored[0].score * params.local_factor
